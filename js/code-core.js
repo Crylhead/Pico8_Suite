@@ -527,7 +527,87 @@ Object.assign(P8Code, (() => {
     };
   }
 
-  return { planSave, createSaver };
+  /**
+   * Guards everything that replaces or runs the open document. A transition is bound to the
+   * document identity (`doc`, a new object on every load) and to its saved revision (`savedLua`, the
+   * Lua the saver last wrote): after every await it checks that the same document is still open
+   * and that no newer text appeared. Newer edits are never dropped silently: the buffer stays open
+   * (no save is retried, so typing cannot cause a save loop) or, without a file to save into, the
+   * user confirms the discard.
+   * io: current() -> { doc, lua, savedLua, handle, name }, idle() (pending saves finished),
+   *     save() -> 'saved' | 'downloaded' | 'cancelled', confirmDiscard(what) -> boolean
+   * open({ what, autosave, prepare, apply }): leave the document (autosave: write it in place first,
+   *   as moving between folder files does), await prepare() (the incoming document; null aborts),
+   *   revalidate, then apply(prepared) synchronously. A newer open() supersedes an older one.
+   * ready(doc): before Run, save the open document in place; -> { ok, lua, inPlace } where lua is
+   *   the saved text (inPlace) or, for a document without a file, the text to run as a copy.
+   * Failures -> { ok: false, why, name, how? }; why: 'superseded' | 'switched' (another document
+   *   was opened meanwhile) | 'unsaved' (the save did not write in place; how = its outcome) |
+   *   'changed' (edited during the save / while the next document loaded) | 'kept' (discard
+   *   declined) | 'failed' (prepare returned null).
+   */
+  function createTransitions(io) {
+    let seq = 0;
+    const isDirty = (c) => c.lua !== c.savedLua;
+    const no = (why, name, extra = {}) => ({ ok: false, why, name, ...extra });
+
+    /** saves `doc` in place if it is dirty; -> current state, or a failure */
+    async function settle(doc, name, live) {
+      let cur = io.current();
+      if (!cur.handle || !isDirty(cur)) return { cur };
+      const how = await io.save();
+      if (!live()) return { fail: no('superseded', name) };
+      cur = io.current();
+      if (cur.doc !== doc) return { fail: no('switched', name) };
+      if (how !== 'saved') return { fail: no('unsaved', name, { how }) };
+      // text typed while the save was pending: keep it open rather than saving again
+      if (isDirty(cur)) return { fail: no('changed', name) };
+      return { cur };
+    }
+
+    async function open({ what, autosave = false, prepare = () => true, apply }) {
+      const token = ++seq;
+      const live = () => token === seq;
+      await io.idle();
+      if (!live()) return no('superseded');
+      let cur = io.current();
+      const { doc, name } = cur;
+      if (autosave) {
+        const r = await settle(doc, name, live);
+        if (r.fail) return r.fail;
+        cur = r.cur;
+      }
+      if (isDirty(cur)) {
+        if (!(await io.confirmDiscard(what))) return no('kept', name);
+        if (!live()) return no('superseded', name);
+        cur = io.current();
+        if (cur.doc !== doc) return no('switched', name);
+      }
+      const accepted = cur.lua;   // the text that is saved or that the user agreed to discard
+      const next = await prepare();
+      if (!live()) return no('superseded', name);
+      cur = io.current();
+      if (cur.doc !== doc) return no('switched', name);
+      if (cur.lua !== accepted && isDirty(cur)) return no('changed', name);
+      if (next == null) return no('failed', name);
+      apply(next);
+      return { ok: true, name };
+    }
+
+    async function ready(doc = io.current().doc) {
+      const name = io.current().name;
+      if (io.current().doc !== doc) return no('switched', name);
+      await io.idle();
+      if (io.current().doc !== doc) return no('switched', name);
+      const r = await settle(doc, name, () => true);
+      if (r.fail) return r.fail;
+      return r.cur.handle ? { ok: true, name, lua: r.cur.savedLua, inPlace: true } : { ok: true, name, lua: r.cur.lua, inPlace: false };
+    }
+
+    return { open, ready };
+  }
+
+  return { planSave, createSaver, createTransitions };
 })());
 
 if (typeof module !== 'undefined') module.exports = P8Code;
