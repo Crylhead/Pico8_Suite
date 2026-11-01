@@ -12,7 +12,7 @@ Cart Builder uses Chrome/Edge's File System Access API with read/write permissio
 | `demo/suite.json` | Project format version 1, prefix, generated cart layout, unmanaged carts and adoption bookkeeping. |
 | `assets/<name>.json` | One asset per file, at the selected project root; parts are stored as base64 bytes. |
 | `demo/unused/` | Source/previously generated carts retired by Write Carts. |
-| `demo/suite.journal.json` | Present only while a write is in progress or after one was interrupted; holds the original file contents for recovery. |
+| `demo/suite.journal.json` | Present only while a write is in progress or after one was interrupted; holds the original file contents, digests of the new contents and the write's state for recovery. |
 | `music/`, `tools/`, `release/` | Optional directories belonging to the external demo framework; the Suite does not provide them. |
 
 For a flat project, replace `demo/` with the selected folder itself; `assets/` and `unused/` are then children of that folder. `suite.json` stores each placed part's ref, offset, stored length and LZ flag.
@@ -98,18 +98,33 @@ Partial adoption does not grant permission to retire a cart: a source cart is re
 
 ### Recoverable writes
 
-Write Carts and Adopt change several files. Both go through `P8Project.transact()` with this intended lifecycle:
+Write Carts and Adopt change several files. Both go through `P8Project.transact()`:
 
-1. **Preflight.** Every target file is read and its current contents kept. A read error stops the write before anything changes.
-2. **Journal.** The original contents go to `demo/suite.journal.json` (next to `suite.json`).
-3. **Write.** Order: data carts, FX carts, assets (including removal of renamed asset files), then `suite.json` last. Each file is **read back from disk** and compared with what was written.
-4. **Commit.** The journal is marked `committed`.
-5. **Retire.** Only now do old carts move to `unused/`: copied, read back, then removed. A cart that cannot be moved stays where it is and is reported.
-6. **Clean up.** The journal is removed.
+1. **Lock.** The whole write, from preflight to clean-up, holds the Cart Builder write lock (see *One writer at a time*).
+2. **Preflight.** Every target file is read and its current contents kept. A read error, an existing journal or a baseline conflict stops the write before anything changes.
+3. **Journal.** `demo/suite.journal.json` (next to `suite.json`) records a random write id, the state `writing`, the original contents of every target and a digest (length plus a 64-bit non-cryptographic hash) of its new contents. It is read back before any other file changes.
+4. **Write.** Order: data carts, FX carts, assets (including removal of renamed asset files), then `suite.json` last. Each file is **read back from disk** and compared with what was written.
+5. **Commit.** The journal is marked `committed` and read back.
+6. **Retire.** Only now do old carts move to `unused/`: copied, read back, then removed. A cart that cannot be moved stays where it is and is reported.
+7. **Clean up.** The journal is removed if it is still this write's journal (same id).
 
-If a write or readback fails, the transaction attempts to restore every file touched so far, and the journal goes once the restore succeeds. The in-memory project stays dirty, so you can try again. If the restore also fails (or the browser stops mid-write), the journal stays. Cart Builder then refuses further writes until the project is reopened.
+If a write or readback fails before the commit, the journal still says `writing`, and the transaction restores every file touched so far. If the `committed` marker fails to close or to read back, it may or may not be on disk; the journal is first marked `rolling-back` (and read back), and only then are the originals restored. If even that marker cannot be written, nothing is restored: every file keeps its verified new contents and the journal stays for recovery to finish or undo. The journal is removed only once the folder holds one coherent revision. A write that fails keeps the in-memory project dirty, so you can try again; while a journal remains, Cart Builder refuses further writes until the project is reopened.
 
-On opening, a leftover `writing` journal offers to restore the original contents. A `committed` journal only finishes the retirement. The File System Access API has no atomic rename, so the journal is intended to supply recovery across files. Two reproduced gaps remain: a failed commit-marker verification followed by partial rollback can be misclassified as committed ([#31](https://github.com/Crylhead/Pico8_Suite/issues/31)), and overlapping writers can remove each other's live journal ([#32](https://github.com/Crylhead/Pico8_Suite/issues/32)). Current recovery is therefore not guaranteed at those boundaries.
+On opening, recovery takes the same lock and decides from the files, not from the marker alone:
+
+| Journal state | Files now hold | Recovery |
+| --- | --- | --- |
+| `committed` | every new content (digests match) | Finishes the retirement, then removes the journal. |
+| any | every original content | Nothing to restore or retire; removes the journal. |
+| `writing` or `rolling-back` | anything else | Asks, then restores the originals (journal marked `rolling-back` first). |
+| `committed` | neither revision (for example a file edited after the commit) | Changes nothing and lists the files. Only if you confirm does it restore the originals and move retired carts back from `unused/`. |
+| empty file | — | The browser stopped while creating the journal, before any other file changed; removes it. |
+
+An unreadable journal, an unknown state or any restore failure leaves the journal (with the originals) in place and reports it. Journals written before this format carry no digests, so a leftover `committed` one is treated as unverifiable: it is finished only if every file still holds its original contents (then nothing is retired), otherwise you are asked as for a mixed folder. The File System Access API has no atomic rename; correctness relies on each file's close replacing its contents as a whole, as Chrome/Edge do through a swap file.
+
+#### One writer at a time
+
+A Cart Builder write, Adopt or recovery never runs alongside another. In one page, the actions and folder switching are disabled while one runs, and `transact()`/`recover()` refuse a second caller at once (`busy`, nothing touched) instead of queueing a write computed from an older state. Across tabs of the same origin the lock is the Web Locks API (`navigator.locks`, available in every browser that can write folders). A browser without Web Locks only serializes the page; another tab is then detected only on a best-effort basis. A write checks before every file, every journal update and its clean-up that the journal on disk is still exactly the text it wrote; a recovery marks the journal with its own id before restoring. A write that finds the journal changed or gone stops at once (stage `ownership`) and never deletes another writer's journal. If another tab's journal or recovery marker is there, it touches nothing and leaves the decision to that tab. If the journal is gone (a recovery restored the originals and removed it while this write was still in flight), it puts every file that still holds its own new contents back to the original it keeps in memory. Not covered: a file write landing just after another tab's recovery restored that file but before it removed the journal, and the `committed` marker overwriting another tab's `rolling-back` marker between the check and the write. The File System Access API has no compare-and-swap to close these windows, which is why Web Locks are used wherever they exist. Other programs (PICO-8, an editor, another browser profile) are not covered by the lock; their edits are detected as baseline conflicts below.
 
 ### External edits
 

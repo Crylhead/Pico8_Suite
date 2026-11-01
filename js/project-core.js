@@ -686,6 +686,8 @@ const P8Project = (() => {
   // ------------------------------------------------------------------ //
 
   const JOURNAL = 'suite.journal.json';
+  const JOURNAL_FORMAT = 2;
+  const LOCK_NAME = 'pico8-suite.cartbuilder.write';
 
   class WriteError extends Error {
     constructor(msg, props) { super(msg); this.name = 'WriteError'; Object.assign(this, props); }
@@ -696,7 +698,8 @@ const P8Project = (() => {
     if (!dir) return null;
     let h;
     try { h = await dir.getFileHandle(name); } catch (e) { if (notFound(e)) return null; throw e; }
-    return (await h.getFile()).text();
+    // removed between the two calls (another tab): absent as well
+    try { return await (await h.getFile()).text(); } catch (e) { if (notFound(e)) return null; throw e; }
   }
   /** writes (or with text null removes) one file, then reads it back */
   async function put(dir, name, text) {
@@ -722,21 +725,90 @@ const P8Project = (() => {
     };
   }
 
+  /** which revision a file holds: length + two 32-bit FNV-style hashes (not a security hash); null = absent */
+  function digest(text) {
+    if (text === null || text === undefined) return null;
+    let a = 0x811c9dc5;
+    let b = 0x9747b28c;
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      a = Math.imul(a ^ c, 0x01000193);
+      b = Math.imul(b ^ c, 0x5bd1e995) ^ (b >>> 15);
+    }
+    return `${text.length}:${(a >>> 0).toString(16).padStart(8, '0')}${(b >>> 0).toString(16).padStart(8, '0')}`;
+  }
+
+  const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+  /**
+   * Exclusive ownership of project writes and recovery. lock.run(fn) runs fn while holding the lock,
+   * or rejects at once with WriteError stage 'busy' (it never queues: a waiting write was computed
+   * from a state that may be gone). Within one page a synchronous flag decides; across tabs of the
+   * origin the Web Locks API (navigator.locks) does, when the browser has it. Without Web Locks only
+   * this page is serialized, and the journal ownership checks in transact() are the best-effort
+   * fallback against another tab.
+   */
+  function createLock({ locks = globalThis.navigator?.locks, name = LOCK_NAME } = {}) {
+    let held = false;
+    const busy = () => new WriteError('Another Cart Builder write or recovery is in progress (in this tab or another one). Nothing was written; try again when it has finished.', { stage: 'busy', file: null, restored: true, journalKept: false });
+    return {
+      crossTab: typeof locks?.request === 'function',
+      get held() { return held; },
+      async run(fn) {
+        if (held) throw busy();
+        held = true;
+        try {
+          if (typeof locks?.request !== 'function') return await fn();
+          return await locks.request(name, { ifAvailable: true }, (lock) => (lock ? fn() : Promise.reject(busy())));
+        } finally { held = false; }
+      },
+    };
+  }
+  const pageLock = createLock();
+
+  /** {ours, present}: is the journal on disk this transaction's (same id)? */
+  /**
+   * is the journal on disk exactly one this transaction wrote (texts: every version it wrote or tried to)?
+   * Exact text, not just the id: a recovery that took the journal over marks it with its own id.
+   */
+  async function journalOwner(jdir, texts) {
+    let text;
+    try { text = await readOrNull(jdir, JOURNAL); } catch (error) { return { ours: false, present: true, error }; }
+    if (text === null) return { ours: false, present: false };
+    return { ours: texts.has(text), present: true };
+  }
+  /** removes the journal only while it is still this transaction's -> true if a journal is left */
+  async function dropJournal(jdir, texts) {
+    const j = await journalOwner(jdir, texts);
+    if (!j.ours) return j.present;
+    try { await put(jdir, JOURNAL, null); return false; } catch { return true; }
+  }
+
   /**
    * Writes several files so that a failure part-way leaves the folder as it was.
    *   writes: [{dir, name, text | null (remove), stage}] in order; the last one (the manifest) commits
    *   retire: [{from, to, name}] moved only after the commit: copied, read back, then removed
    *   checks: [{dir, name, expect}] files the result depends on; with writes[].expect they must still read
    *           as expected (null: absent), otherwise nothing is written (WriteError stage 'conflict')
-   * Every target is read first (preflight), the original contents go into a journal next to the
-   * manifest, each write is read back, and any failure restores the originals. If the restore itself
-   * fails, the journal stays for recover() the next time the project opens.
+   * The whole call holds the project lock (createLock); a second writer or a recovery meanwhile gets
+   * WriteError stage 'busy' and touches nothing. Every target is read first (preflight), the original
+   * contents and a digest of the new ones go into a journal next to the manifest, each write is read
+   * back, and any failure restores the originals. The journal moves writing -> committed; if the
+   * 'committed' marker cannot be confirmed, it moves to 'rolling-back' before anything is restored, so
+   * recovery can never mistake a half-restored folder for a commit. If that marker cannot be written
+   * either, nothing is restored (every file still holds the new contents). Whenever the folder cannot
+   * be left coherent, the journal stays for recover(). Only this transaction's own journal is removed.
    * -> {retired, retireErrors, journalKept} or throws WriteError {stage, file, restored, journalKept}
    */
-  async function transact(dirs, { writes, retire = [], checks = [] }, { journalDir = 'demo', now = () => new Date().toISOString() } = {}) {
+  async function transact(dirs, plan, opts = {}) {
+    return (opts.lock || pageLock).run(() => transactLocked(dirs, plan, opts));
+  }
+
+  async function transactLocked(dirs, { writes, retire = [], checks = [] }, { journalDir = 'demo', now = () => new Date().toISOString(), id = newId() } = {}) {
     const dir = dirResolver(dirs);
     const label = (w) => `${w.dir}/${w.name}`;
     const jdir = await dir(journalDir);
+    const jlabel = `${journalDir}/${JOURNAL}`;
     const before = [];
     const conflicts = [];
     try {
@@ -750,29 +822,78 @@ const P8Project = (() => {
       throw new WriteError(`Preflight failed, nothing was written: ${e.message}`, { stage: 'preflight', file: label(writes[before.length] || { dir: journalDir, name: JOURNAL }), restored: true, journalKept: false, cause: e });
     }
     if (conflicts.length) throw new WriteError(`Changed on disk since the project was read: ${conflicts.join(', ')}. Nothing was written.`, { stage: 'conflict', file: conflicts[0], conflicts, restored: true, journalKept: false });
-    const journal = { format: 1, started: now(), state: 'writing', writes: writes.map((w, i) => ({ dir: w.dir, name: w.name, before: before[i] })), retire };
-    try { await put(jdir, JOURNAL, JSON.stringify(journal)); } catch (e) {
-      try { await put(jdir, JOURNAL, null); } catch { /* nothing else was touched */ }
-      throw new WriteError(`Could not write the recovery journal, nothing was written: ${e.message}`, { stage: 'journal', file: `${journalDir}/${JOURNAL}`, restored: true, journalKept: false, cause: e });
+    const journal = { format: JOURNAL_FORMAT, id, started: now(), state: 'writing', writes: writes.map((w, i) => ({ dir: w.dir, name: w.name, before: before[i], after: digest(w.text) })), retire };
+    const mine = new Set(); // every journal text this transaction wrote or tried to write
+    const putJournal = (state) => { const text = JSON.stringify({ ...journal, state }); mine.add(text); return put(jdir, JOURNAL, text); };
+    const lostMsg = `${jlabel} is no longer this write's journal (another tab removed or took it over, e.g. to recover it)`;
+    /**
+     * the journal is not ours any more. Present (another tab's marker): touch nothing, that tab decides.
+     * Gone while this write's journal still said 'writing' / 'rolling-back': whoever removed it restored
+     * the originals first, so a file this write changed afterwards (it still holds the new contents)
+     * goes back to its original from memory. undo = false once 'committed' may be on disk.
+     */
+    const lost = async (done, present, cause, undo = true) => {
+      const back = [];
+      const problems = [];
+      if (!present && undo) {
+        for (const [k, w] of journal.writes.slice(0, done).entries()) {
+          try {
+            const now = await readOrNull(await dir(w.dir), w.name);
+            if (now === w.before || digest(now) !== w.after) continue;
+            await put(await dir(w.dir, w.before !== null), w.name, w.before);
+            back.push(label(writes[k]));
+          } catch (e) { problems.push(`${label(writes[k])}: ${e.message}`); }
+        }
+      }
+      const what = problems.length ? `could not restore ${problems.join('; ')}` : back.length ? `restored ${back.join(', ')} (written after the journal was removed)` : 'restored nothing';
+      return new WriteError(`${lostMsg}. This write stopped after ${done} of ${writes.length} files and ${what}; it does not undo what the other tab did. Reopen the project to check the folder.`, { stage: 'ownership', file: jlabel, restored: !problems.length && !present && undo, journalKept: present, cause });
+    };
+    /** moves the journal to `state`, but only while it is still this transaction's */
+    const mark = async (state) => {
+      if (!(await journalOwner(jdir, mine)).ours) throw new Error(lostMsg);
+      await putJournal(state);
+    };
+    try { await putJournal('writing'); } catch (e) {
+      const journalKept = await dropJournal(jdir, mine);
+      throw new WriteError(`Could not write the recovery journal, nothing was written: ${e.message}${journalKept ? `. ${jlabel} is still there (not removed: it may belong to another write); reopen the project to check it.` : ''}`, { stage: 'journal', file: jlabel, restored: true, journalKept, cause: e });
     }
-    let i = 0;
-    try {
-      for (; i < writes.length; i++) await put(await dir(writes[i].dir, true), writes[i].name, writes[i].text);
-      await put(jdir, JOURNAL, JSON.stringify({ ...journal, state: 'committed' }));
-    } catch (e) {
-      const failed = writes[i] || { dir: journalDir, name: JOURNAL, stage: 'commit' };
-      const problems = await restore(dir, journal.writes.slice(0, i + 1));
-      let journalKept = !!problems.length;
-      if (!journalKept) { try { await put(jdir, JOURNAL, null); } catch { journalKept = true; } }
-      throw new WriteError(problems.length
-        ? `Writing ${label(failed)} failed (${e.message}) and ${problems.length} files could not be restored: ${problems.join('; ')}. ${journalDir}/${JOURNAL} keeps the original contents; reopen the project to restore them.`
+    /** restores the first n targets; the journal goes only when all of them are back */
+    const rollback = async (e, failed, n) => {
+      const owner = await journalOwner(jdir, mine);
+      if (!owner.ours && !owner.error) return lost(n, owner.present, e);
+      const problems = await restore(dir, journal.writes.slice(0, n));
+      const journalKept = problems.length ? true : await dropJournal(jdir, mine);
+      return new WriteError(problems.length
+        ? `Writing ${label(failed)} failed (${e.message}) and ${problems.length} files could not be restored: ${problems.join('; ')}. ${jlabel} keeps the original contents; reopen the project to restore them.`
         : `Writing ${label(failed)} failed (${e.message}). All files were restored to their state before the write.`,
       { stage: failed.stage || 'commit', file: label(failed), restored: !problems.length, journalKept, cause: e });
+    };
+    let i = 0;
+    try {
+      for (; i < writes.length; i++) {
+        // without Web Locks another tab may recover this journal meanwhile: stop as soon as it is not ours
+        const owner = await journalOwner(jdir, mine);
+        if (owner.error) throw owner.error;
+        if (!owner.ours) throw await lost(i, owner.present);
+        await put(await dir(writes[i].dir, true), writes[i].name, writes[i].text);
+      }
+    } catch (e) {
+      if (e instanceof WriteError) throw e;
+      throw await rollback(e, writes[i], i + 1); // the journal says 'writing': recovery would restore too
+    }
+    try {
+      await mark('committed');
+    } catch (e) {
+      // the 'committed' marker may have reached the disk: record the rollback decision first (#31)
+      try { await mark('rolling-back'); } catch (e2) {
+        const owner = await journalOwner(jdir, mine);
+        if (!owner.ours && !owner.error) throw await lost(writes.length, owner.present, e, false);
+        throw new WriteError(`Committing ${jlabel} failed (${e.message}), and the journal could not record a rollback (${e2.message}). Every file holds the new contents; nothing was restored. ${jlabel} stays; reopen the project to finish or undo this write.`, { stage: 'commit', file: jlabel, restored: false, journalKept: true, cause: e });
+      }
+      throw await rollback(e, { dir: journalDir, name: JOURNAL, stage: 'commit' }, writes.length);
     }
     const { retired, errors: retireErrors } = await retireAll(dir, retire);
-    let journalKept = false;
-    try { await put(jdir, JOURNAL, null); } catch { journalKept = true; }
-    return { retired, retireErrors, journalKept };
+    return { retired, retireErrors, journalKept: await dropJournal(jdir, mine) };
   }
 
   async function restore(dir, entries) {
@@ -804,28 +925,114 @@ const P8Project = (() => {
     return { retired, errors };
   }
 
+  /** undoes retireAll(): a cart that is only in `to` goes back to `from` -> problems */
+  async function unretireAll(dir, retire) {
+    const problems = [];
+    for (const r of retire) {
+      try {
+        const to = await dir(r.to);
+        const text = await readOrNull(to, r.name);
+        if (text === null) continue;
+        const from = await dir(r.from, true);
+        const there = await readOrNull(from, r.name);
+        if (there !== null && there !== text) throw new Error(`${r.from}/${r.name} exists with other contents`);
+        if (there === null) await put(from, r.name, text);
+        await put(to, r.name, null);
+      } catch (e) { problems.push(`${r.from}/${r.name}: ${e.message}`); }
+    }
+    return problems;
+  }
+
   /**
-   * An interrupted transact() left its journal: 'writing' -> restore the originals,
-   * 'committed' -> finish the retirement. -> null (no journal) | {state, problems, retired}
+   * An interrupted transact() left its journal. Holds the same lock as transact() and decides from
+   * what the files hold now, not from the marker alone:
+   *   'committed' and every file holds the new contents -> finish the retirement      (outcome 'new')
+   *   every file holds its original contents              -> nothing to restore/retire (outcome 'old')
+   *   'writing' / 'rolling-back' otherwise                -> restore the originals     (outcome 'old')
+   *   'committed' but neither revision (mixed)            -> touch nothing, report     (outcome 'unresolved')
+   *   an empty journal (created, never closed)            -> no file was touched       (outcome 'old')
+   * Restoring a mixed committed folder (only after confirmRollback) also moves retired carts back.
+   * confirmRollback({state, reason: 'rollback' | 'mixed', files}) -> bool is asked before restoring;
+   * without it a rollback proceeds and a mixed folder is left alone. Declining -> outcome 'declined'.
+   * The journal is removed only when the folder verifiably holds one revision and the journal is still
+   * the one read here; otherwise it stays with the originals (outcome 'unresolved', problems).
+   * -> null (no journal) | {state, outcome: 'new'|'old'|'declined'|'unresolved'|'busy', problems, retired, mixed}
    */
-  async function recover(dirs, { journalDir = 'demo' } = {}) {
+  async function recover(dirs, opts = {}) {
+    try {
+      return await (opts.lock || pageLock).run(() => recoverLocked(dirs, opts));
+    } catch (e) {
+      if (e instanceof WriteError && e.stage === 'busy') return { state: 'busy', outcome: 'busy', problems: [e.message], retired: [], mixed: [] };
+      throw e;
+    }
+  }
+
+  async function recoverLocked(dirs, { journalDir = 'demo', confirmRollback = null } = {}) {
     const dir = dirResolver(dirs);
     const jdir = await dir(journalDir);
-    const text = await readOrNull(jdir, JOURNAL);
-    if (text === null) return null;
+    let jtext = await readOrNull(jdir, JOURNAL);
+    if (jtext === null) return null;
+    const out = (state, outcome, more = {}) => ({ state, outcome, problems: [], retired: [], mixed: [], ...more });
+    // created but never closed: transact() changes no file before its journal reads back complete
+    if (jtext === '') {
+      try { await put(jdir, JOURNAL, null); } catch (e) { return out('empty', 'unresolved', { problems: [`${JOURNAL} could not be removed: ${e.message}`] }); }
+      return out('empty', 'old');
+    }
     let j;
-    try { j = JSON.parse(text); } catch (e) { return { state: 'unreadable', problems: [`${JOURNAL}: ${e.message}`], retired: [] }; }
+    try { j = JSON.parse(jtext); } catch (e) { return out('unreadable', 'unresolved', { problems: [`${JOURNAL}: ${e.message}`] }); }
+    const writes = Array.isArray(j.writes) ? j.writes : [];
+    const label = (w) => `${w.dir}/${w.name}`;
+    const current = [];
+    try { for (const w of writes) current.push(await readOrNull(await dir(w.dir), w.name)); } catch (e) {
+      return out(j.state, 'unresolved', { problems: [`${label(writes[current.length])} cannot be read (${e.message}); nothing was changed`] });
+    }
+    const isNew = (w, k) => typeof w.after !== 'undefined' && digest(current[k]) === w.after;
+    const allOld = writes.every((w, k) => current[k] === w.before);
+    const allNew = writes.every(isNew);
+    const mixed = writes.filter((w, k) => current[k] !== w.before && !isNew(w, k)).map(label);
+    let outcome;
     let problems = [];
     let retired = [];
-    if (j.state === 'committed') ({ retired, errors: problems } = await retireAll(dir, j.retire || []));
-    else problems = await restore(dir, j.writes || []);
-    if (!problems.length) await put(jdir, JOURNAL, null);
-    return { state: j.state, problems, retired };
+    if (j.state === 'committed' && allNew) {
+      ({ retired, errors: problems } = await retireAll(dir, j.retire || []));
+      outcome = 'new';
+    } else if (allOld) {
+      outcome = 'old';
+    } else {
+      if (!['writing', 'rolling-back', 'committed'].includes(j.state)) return out(String(j.state), 'unresolved', { problems: [`${JOURNAL} has the unknown state “${j.state}”; nothing was changed`], mixed });
+      const reason = j.state === 'committed' ? 'mixed' : 'rollback';
+      const ok = confirmRollback ? await confirmRollback({ state: j.state, reason, files: mixed }) : reason === 'rollback';
+      if (!ok) {
+        return reason === 'mixed'
+          ? out(j.state, confirmRollback ? 'declined' : 'unresolved', { problems: confirmRollback ? [] : [`the write was committed, but these files hold neither its new nor their original contents: ${mixed.join(', ')}. Nothing was changed`], mixed })
+          : out(j.state, 'declined', { mixed });
+      }
+      if (j.state !== 'rolling-back') {
+        // its own id: a writer still running in a tab without Web Locks sees the journal is no longer its own
+        const next = JSON.stringify({ ...j, state: 'rolling-back', recovery: newId() });
+        try {
+          if ((await readOrNull(jdir, JOURNAL)) !== jtext) throw new Error('it changed during the recovery');
+          await put(jdir, JOURNAL, next);
+        } catch (e) { return out(j.state, 'unresolved', { problems: [`${JOURNAL} could not record the rollback (${e.message}); nothing was restored`], mixed }); }
+        jtext = next;
+      }
+      problems = await restore(dir, writes);
+      // a committed write may already have retired carts: the old revision needs them back
+      if (j.state === 'committed') problems.push(...await unretireAll(dir, j.retire || []));
+      outcome = problems.length ? 'unresolved' : 'old';
+    }
+    if (!problems.length) {
+      try {
+        if ((await readOrNull(jdir, JOURNAL)) !== jtext) throw new Error('it changed during the recovery');
+        await put(jdir, JOURNAL, null);
+      } catch (e) { problems.push(`${JOURNAL} could not be removed: ${e.message}`); }
+    }
+    return out(j.state, outcome, { problems, retired, mixed });
   }
 
   return {
     FORMAT, CART, TYPES, hex, safeName, assetToJson, assetFromJson, findAnchors, rewriteAnchors, renameInText, listLiteral,
-    constExpr, constRange, retirement, JOURNAL, WriteError, transact, recover, adopt, segmentsOf, segmentImage, setSegment, imageBytes, partsOf, autoPack, placements, buildCarts, verifyCarts, checkAnchors, isMusic, isTracks,
+    constExpr, constRange, retirement, JOURNAL, WriteError, createLock, digest, transact, recover, adopt, segmentsOf, segmentImage, setSegment, imageBytes, partsOf, autoPack, placements, buildCarts, verifyCarts, checkAnchors, isMusic, isTracks,
   };
 })();
 

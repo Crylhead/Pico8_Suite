@@ -32,6 +32,7 @@
     adoptPlan: null,
     pendingHandle: null, // remembered folder that still needs permission
     journalPending: false, // an interrupted write left suite.journal.json: no writes until it is recovered
+    busy: false,         // a write, adoption or recovery is running: other mutations and folder switches wait
     disk: new Map(),     // "demo/x.p8" | "assets/x.json" | "demo/suite.json" -> raw text as read (null: absent); writes expect it unchanged
   };
 
@@ -45,15 +46,20 @@
   // Folder access                                                      //
   // ------------------------------------------------------------------ //
 
-  async function readText(dir, name) {
-    const f = await (await dir.getFileHandle(name)).getFile();
-    return (await f.text()).replace(/\r\n/g, '\n');
-  }
   async function exists(dir, name) {
     try { await dir.getFileHandle(name); return true; } catch { return false; }
   }
 
+  /** one project mutation at a time in this page (P.transact also holds a cross-tab lock) */
+  async function exclusive(title, fn) {
+    if (pj.busy) { showMessage(title, 'Cart Builder is still writing or recovering the project. Try again when it has finished.'); return; }
+    pj.busy = true;
+    render();
+    try { await fn(); } finally { pj.busy = false; render(); }
+  }
+
   async function openFolder() {
+    if (pj.busy) { showMessage('Cart Builder', 'Wait until the current write has finished before opening another folder.'); return; }
     if (!window.showDirectoryPicker) { showMessage('Cart Builder', 'This browser cannot write to folders. Use Chrome or Edge.'); return; }
     let h;
     try { h = await window.showDirectoryPicker({ id: 'p8-demo-project', mode: 'readwrite' }); } catch { return; }
@@ -61,6 +67,10 @@
   }
 
   async function useFolder(h) {
+    await exclusive('Cart Builder', () => openProject(h));
+  }
+
+  async function openProject(h) {
     // demoframe layout (demo/ next to tools/, music/) or a flat demo (main.p8 in the folder)
     let demo = null;
     try { demo = await h.getDirectoryHandle('demo'); } catch {
@@ -96,11 +106,13 @@
   // Recoverable writes (P.transact, docs/PROJECT_MODEL.md)              //
   // ------------------------------------------------------------------ //
 
+  /** the folders of the project open now (captured: switching folders cannot redirect a running write) */
   function projectDirs() {
+    const { root, demo } = pj;
     return {
-      demo: pj.demo,
-      assets: (create) => pj.root.getDirectoryHandle('assets', { create }),
-      unused: (create) => pj.demo.getDirectoryHandle('unused', { create }),
+      demo,
+      assets: (create) => root.getDirectoryHandle('assets', { create }),
+      unused: (create) => demo.getDirectoryHandle('unused', { create }),
     };
   }
   const inDemo = (name) => `${pj.demo === pj.root ? '' : 'demo/'}${name}`;
@@ -128,6 +140,7 @@
     } catch (e) {
       if (!(e instanceof P.WriteError)) throw e;
       pj.journalPending = e.journalKept;
+      if (e.stage === 'busy') { showMessage(title, e.message); return null; }
       if (e.stage === 'conflict') {
         showMessage(title, `These files changed on disk after Cart Builder read them (in PICO-8, another tab or another program):\n${e.conflicts.join('\n')}\n\nNothing was written: the files on disk keep the external changes and Cart Builder keeps its own changes in memory. To continue from the disk versions, open the folder again (Cart Builder's unsaved changes are then dropped).`);
         return null;
@@ -137,16 +150,24 @@
     }
   }
 
-  /** a journal left by an interrupted write: finish or undo it before anything else */
+  /**
+   * a journal left by an interrupted write: finish or undo it before anything else. P.recover decides
+   * from the files themselves (under the write lock) and asks before restoring originals.
+   */
   async function recoverWrites() {
     pj.journalPending = false;
     if (!(await exists(pj.demo, P.JOURNAL))) return;
-    let committed = false;
-    try { committed = JSON.parse(await readText(pj.demo, P.JOURNAL)).state === 'committed'; } catch { /* recover() reports it */ }
-    if (!committed && !(await confirmDialog('Interrupted write', `An earlier write did not finish (${inDemo(P.JOURNAL)}). Restore the files it changed to their state before that write? Until then Cart Builder writes nothing.`, 'Restore'))) { pj.journalPending = true; return; }
-    const r = await P.recover(projectDirs());
-    if (r.problems.length) { pj.journalPending = true; showMessage('Interrupted write', `Could not finish the recovery; ${inDemo(P.JOURNAL)} stays:\n${r.problems.join('\n')}`); return; }
-    toast(r.state === 'committed' ? `Finished an earlier write (${r.retired.length} carts moved to unused/).` : 'Restored the files of an interrupted write.', 'info', 4000);
+    const j = inDemo(P.JOURNAL);
+    const r = await P.recover(projectDirs(), {
+      confirmRollback: ({ reason, files }) => confirmDialog('Interrupted write', reason === 'mixed'
+        ? `An earlier write was recorded as finished (${j}), but these files now hold neither its new contents nor their originals:\n${files.join('\n')}\n\nRestore every file that write changed (and the carts it moved to unused/) to the state before it? Otherwise the files stay as they are and Cart Builder writes nothing.`
+        : `An earlier write did not finish (${j}). Restore the files it changed to their state before that write? Until then Cart Builder writes nothing.`, 'Restore'),
+    });
+    if (!r) return;
+    if (r.outcome === 'busy') { pj.journalPending = true; showMessage('Interrupted write', `${j} is there, but ${r.problems[0]} Reopen the project when it has finished.`); return; }
+    if (r.outcome === 'declined') { pj.journalPending = true; return; }
+    if (r.problems.length) { pj.journalPending = true; showMessage('Interrupted write', `Could not finish the recovery; ${j} stays and keeps the original contents:\n${r.problems.join('\n')}`); return; }
+    toast(r.outcome === 'new' ? `Finished an earlier write (${r.retired.length} carts moved to unused/).` : 'Restored the files of an interrupted write.', 'info', 4000);
   }
 
   // ------------------------------------------------------------------ //
@@ -432,7 +453,8 @@
     dom.reconnect.hidden = !pj.pendingHandle;
     if (pj.pendingHandle) dom.reconnect.textContent = `Reconnect “${pj.pendingHandle.name}”`;
     const has = Boolean(pj.root && pj.project);
-    for (const b of [dom.pack, dom.write, dom.addLib, dom.addMap, dom.addFile]) b.disabled = !has;
+    for (const b of [dom.pack, dom.write, dom.addLib, dom.addMap, dom.addFile]) b.disabled = !has || pj.busy;
+    dom.open.disabled = pj.busy;
     dom.status.textContent = pj.root ? (pj.project ? `${pj.assets.length} assets · ${pj.parts.length} parts · ${pj.layout.filter((c) => c.items.length).length} data carts` : 'not a suite project yet') : '';
     renderAdopt();
     renderParts();
@@ -449,7 +471,7 @@
       el('p', { textContent: plan && plan.assets.length ? `The suite found ${plan.assets.length} pieces of data in ${plan.sourceCarts.length} carts (${plan.sourceCarts.join(', ')}), read by ${plan.edits.length} reload() lines. Adopting stores them as assets, marks those lines with --@data anchors and packs new carts. The demo runs the same.` : 'No reload() of a data cart found in demo/.' }),
       plan?.skipped.length ? el('p', { className: 'muted', textContent: `Left as they are: ${plan.skipped.map((s) => `${s.file}:${s.line} (${s.why})`).join('; ')}` }) : null,
       plan?.keptCarts.length ? el('p', { className: 'muted', textContent: `Still read by lines left as they are, so they stay in demo/: ${plan.keptCarts.join(', ')}` }) : null,
-      plan?.assets.length ? el('button', { className: 'btn btn-primary', type: 'button', textContent: 'Adopt', onclick: adoptNow }) : null,
+      plan?.assets.length ? el('button', { className: 'btn btn-primary', type: 'button', textContent: 'Adopt', disabled: pj.busy, onclick: () => exclusive('Adopt', adoptNow) }) : null,
     ].filter(Boolean));
   }
 
@@ -678,7 +700,7 @@
     dom.open.addEventListener('click', openFolder);
     dom.reconnect.addEventListener('click', reconnect);
     dom.pack.addEventListener('click', autoPack);
-    dom.write.addEventListener('click', writeAll);
+    dom.write.addEventListener('click', () => exclusive('Write carts', writeAll));
     dom.addLib.addEventListener('click', addFromLibrary);
     dom.addMap.addEventListener('click', addMapFromLibrary);
     dom.addFile.addEventListener('click', addFile);
@@ -688,6 +710,7 @@
     });
     dom.stacks.addEventListener('dragover', (e) => { if (e.target.closest('[data-cart]')) e.preventDefault(); });
     dom.stacks.addEventListener('drop', (e) => {
+      if (pj.busy) return;
       const s = e.target.closest('[data-cart]');
       const ref = e.dataTransfer.getData('text/x-p8part');
       if (s && ref) { e.preventDefault(); moveTo(ref, s.dataset.cart); }
@@ -695,6 +718,7 @@
     dom.parts.addEventListener('change', (e) => {
       const ref = e.target.dataset.lz;
       if (!ref) return;
+      if (pj.busy) { e.target.checked = !e.target.checked; return; }
       const p = partOf(ref);
       const ranged = (anchorsByRef().get(ref) || []).filter((x) => x.ranged);
       if (e.target.checked && ranged.length) {
@@ -709,6 +733,7 @@
     });
     dom.parts.addEventListener('click', async (e) => {
       const d = e.target.dataset || {};
+      if (pj.busy && (d.rename || d.segin)) { showMessage('Cart Builder', 'Wait until the current write has finished.'); return; }
       if (d.rename) return renameAsset(d.rename);
       if (d.segout) return segmentOut(d.segout, Number(d.seg));
       if (d.segin) return segmentIn(d.segin, Number(d.seg));
