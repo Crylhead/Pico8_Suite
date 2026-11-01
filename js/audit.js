@@ -270,9 +270,9 @@
     return el('div', { className: 'au-detail' },
       el('h3', { className: 'au-title', textContent: c.name }),
       el('p', { className: 'muted', textContent: `Modified ${when} · ${(c.bytes / 1024).toFixed(1)} KB on disk` }),
-      meter('Tokens (with includes)', c.tokens_expanded, A.TOKEN_LIMIT),
+      meter('Tokens (with includes, estimate)', c.tokens_expanded, A.TOKEN_LIMIT),
       meter('Characters (with includes)', c.chars_expanded, A.CHAR_LIMIT),
-      el('p', { className: 'muted', textContent: `This cart alone: ${c.tokens_self.toLocaleString('en-US')} tokens, ${c.chars_self.toLocaleString('en-US')} characters.` }),
+      el('p', { className: 'muted', textContent: `This cart alone: ${c.tokens_self.toLocaleString('en-US')} tokens (estimate), ${c.chars_self.toLocaleString('en-US')} characters. PICO-8's own token count is authoritative.` }),
       c.warnings.length ? el('div', { className: 'au-warnings' }, el('h4', { textContent: 'Warnings' }), list(c.warnings)) : null,
       el('h4', { textContent: '#include' }), list(c.includes_out),
       el('h4', { textContent: 'Included by' }), list(c.includes_in),
@@ -291,7 +291,7 @@
       : el('p', { className: 'muted', textContent: empty }));
     return el('div', { className: 'au-detail' },
       el('h3', { className: 'au-title', textContent: `Project ${au.rootName}` }),
-      el('div', { className: 'au-stats' }, card('carts', s.total), card('used', s.used.length), card('unused', s.unused.length), card('tokens in used carts', s.tokensSelf), card('characters in used carts', s.charsSelf)),
+      el('div', { className: 'au-stats' }, card('carts', s.total), card('used', s.used.length), card('unused', s.unused.length), card('tokens in used carts (estimate)', s.tokensSelf), card('characters in used carts', s.charsSelf)),
       s.overTokens.length || s.overChars.length
         ? el('div', { className: 'au-warnings' }, el('h4', { textContent: 'Over the PICO-8 limits' }), names([...new Set([...s.overTokens, ...s.overChars])], ''))
         : null,
@@ -318,7 +318,7 @@
       const s = A.summarize(au.stats);
       return ['PROJECT SUMMARY', '='.repeat(50), '',
         `Total files in project: ${s.total}`, `Referenced/Used files:  ${s.used.length}`, `Unused files:           ${s.unused.length}`, '',
-        'TOTALS FOR USED FILES:', `  Total tokens (self):     ${s.tokensSelf}`, `  Total characters (self): ${s.charsSelf}`, '',
+        'TOTALS FOR USED FILES:', `  Total tokens (self, est.): ${s.tokensSelf}`, `  Total characters (self): ${s.charsSelf}`, '',
         'USED FILES:', ...(s.used.length ? s.used.map((c) => `  • ${c.name}`) : ['  (none)']), '',
         'UNUSED FILES:', ...(s.unused.length ? s.unused.map((c) => `  • ${c.name}`) : ['  (none - all files are referenced!)'])].join('\n');
     }
@@ -326,7 +326,7 @@
     if (!c) return '';
     const sec = (title, items, pad = '  ') => [title, ...(items.length ? items.map((t) => `${pad}- ${t}`) : [`${pad}(none)`])];
     return [`Cart: ${c.name}`, `Modified: ${c.mtime ? new Date(c.mtime).toLocaleString() : '-'}`, '', 'Size:',
-      `  Tokens (expanded): ${c.tokens_expanded}`, `  Tokens (self):     ${c.tokens_self}`, `  Chars (expanded):  ${c.chars_expanded}`, `  Chars (self):      ${c.chars_self}`, '',
+      `  Tokens (expanded, est.): ${c.tokens_expanded}`, `  Tokens (self, est.):     ${c.tokens_self}`, `  Chars (expanded):  ${c.chars_expanded}`, `  Chars (self):      ${c.chars_self}`, '',
       ...sec('Includes OUT (#include ...):', c.includes_out), '', ...sec('Included BY (reverse includes):', c.includes_in), '',
       'Cart references (expanded code scan):', ...sec('  load(...):', c.load_refs, '    '), ...sec('  run(...):', c.run_refs, '    '),
       ...sec('  reload(... filename):', c.reload_file_refs, '    '), ...sec('  cstore(... filename):', c.cstore_file_refs, '    '), '',

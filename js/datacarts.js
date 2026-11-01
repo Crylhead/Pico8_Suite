@@ -75,7 +75,8 @@
     }
     const names = [...dc.carts.values()].map((c) => c.name);
     for (const c of dc.carts.values()) {
-      for (const r of C.findReloads(c.lua)) {
+      // comments (block ones too) do not call reload()
+      for (const r of C.findReloads(V.stripComments(c.lua))) {
         const target = C.reloadTarget(r.fileExpr, c.lua);
         if (!target) continue;
         for (const n of names.filter(target.match)) {
@@ -89,10 +90,11 @@
     for (const c of dc.carts.values()) {
       c.readMask = new Uint8Array(ROM);
       for (const r of c.reads) c.readMask.fill(1, r.src, r.src + r.len);
-      // the cart's own code reads its data straight from memory (sget, mget, @0x2000, ..)
+      // the cart's own code reads its data straight from memory (sget, mget, @0x2000, memcpy, ..)
       c.own = V.ownReads(c);
-      c.ownMask = new Uint8Array(ROM);
-      for (const reg of C.REGIONS) if (c.own[reg.id]) c.ownMask.fill(1, reg.start, Math.min(reg.end, ROM));
+      c.ownMask = V.ownMask(c.own);
+      // reads whose bytes are unknown: computed addresses / included code, inferred reload() ranges
+      c.uncertain = [...(c.own.unresolved || []), ...c.reads.filter((r) => r.inferred).map((r) => `reload() ${r.from}:${r.line} (inferred)`)];
       c.usedBytes = c.used.reduce((s, v) => s + v, 0);
       c.readBytes = c.readMask.reduce((s, v) => s + v, 0);
       let lost = 0, ownBytes = 0, anyRead = 0;
@@ -105,7 +107,7 @@
       c.anyReadBytes = anyRead;
       c.unreadContent = lost;
       // reloaded by someone, data its own code reads, or no code apart from comments
-      c.isData = c.reads.length > 0 || c.ownBytes > 0 || c.lua.split('\n').every((l) => !l.trim() || l.trim().startsWith('--'));
+      c.isData = c.reads.length > 0 || c.ownBytes > 0 || !V.stripComments(c.lua).trim();
     }
     dc.root = root;
     dc.sel = dc.sel && dc.carts.has(dc.sel) ? dc.sel : [...dc.carts.values()].find((c) => c.isData)?.name.toLowerCase() || null;
@@ -138,7 +140,7 @@
     },
     el('span', { className: 'dc-item-name', textContent: c.name }),
     el('span', { className: 'dc-item-bar' }, el('i', { className: 'read', style: `width:${(c.readBytes / ROM) * 100}%` }), el('i', { className: 'used', style: `width:${(c.usedBytes / ROM) * 100}%` })),
-    el('span', { className: 'muted dc-item-meta', textContent: `${kb(c.usedBytes)} data · ${c.reads.length ? `${kb(c.readBytes)} read` : c.ownBytes ? 'read by its own code' : 'not reloaded'}` }))) : [el('p', { className: 'muted', textContent: dc.carts.size ? 'No data carts. Untick “Only data carts” to see all carts.' : 'Open a project folder (shared with Project Audit) or single .p8 files.' })]));
+    el('span', { className: 'muted dc-item-meta', textContent: `${kb(c.usedBytes)} data · ${c.reads.length ? `${kb(c.readBytes)} read` : c.ownBytes ? 'read by its own code' : 'not reloaded'}${c.uncertain.length ? ' · uncertain reads' : ''}` }))) : [el('p', { className: 'muted', textContent: dc.carts.size ? 'No data carts. Untick “Only data carts” to see all carts.' : 'Open a project folder (shared with Project Audit) or single .p8 files.' })]));
   }
 
   const CELL = 128; // bytes per map row
@@ -206,10 +208,11 @@
     dom.stats.replaceChildren(...[
       stat('data in the cart', kb(c.usedBytes), 'Bytes that differ from an empty cart'),
       stat('read by reload()', c.reads.length ? kb(c.readBytes) : '–', 'Union of all reload() ranges that point to this cart'),
-      c.ownBytes ? stat('read by its own code', kb(c.ownBytes), `When this cart runs, its data is already in memory and its code reads it directly:\n${Object.entries(c.own).map(([id, o]) => `${C.REGIONS.find((r) => r.id === id).name}: ${o.how.join(', ')}`).join('\n')}`) : null,
-      stat('free / never read', kb(ROM - c.anyReadBytes), 'Space in 0x0000-0x42ff that neither a reload() nor the cart\'s own code reads; room for more data'),
+      c.ownBytes ? stat('read by its own code', kb(c.ownBytes), `When this cart runs, its data is already in memory and its code reads it directly:\n${C.REGIONS.filter((r) => c.own[r.id]).map((r) => `${r.name}: ${c.own[r.id].how.join(', ')}${c.own[r.id].whole ? ' (whole region: approximation)' : ' (exact ranges)'}`).join('\n')}`) : null,
+      stat('no read detected', kb(ROM - c.anyReadBytes), `Bytes in 0x0000-0x42ff for which no reload() range and no read in the cart's own code was found. A heuristic, not proof that the space is free: computed addresses, included code and code outside this folder are not followed${c.uncertain.length ? ' (this cart has uncertain reads)' : ''}. Check the code before putting other data there.`),
       stat('reload() calls', String(reloads)),
-      c.unreadContent ? stat('data nobody reads', kb(c.unreadContent), 'Bytes with content that no reload() range covers and the cart\'s own code does not read (red in the map)') : null].filter(Boolean));
+      c.uncertain.length ? stat('uncertain reads', String(c.uncertain.length), `Reads whose bytes could not be worked out; any range may be read:\n${c.uncertain.join('\n')}`) : null,
+      c.unreadContent ? stat('data, no read detected', kb(c.unreadContent), 'Bytes with content that no reload() range covers and no read found in the cart\'s own code covers (red in the map). Not proof that nothing reads them.') : null].filter(Boolean));
     renderSections();
     dom.reads.replaceChildren(...(c.reads.length ? c.reads.map((r) => el('div', { className: 'dc-read' },
       el('code', { textContent: `${hex4(r.src)}–${hex4(r.src + r.len - 1)}` }), el('span', { textContent: ` ${kb(r.len)}` }),
@@ -227,7 +230,7 @@
       title: `${hex4(s.start)}–${hex4(s.start + s.len - 1)}${s.fx ? ` · cut out by ${s.fx}${s.alsoFx ? ` (also ${s.alsoFx.join(', ')})` : ''}` : ''}`,
     },
     el('span', { className: 'dc-sec-name', textContent: s.label }),
-    el('span', { className: 'muted', textContent: `${s.fx ? s.fx.replace(/\.p8$/i, '') : c?.reads.length ? 'unused' : 'not reloaded'} · ${KIND[s.kind]} · ${hex4(s.start)} +${kb(s.len)}` }))) : [el('p', { className: 'muted', textContent: 'No sections found.' })]),
+    el('span', { className: 'muted', textContent: `${s.fx ? s.fx.replace(/\.p8$/i, '') : c?.reads.length ? 'no read detected' : 'not reloaded'} · ${KIND[s.kind]} · ${hex4(s.start)} +${kb(s.len)}` }))) : [el('p', { className: 'muted', textContent: 'No sections found.' })]),
     el('button', { type: 'button', className: 'dc-sec', dataset: { id: '' }, attrs: { 'aria-pressed': String(dc.secId == null) }, title: 'Any range: type Start / Length below, or drag on the map' },
       el('span', { className: 'dc-sec-name', textContent: 'Custom range' }), el('span', { className: 'muted', textContent: `${hex4(dc.view.start)} +${kb(dc.view.len)}` })));
   }
@@ -318,7 +321,7 @@
     dom.vLen.value = hex4(dc.view.len);
     const reg = regionOf(dc.view.start);
     const sec = dc.secs?.find((x) => x.id === dc.secId);
-    const ownNote = sec?.own ? ` · read by the cart's own code: ${sec.own.how.join(', ')}${sec.own.values ? ' (as values: they may be data, not colors)' : ''}` : '';
+    const ownNote = sec?.own ? ` · read by the cart's own code${sec.own.whole ? ' (whole region: approximation)' : ''}: ${sec.own.how.join(', ')}${sec.own.values ? ' (as values: they may be data, not colors)' : ''}` : '';
     dom.vInfo.textContent = b.length ? `${b.length} bytes · ${reg.name}${dc.view.start + b.length > reg.end ? ' and following' : ''}${as === 'img4' || as === 'img4g' ? ` · ${width}×${Math.ceil(b.length / (width >> 1))} px` : as === 'tab' ? ` · ${Math.ceil(b.length / 16)} rows of 16` : ''}${ownNote}` : '';
     if (!b.length) { dom.viewer.width = 1; dom.viewer.height = 1; dom.hexOut.textContent = ''; return; }
     if (as === 'hex') {
