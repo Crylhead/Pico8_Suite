@@ -165,13 +165,8 @@ const P8Project = (() => {
     }
     if (a.sub >= part.len) return `${a.ref}+${hex(a.sub)} starts past the end of the part (${hex(part.len)} bytes)`;
     if (len <= 0) return `${a.ref}+${hex(a.sub)} reads ${len} bytes; the length must be positive`;
-<<<<<<< HEAD
     if (a.sub + len > part.len) return `${a.ref}+${hex(a.sub)} reads ${hex(len)} bytes, but only ${hex(part.len - a.sub)} remain in the part (${hex(part.len)} bytes)`;
     return null;
-=======
-  if (a.sub + len > part.len) return `${a.ref}+${hex(a.sub)} reads ${hex(len)} bytes, but only ${hex(part.len - a.sub)} remain in the part (${hex(part.len)} bytes)`;
-  return null;
->>>>>>> origin/fix/14-ci
   }
 
   /** renames an asset in the anchor comments of `text` */
@@ -686,8 +681,6 @@ const P8Project = (() => {
     return { retire: [...cand.keys()].filter((lc) => !kept.has(lc)).map((lc) => cand.get(lc)), kept: [...kept.values()], unresolved };
   }
 
-<<<<<<< HEAD
-
   // ------------------------------------------------------------------ //
   // Recoverable multi-file writes (File System Access handles)         //
   // ------------------------------------------------------------------ //
@@ -833,11 +826,6 @@ const P8Project = (() => {
   return {
     FORMAT, CART, TYPES, hex, safeName, assetToJson, assetFromJson, findAnchors, rewriteAnchors, renameInText, listLiteral,
     constExpr, constRange, retirement, JOURNAL, WriteError, transact, recover, adopt, segmentsOf, segmentImage, setSegment, imageBytes, partsOf, autoPack, placements, buildCarts, verifyCarts, checkAnchors, isMusic, isTracks,
-=======
-  return {
-    FORMAT, CART, TYPES, hex, safeName, assetToJson, assetFromJson, findAnchors, rewriteAnchors, renameInText, listLiteral,
-    constExpr, constRange, retirement, adopt, segmentsOf, segmentImage, setSegment, imageBytes, partsOf, autoPack, placements, buildCarts, verifyCarts, checkAnchors, isMusic, isTracks,
->>>>>>> origin/fix/14-ci
   };
 })();
 

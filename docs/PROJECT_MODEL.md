@@ -96,7 +96,6 @@ Retirement candidates are carts the project wrote before, or adopted, that the n
 
 Partial adoption does not grant permission to retire a cart: a source cart is retired only when this check passes at write time.
 
-<<<<<<< HEAD
 ### Recoverable writes
 
 Write Carts and Adopt change several files. Both go through `P8Project.transact()`:
@@ -122,9 +121,6 @@ When it opens the folder, Cart Builder keeps the raw text of every demo `.p8`, `
 On a conflict nothing is written. The dialog lists the files, the disk keeps the external version and Cart Builder keeps its own changes in memory. Opening the folder again continues from the disk versions. Cancelling the confirmation writes nothing. After a successful write the baseline becomes what was written.
 
 The check runs immediately before the journal and the writes. An edit in the short window between that check and the writes themselves is not detected.
-=======
-The current comparison is **in memory before disk writes**, not a disk readback. Multi-file writes are not transactional, and conflict handling has open defects. See issues #3–#4 in the [health review](HEALTH_REVIEW_2026-11-01.md).
->>>>>>> origin/fix/14-ci
 
 There is **no `tools/build.py` release builder in this repository**. Anchor validation runs in Cart Builder; if the surrounding demo framework supplies a release checker, configure and run it there separately.
 

@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 // Cart Builder project mutation (issues #1, #2, #3, #4, #7): conservative adoption, anchor rewriting, recoverable writes, disk conflicts.
-=======
-// Cart Builder project mutation (issues #1, #2, #7): conservative adoption and anchor rewriting.
->>>>>>> origin/fix/14-ci
 const assert = require('assert');
 const { t } = require('./harness.js');
 const P = require('../js/project-core.js');
@@ -52,10 +48,6 @@ t('#1 rewrite refuses to replace a computed source, length or cart name', () => 
   assert.match(lines[3], /reload\(0,0x1010,0x0020,"d0\.p8"\)/);
   assert.ok(P.checkAnchors([{ name: 'fx.p8', text: src }], [{ ref: 'a.bin', bytes: new Uint8Array(0x400), lz: false }]).errors.length >= 3);
 });
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/fix/14-ci
 // #7: a sub-range of an LZ stream cannot be unpacked; raw sub-ranges must lie inside the part
 const C = require('../js/cart-core.js');
 const lzPart = () => {
@@ -111,8 +103,6 @@ t('#2 load/cstore/include/multi-line/traceable references keep their carts, also
   assert.deepStrictEqual(inc.retire, [], 'an include that cannot be read keeps every candidate');
   assert.match(inc.unresolved[0].why, /fx\.lua/);
 });
-<<<<<<< HEAD
-
 // #3: recoverable multi-file writes over File System Access handles (in-memory fake)
 const { makeFs } = require('./fake-fs.js');
 const original = () => ({ demo: { 'fx.p8': 'fx v1', 'd0.p8': 'd0 v1', 'old.p8': 'old', 'suite.json': '{"v":1}' }, assets: { 'a.json': 'a v1', 'gone.json': 'gone' } });
@@ -194,5 +184,3 @@ t('#4 external fx/asset/new-cart changes stop the write untouched; a matching ba
   const clean = makeFs(original());
   assert.deepStrictEqual((await expecting(clean)).retired, ['old.p8']);
 });
-=======
->>>>>>> origin/fix/14-ci
