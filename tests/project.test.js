@@ -77,3 +77,30 @@ t('#7 raw ranges: out-of-range/overflowing/empty reads are rejected; valid slice
   const raw = { ref: 'x.bin', bytes: new Uint8Array(100), lz: false };
   assert.strictEqual(P.checkAnchors([{ name: 'fx.p8', text: bad.join('\n') }], [raw]).errors.length, 4);
 });
+
+// #2: retirement follows the references left in the final sources, not the adoption plan
+t('#2 mixed literal/computed references keep atlas.p8; fully converted sources retire it', () => {
+  const r = adoptOf('reload(0x8000,0,0x100,"atlas.p8")\nreload(0x8000,0,0x100,which)\n');
+  const fx = P.rewriteAnchors(r.edits[0].after + '\nreload(0x8000,0,0x100,which)\n', () => ({ off: 0, len: 0x100, cart: 'd0.p8' })).text;
+  const mixed = P.retirement(['atlas.p8'], [{ name: 'fx.p8', text: fx }]);
+  assert.deepStrictEqual(mixed.retire, []);
+  assert.strictEqual(mixed.unresolved.length, 1);
+  assert.match(mixed.unresolved[0].why, /which/);
+  const converted = P.retirement(['atlas.p8'], [{ name: 'fx.p8', text: fx.replace(/\nreload\(0x8000,0,0x100,which\)/, '') }]);
+  assert.deepStrictEqual(converted, { retire: ['atlas.p8'], kept: [], unresolved: [] });
+});
+t('#2 load/cstore/include/multi-line/traceable references keep their carts, also through kept carts', () => {
+  const files = [
+    { name: 'main.p8', text: 'load("intro")\ncstore(0,0,0x10,"save.p8")\n#include gfx.p8:1\nreload(0x8000,\n 0,0x100,\n "multi.p8")\nlocal n="named.p8"\nreload(0,0,1,n)\n' },
+    { name: 'intro.p8', text: 'reload(0,0,1,"chain.p8")' },
+    { name: 'gone.p8', text: 'reload(0,0,1,"alsogone.p8")' },
+  ];
+  const cands = ['intro.p8', 'save.p8', 'gfx.p8', 'multi.p8', 'named.p8', 'chain.p8', 'gone.p8', 'alsogone.p8'];
+  const r = P.retirement(cands, files);
+  assert.deepStrictEqual(r.retire.sort(), ['alsogone.p8', 'gone.p8']);
+  assert.deepStrictEqual(r.kept.map((k) => k.cart).sort(), ['chain.p8', 'gfx.p8', 'intro.p8', 'multi.p8', 'named.p8', 'save.p8']);
+  assert.deepStrictEqual(r.unresolved, []);
+  const inc = P.retirement(['gone.p8'], [{ name: 'main.p8', text: '#include ../lib/fx.lua\n' }]);
+  assert.deepStrictEqual(inc.retire, [], 'an include that cannot be read keeps every candidate');
+  assert.match(inc.unresolved[0].why, /fx\.lua/);
+});
