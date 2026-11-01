@@ -50,7 +50,7 @@
     files: new Map(),       // relative path (lower case) -> {rel, handle}
     rel: null,              // the open file's path inside the folder
     parent: null,           // {rel, name}: the cart this include was opened from
-    incs: [],               // [{line, path, rel, found, tokens, nested}]
+    incs: [],               // P8Audit.includeMeter items: [{line, path, tab, rel, found, cycle, depth, missing, tokens, warnings}]
     incTokens: 0,
     fileCache: new Map(),   // rel -> {stamp, text}
   };
@@ -897,37 +897,22 @@
     load(text, f.handle.name, f.handle, { rel: f.rel, parent });
   }
 
-  // includes: resolved against the open file's folder, nested ones too, with their tokens
+  // includes: resolved like Project Audit does (P8Audit.includeMeter), nested ones too, with their
+  // tokens; a file included twice counts twice, a cycle stops (and is not "missing")
   let incRun = 0;
   async function resolveIncludes() {
     const run = ++incRun;
-    const list = K.includes(ed.text);
-    if (!list.length) { ed.incs = []; ed.incTokens = 0; renderIncludes(); renderMeters(); return; }
+    if (!K.includes(ed.text).length) { ed.incs = []; ed.incTokens = 0; renderIncludes(); renderMeters(); return; }
     const can = ed.folder && ed.folderReady && ed.rel != null;
-    const seen = new Set([ed.rel?.toLowerCase()]);
-    let total = 0;
-    const one = async (inc, base, depth) => {
-      const rel = K.joinPath(base, inc.path);
-      const item = { ...inc, rel, found: false, tokens: 0, nested: 0 };
-      if (!can || seen.has(rel.toLowerCase()) || depth > 8) return item;
-      seen.add(rel.toLowerCase());
-      const text = await readRel(rel).catch(() => null);
-      if (text == null) return item;
-      const code = K.includedCode(text, rel, inc.tab);
-      item.found = true;
-      try { item.tokens = A.countTokens(code); } catch { item.tokens = 0; }
-      total += item.tokens;
-      for (const sub of K.includes(code)) {
-        const s = await one(sub, dirOf(rel), depth + 1);
-        item.nested += s.tokens + s.nested;
-      }
-      return item;
-    };
-    const items = [];
-    for (const inc of list) items.push(await one(inc, dirOf(ed.rel || ''), 0));
+    let rep;
+    try {
+      rep = await A.includeMeter({ names: can ? [...ed.files.values()].map((f) => f.rel) : [], path: ed.rel ?? ed.name ?? '', cart: cartText(), lua: ed.text, read: readRel });
+    } catch {
+      rep = { included: 0, items: K.includes(ed.text).map((i) => ({ ...i, rel: i.path, found: false, tokens: 0, warnings: [] })) };
+    }
     if (run !== incRun) return;
-    ed.incs = items;
-    ed.incTokens = total;
+    ed.incs = rep.items;
+    ed.incTokens = rep.included;
     renderIncludes();
     renderMeters();
   }
@@ -935,11 +920,12 @@
   function renderIncludes() {
     if (!ed.incs.length) { dom.includes.replaceChildren(); return; }
     const can = ed.folder && ed.folderReady && ed.rel != null;
+    const note = (i) => [i.cycle && 'cycle stopped', i.depth && 'too deep', i.missing && `${i.missing} missing inside`].filter(Boolean).join(', ');
     const rows = ed.incs.map((i) => el('button', {
       type: 'button', className: `ce-inc${i.found ? '' : ' missing'}`, dataset: { line: String(i.line) },
-      title: i.found ? `${i.rel} · click to open (or Ctrl+click the #include line)` : can ? `${i.rel} is not in the folder` : 'Open the folder of this cart to follow its includes',
+      title: i.found ? `${i.rel} · click to open (or Ctrl+click the #include line)${i.warnings.length ? `\n${i.warnings.join('\n')}` : ''}` : can ? (i.target ? `${i.rel} has no code tab ${i.tab}` : `${i.rel} is not in the folder`) : 'Open the folder of this cart to follow its includes',
     }, el('span', { className: 't-include', textContent: `#include ${i.path}${i.tab != null ? `:${i.tab}` : ''}` }),
-    el('span', { className: 'muted', textContent: i.found ? `${i.tokens + i.nested} tokens` : can ? 'missing' : '?' })));
+    el('span', { className: 'muted', textContent: !i.found ? (can ? 'missing' : '?') : `${i.tokens} tokens${note(i) ? ` (${note(i)})` : ''}` })));
     const head = el('div', { className: 'ce-inc-head', textContent: 'Includes' });
     if (!can) {
       const b = el('button', { type: 'button', className: 'btn btn-sm', dataset: { action: 'code-open-folder' }, textContent: 'Open the folder to follow them…' });
