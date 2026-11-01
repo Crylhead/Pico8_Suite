@@ -89,8 +89,7 @@
     pixelPerfect: !!saved.pixelPerfect,
     customBrush: null,      // {w, h, data} picked up from a selection (brush 0)
     playing: false,
-    undo: [],
-    redo: [],
+    history: K.createHistory({ limit: UNDO_LIMIT, maxBytes: UNDO_BYTES }),
     clip: null,             // internal clipboard {w, h, data}
     hover: null,            // {x, y}
     spaceDown: false,
@@ -587,14 +586,10 @@
   //
   // { kind:'px', frame, layer, x, y, w, h, before, after }  pixel patch
   // { kind:'doc', snapshot, frame, layer }                   whole document (structure changes)
-
-  const entryBytes = (e) => (e.kind === 'px' ? e.before.length * 2 : e.snapshot.frames.length * e.snapshot.layers.length * e.snapshot.w * e.snapshot.h);
+  // Both kinds, on both stacks, share the retention policy of K.createHistory.
 
   function pushUndo(entry) {
-    ps.undo.push(entry);
-    ps.redo = [];
-    let bytes = ps.undo.reduce((s, e) => s + entryBytes(e), 0);
-    while (ps.undo.length > UNDO_LIMIT || (bytes > UNDO_BYTES && ps.undo.length > 1)) bytes -= entryBytes(ps.undo.shift());
+    ps.history.record(entry);
     changed();
   }
 
@@ -626,20 +621,12 @@
       dirtyAll();
       if (!lifted) return;
     }
-    const e = ps.undo.pop();
-    if (!e) return;
-    const r = applyEntry(e, 'after', 'before');
-    ps.redo.push(r);
-    changed();
+    if (ps.history.undo((e) => applyEntry(e, 'after', 'before'))) changed();
   }
 
   function redo() {
     commitFloating();
-    const e = ps.redo.pop();
-    if (!e) return;
-    const r = applyEntry(e, 'before', 'after');
-    ps.undo.push(r);
-    changed();
+    if (ps.history.redo((e) => applyEntry(e, 'before', 'after'))) changed();
   }
 
   /** Records a structural change: fn mutates ps.doc (or returns a new doc). */
@@ -650,8 +637,7 @@
     const res = fn(ps.doc);
     if (res === false) return;
     if (res && res !== true) ps.doc = res;
-    ps.undo.push(entry);
-    ps.redo = [];
+    ps.history.record(entry);
     ps.frame = Math.min(ps.frame, ps.doc.frames.length - 1);
     ps.layer = Math.min(ps.layer, ps.doc.layers.length - 1);
     afterDocReplaced();
@@ -2181,7 +2167,7 @@
   }
 
   async function savePaletteToLibrary() {
-    await S.assets.put(S.paletteAsset({ name: `${ps.name} palette`, colors: ps.doc.pal, source: 'studio' }));
+    if (!(await S.assets.put(S.paletteAsset({ name: `${ps.name} palette`, colors: ps.doc.pal, source: 'studio' })).catch((e) => S.reportStorageError('Save Palette', e)))) return;
     toast('Saved the palette to the library');
   }
 
@@ -2438,11 +2424,11 @@
   }
 
   function saveSession() {
-    S.kv.set(KEYS.session, { doc: ps.doc, name: ps.name, assetId: ps.assetId, dirty: ps.dirty, primary: ps.primary, secondary: ps.secondary });
+    S.kv.set(KEYS.session, { doc: ps.doc, name: ps.name, assetId: ps.assetId, dirty: ps.dirty, primary: ps.primary, secondary: ps.secondary }).catch(S.autosaveFailed('Pixel Studio session'));
   }
 
   async function restoreSession() {
-    const s = await S.kv.get(KEYS.session);
+    const s = await S.kv.get(KEYS.session).catch(S.autosaveFailed('Pixel Studio session'));
     if (!s?.doc?.frames?.length) return false;
     loadDoc(s.doc, { name: s.name, assetId: s.assetId, dirty: s.dirty });
     if (Number.isInteger(s.primary)) ps.primary = s.primary & 15;
@@ -2462,8 +2448,7 @@
     ps.layer = d.layers.length - 1;
     ps.sel = null;
     ps.floating = null;
-    ps.undo = [];
-    ps.redo = [];
+    ps.history.clear();
     afterDocReplaced();
     requestAnimationFrame(zoomFit);
     saveSession();
@@ -2536,7 +2521,8 @@
       a.id = old.id;
       a.created = old.created;
     }
-    const stored = await S.assets.put(a);
+    const stored = await S.assets.put(a).catch((e) => S.reportStorageError('Save to Library', e));
+    if (!stored) return;
     ps.assetId = stored.id;
     ps.dirty = false;
     renderTitle();
@@ -2759,7 +2745,7 @@
     const d = ps.doc;
     const pixels = new Uint8Array(128 * 128);
     K.blit(p.slots, p.w, p.h, pixels, 128, 128, p.dx, p.dy);
-    await S.assets.put(S.imageAsset({ name: `${ps.name} sheet`, w: 128, h: 128, pixels, pal: d.pal, transparent: d.transparent, source: 'studio' }));
+    if (!(await S.assets.put(S.imageAsset({ name: `${ps.name} sheet`, w: 128, h: 128, pixels, pal: d.pal, transparent: d.transparent, source: 'studio' })).catch((e) => S.reportStorageError('Frames → Sprite Sheet', e)))) return;
     toast(p.anim ? `Sheet saved to the library: frames at sprites ${p.anim.frames.join(', ')}` : 'Sheet saved to the library');
   }
 

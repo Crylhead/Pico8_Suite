@@ -717,6 +717,171 @@ function P8TerrainEngine() {
   };
 }
 
+/**
+ * Undo / redo snapshots for the Terrain Lab UI (DOM-free, not part of the worker engine).
+ * A snapshot keeps references to every resource it needs: the imports map, the import source
+ * (grey pixels + seam settings) and the bitmaps its stamps use. These objects are treated as
+ * immutable by terrain.js (retile / seam changes / scene loads build new ones), so sharing them
+ * costs no copies, and pruning or replacing the live stores never breaks an older snapshot.
+ * Retained memory is bounded by trim(): oldest entries go first once the budget is exceeded.
+ */
+const P8TerrainHistory = (() => {
+  const MAX_ENTRIES = 100;
+  const BUDGET_BYTES = 256 * 1024 * 1024;
+
+  /** the bitmaps the stamps reference, as {id: bitmap} (shared references) */
+  function bitmapRefs(stamps, bitmaps) {
+    const out = {};
+    for (const s of stamps) if (s.bmp && bitmaps[s.bmp]) out[s.bmp] = bitmaps[s.bmp];
+    return out;
+  }
+  /** withPico: also the PICO-8 output settings (scene loads replace them) */
+  function snapshot(st, withParams = false, withPico = false) {
+    return {
+      stamps: st.stamps.slice(), passes: st.passes.map((p) => ({ ...p })), strokeStarts: st.strokeStarts.slice(), importId: st.params.importId, importMix: st.params.importMix,
+      params: withParams ? { ...st.params } : null, preset: st.preset, weather: { ...st.weather },
+      imports: st.imports, importSrc: st.importSrc, bitmaps: bitmapRefs(st.stamps, st.bitmaps), pico: withPico ? { ...st.pico } : null,
+    };
+  }
+  /** puts a snapshot back into st; returns what changed besides the edits (worker assets, output settings) */
+  function restore(st, s) {
+    st.stamps = s.stamps; st.passes = s.passes; st.strokeStarts = s.strokeStarts;
+    if (s.params) { st.params = { ...s.params }; st.preset = s.preset; st.weather = { ...s.weather }; }
+    st.params.importId = s.importId; st.params.importMix = s.importMix;
+    const changed = { bitmaps: false, imports: st.imports !== s.imports, pico: !!s.pico };
+    st.imports = s.imports; st.importSrc = s.importSrc;
+    if (s.pico) st.pico = { ...s.pico };
+    for (const [id, b] of Object.entries(s.bitmaps || {})) if (st.bitmaps[id] !== b) { st.bitmaps[id] = b; changed.bitmaps = true; }
+    return changed;
+  }
+  /** bytes of the distinct large arrays (imports, import sources, bitmaps) the snapshots hold */
+  function retainedBytes(snaps) {
+    const seen = new Set();
+    let bytes = 0;
+    const add = (a) => { if (a && a.buffer && !seen.has(a.buffer)) { seen.add(a.buffer); bytes += a.buffer.byteLength; } };
+    for (const s of snaps) {
+      for (const im of Object.values(s.imports || {})) add(im && im.data);
+      add(s.importSrc && s.importSrc.grey);
+      for (const b of Object.values(s.bitmaps || {})) add(b && b.data);
+    }
+    return bytes;
+  }
+  /** drops the oldest undo entries (then the farthest redo entries) over the entry count or memory budget */
+  function trim(undo, redo, { max = MAX_ENTRIES, budget = BUDGET_BYTES } = {}) {
+    while (undo.length > max) undo.shift();
+    while (redo.length > max) redo.shift();
+    while ((undo.length || redo.length) && retainedBytes([...undo, ...redo]) > budget) (undo.length ? undo : redo).shift();
+  }
+  /** bitmap ids that must stay in the live store: current stamps plus extra ids (tool bitmaps) */
+  function liveBitmapIds(stamps, extra = []) {
+    const used = new Set();
+    for (const s of stamps) if (s.bmp) used.add(s.bmp);
+    for (const id of extra) if (id) used.add(id);
+    return used;
+  }
+  return { MAX_ENTRIES, BUDGET_BYTES, snapshot, restore, retainedBytes, trim, liveBitmapIds, bitmapRefs };
+})();
+
+/**
+ * PICO-8 output recipe of a scene file (DOM-free). Scene format v4 adds `pico`:
+ *   {colors, dither, strength, shade, depth, lift, palette}
+ *   colors:  the mode as chosen (auto16/12/8/4, std, library, libimg, frozen, src:<live source id>)
+ *   palette: null for the auto modes, else the fixed palette in slot order and the fade tables the
+ *            output used {colors, fades, name, external, link}. external = it was read from another
+ *            tool (a live source, or fades borrowed from Palette & Fades); link = the live source.
+ * Loading turns every external palette into the frozen snapshot ('frozen' mode, link kept), so
+ * a scene renders the same in any session; going live again is an explicit Colors choice.
+ * Older scenes (v0.4, v1-v3) have no recipe and get PICO_DEFAULTS, never the current settings.
+ */
+const P8TerrainScene = (() => {
+  const VERSION = 4;
+  const PICO_DEFAULTS = Object.freeze({ colors: 'auto16', dither: 'ordered', strength: 0.5, palColors: null, palFades: null, palName: '', shade: 'lit', depth: 0.8, lift: 0.4, link: null });
+  const AUTO = /^auto(16|12|8|4)$/, LIVE = /^src:[\w.-]+$/;
+  const STD = Array.from({ length: 16 }, (_, i) => i);
+  const unit = (v, d) => (v !== null && v !== '' && Number.isFinite(Number(v)) ? Math.min(1, Math.max(0, Number(v))) : d);
+  const isColor = (c) => Number.isInteger(c) && ((c >= 0 && c < 16) || (c >= 128 && c < 144));
+  /** validated copy of a palette (1-16 PICO-8 colors in slot order) or null */
+  const cleanPal = (a) => (Array.isArray(a) && a.length >= 1 && a.length <= 16 && a.every(isColor) ? a.slice() : null);
+  function cleanTable(f) {
+    if (!f || !Array.isArray(f.tables) || !f.tables.length || f.tables.length > 64) return null;
+    if (!f.tables.every((r) => Array.isArray(r) && r.length >= 16 && r.every((v) => Number.isInteger(v) && v >= 0 && v < 256))) return null;
+    const out = { tables: f.tables.map((r) => r.slice()) };
+    if (Array.isArray(f.coverage) && f.coverage.every(Number.isFinite)) out.coverage = f.coverage.slice();
+    return out;
+  }
+  /** validated deep copy of {dark, bright} fade tables, or null when there are none */
+  function cleanFades(f) {
+    if (!f) return null;
+    const dark = cleanTable(f.dark), bright = cleanTable(f.bright);
+    return dark || bright ? { dark, bright } : null;
+  }
+
+  /**
+   * The fixed palette a recipe uses: {pal, fades, from, note, external}, or null for the auto modes.
+   * sources: {get(id) -> {pal, fades, name} | null, label(id)}: the live palettes of other tools.
+   */
+  function resolveFixed(pico, sources) {
+    const pm = pico.colors || '';
+    const label = (id) => (sources.label && sources.label(id)) || id;
+    let pal = null, fades = null, from = '', note = '', external = false;
+    if (pm === 'frozen' && pico.palColors) {
+      // a snapshot never borrows from other tools
+      const hint = pico.link && LIVE.test(pico.link) ? ` Choose “${label(pico.link.slice(4))} (live)” under Colors to use the live palette.` : '';
+      return { pal: pico.palColors.slice(), fades: pico.palFades || null, from: pico.palName || 'Saved snapshot', note: `Saved snapshot.${hint}`, external: false };
+    }
+    if (pm === 'std') { pal = STD.slice(); from = 'Standard 16'; }
+    else if (LIVE.test(pm)) {
+      const id = pm.slice(4), s = sources.get(id);
+      external = true;
+      if (s) { pal = s.pal.slice(); fades = s.fades; from = `${label(id)}: ${s.name}`; } else { pal = STD.slice(); note = `${label(id)} has nothing open: using the standard 16.`; from = 'Standard 16'; }
+    } else if ((pm === 'library' || pm === 'libimg') && pico.palColors) { pal = pico.palColors.slice(); fades = pm === 'libimg' ? pico.palFades : null; from = pico.palName || 'Library'; }
+    if (!pal) return null;
+    if (!fades?.dark && !fades?.bright) {
+      const pf = sources.get('palette');
+      if (pf?.fades) {
+        fades = pf.fades;
+        if (pm !== 'src:palette') note ||= 'Fade tables from Palette & Fades, used by slot number.';
+        if (pico.shade === 'fades') external = true;
+      }
+    }
+    return { pal, fades, from, note, external };
+  }
+
+  /** the scene file's `pico` recipe; resolved = resolveFixed() at save time */
+  function encodePico(pico, resolved) {
+    const pm = pico.colors;
+    const out = { colors: pm, dither: pico.dither, strength: pico.strength, shade: pico.shade, depth: pico.depth, lift: pico.lift, palette: null };
+    if (resolved) {
+      const frozen = resolved.external || pm === 'frozen';
+      out.palette = {
+        colors: resolved.pal.slice(), fades: cleanFades(frozen ? resolved.fades : pm === 'libimg' ? pico.palFades : null), name: resolved.from,
+        external: !!resolved.external, link: LIVE.test(pm) ? pm : pm === 'frozen' && LIVE.test(pico.link || '') ? pico.link : null,
+      };
+    }
+    return out;
+  }
+
+  /** st.pico for a parsed scene file: its recipe (v4) or the defaults (older versions) */
+  function decodePico(scene) {
+    const out = { ...PICO_DEFAULTS };
+    const p = scene && Number(scene.version) >= 4 ? scene.pico : null;
+    if (!p || typeof p !== 'object') return out;
+    if (['none', 'ordered', 'diffuse'].includes(p.dither)) out.dither = p.dither;
+    if (['lit', 'fades'].includes(p.shade)) out.shade = p.shade;
+    out.strength = unit(p.strength, out.strength); out.depth = unit(p.depth, out.depth); out.lift = unit(p.lift, out.lift);
+    const pm = String(p.colors || ''), sp = p.palette && typeof p.palette === 'object' ? p.palette : null, pal = sp && cleanPal(sp.colors);
+    const name = sp && typeof sp.name === 'string' ? sp.name.slice(0, 200) : '';
+    if (AUTO.test(pm)) out.colors = pm;
+    else if (pal && (LIVE.test(pm) || pm === 'frozen' || sp.external === true)) {
+      const link = LIVE.test(pm) ? pm : LIVE.test(sp.link || '') ? sp.link : null;
+      Object.assign(out, { colors: 'frozen', palColors: pal, palFades: cleanFades(sp.fades), palName: name || 'Saved snapshot', link });
+    } else if (pm === 'std') out.colors = 'std';
+    else if (pal && (pm === 'library' || pm === 'libimg')) Object.assign(out, { colors: pm, palColors: pal, palFades: pm === 'libimg' ? cleanFades(sp.fades) : null, palName: name });
+    return out;
+  }
+  return { VERSION, PICO_DEFAULTS, resolveFixed, encodePico, decodePico, cleanFades, cleanPal };
+})();
+
 const P8Terrain = (() => {
   const E = P8TerrainEngine();
   let url = null;
@@ -728,7 +893,7 @@ const P8Terrain = (() => {
     }
     return url;
   }
-  return { ...E, workerUrl };
+  return { ...E, workerUrl, history: P8TerrainHistory, scene: P8TerrainScene };
 })();
 
 if (typeof module !== 'undefined') module.exports = P8Terrain;

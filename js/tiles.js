@@ -1303,7 +1303,8 @@ Increase the tile reduction (MAE) threshold and rebuild.`);
       pixels[i * 2] = mem[i] & 15;
       pixels[i * 2 + 1] = mem[i] >> 4;
     }
-    const a = await S.assets.put(S.imageAsset({ name: `${tm.name || 'tiles'} sheet`, w: 128, h: 128, pixels, pal: pal.picos || S.STD_PAL, source: 'tiles' }));
+    const a = await S.assets.put(S.imageAsset({ name: `${tm.name || 'tiles'} sheet`, w: 128, h: 128, pixels, pal: pal.picos || S.STD_PAL, source: 'tiles' })).catch((e) => S.reportStorageError('Send to Library', e));
+    if (!a) return;
     toast(`Sprite sheet "${a.name}" saved to the library`);
     if (tm.result.tiles.length > T.MAX_SPRITES) toast(`Only the first ${T.MAX_SPRITES} tiles fit on the sprite sheet.`, 'warn');
   }
@@ -1316,7 +1317,8 @@ Increase the tile reduction (MAE) threshold and rebuild.`);
       showMessage('Send to Library', `The reconstructed image is ${r.w}×${r.h}; the library keeps images up to ${S.MAX_IMAGE_SIDE}×${S.MAX_IMAGE_SIDE}.`);
       return;
     }
-    const a = await S.assets.put(S.imageAsset({ name: `${tm.name || 'tiles'} tiles`, w: r.w, h: r.h, pixels: T.imageToSlots(r, pal.rgb), pal: pal.picos || S.STD_PAL, source: 'tiles' }));
+    const a = await S.assets.put(S.imageAsset({ name: `${tm.name || 'tiles'} tiles`, w: r.w, h: r.h, pixels: T.imageToSlots(r, pal.rgb), pal: pal.picos || S.STD_PAL, source: 'tiles' })).catch((e) => S.reportStorageError('Send to Library', e));
+    if (!a) return;
     toast(`Reconstructed image "${a.name}" saved to the library`);
   }
 

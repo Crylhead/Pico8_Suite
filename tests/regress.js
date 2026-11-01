@@ -1,9 +1,11 @@
 // Small regression entry point for review findings (P8S-010). Run: node tests/regress.js
+// Focused regressions for later fixes live in tests/*.test.js and are loaded below.
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { t, run } = require('./harness.js');
 const P = require('../js/project-core.js');
 const A = require('../js/audit-core.js');
-let n = 0;
-const t = (name, fn) => { fn(); n++; console.log(`ok - ${name}`); };
 
 // P8S-002: a partial read at sub-offset zero keeps its own length
 t('P8S-002 rewrite keeps partial length at +0x0', () => {
@@ -14,11 +16,13 @@ t('P8S-002 rewrite keeps partial length at +0x0', () => {
   assert.match(out[1], /reload\(0x9000,0x1000,0x0032,"d1\.p8"\)/);
   assert.match(out[2], /reload\(0x9100,0x100a,0x0014,"d1\.p8"\)/);
 });
-t('P8S-002 bare anchor follows a resized part; ranged anchor is clamped', () => {
+t('P8S-002 bare anchor follows a resized part; ranged anchor past the part is rejected (#7, was clamped)', () => {
   const where = () => ({ off: 0, len: 40, cart: 'd1.p8' });
-  const out = P.rewriteAnchors('reload(0,0,100,"a.p8") --@data x.bin\nreload(0,0,100,"a.p8") --@data x.bin+0', where).text.split('\n');
+  const r = P.rewriteAnchors('reload(0,0,100,"a.p8") --@data x.bin\nreload(0,0,100,"a.p8") --@data x.bin+0', where);
+  const out = r.text.split('\n');
   assert.match(out[0], /0x0028/);
-  assert.match(out[1], /0x0028/);
+  assert.strictEqual(out[1], 'reload(0,0,100,"a.p8") --@data x.bin+0');
+  assert.deepStrictEqual(r.errors.map((e) => e.line), [2]);
 });
 t('P8S-002 adopt -> rewrite keeps reads of 100 and 50 bytes distinct', () => {
   const mk = (name, text) => ({ rom: new Uint8Array(0x8000).fill(1), lua: '', used: new Uint8Array(0x8000), reads: [], luaAt: 0, name, text });
@@ -55,4 +59,6 @@ t('P8S-008 self and indirect cycles still stop', () => {
   A.expandIncludes(fs2, 's.lua', fs2.read('s.lua'), new Set(['s.lua']), w2);
   assert.ok(w2.some((m) => /cycle/.test(m)));
 });
-console.log(`${n} passed`);
+
+for (const f of fs.readdirSync(__dirname).filter((f) => f.endsWith('.test.js')).sort()) require(path.join(__dirname, f));
+run();
