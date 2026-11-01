@@ -2,18 +2,22 @@
 
 Decided with the user on 2026-10-29, after benchmarks in PICO-8 0.2.7. Nuova and Modulator shipped without compression: they need no unpacker, start faster and spend no tokens on one. That only worked because the data just fit. Compression is therefore an option for when a demo does not fit, never the default.
 
+## Implementation status
+
+This standalone repository implements **raw storage and byte LZ only**. Target-cart compression and gamma LZ remain proposals. The measurements below are historical PICO-8 0.2.7 reports from Demotools, not benchmarks shipped with this repository or independently rerun on 2026-11-01. Token counts and timings depend on the exact decoder, runtime and workload.
+
 ## Decisions
 
 1. **Raw by default.** It costs no tokens and no CPU, and a `reload()` is the only cost.
 2. **Byte LZ (`unlz`, 60 tokens) is the codec for data unpacked at a cut.** It unpacks 17 KB in about 0.1 frame, so a cut stays within budget.
-   - Since 2026-10-29 the encoder in `cart-core.js` uses an optimal parse. The format and the decoder are unchanged, so existing carts and anchors keep working.
+   - Since 2026-10-29 the encoder in `cart-core.js` uses dynamic programming over a bounded match search (default chain limit 1024); this is not a guarantee of the global minimum over every possible match. The format and the decoder are unchanged, so existing carts and anchors keep working.
    - The new encoder output was checked in PICO-8: 248 of 248 unpacks byte-exact.
 3. **Compress only what saves a cart (planned).** The cart builder gets an option to compress parts only when the demo would otherwise need more carts than the target. Parts that shrink most go first: images and music patterns, and audio last.
 4. **Gamma LZ (139 tokens) is an opt-in second codec, for data unpacked at boot only (planned).**
    - It packs about 13% smaller than byte LZ over all carts.
    - It takes 2–5 frames per 17 KB. During a cut that would drop frames, so it is only for data unpacked behind the boot screen.
-   - The builder warns when a gamma LZ anchor is in `init()` instead of `load()`.
-   - A project uses one codec, so its decoder's tokens are paid once.
+   - Proposed behavior: the builder would warn when a gamma LZ anchor is in `init()` instead of `load()`; no such gamma codec or warning is implemented.
+   - Proposed policy: use one codec per project so its decoder's tokens are paid once.
 5. **Not offered:**
    - PX9: 214 tokens and 15–50 frames per cart. It beats gamma LZ on only 3 images and makes audio and tables bigger.
    - RLE: always worse than byte LZ, at about the same token cost.
@@ -23,7 +27,7 @@ The fixed cost of `reload()` stays the same: about 0.23 frames per call for anyt
 
 ## Measurements
 
-The data set is 35 data carts of Nuova and Modulator (579 KB). They are:
+The inherited benchmark notes report 35 data carts of Nuova and Modulator (579 KB), categorized as follows. The category counts sum to 36; without the original fixtures this discrepancy cannot be resolved, so do not treat this as a verified inventory:
 - 13 image carts
 - 4 uv/bump tables
 - 2 music pattern carts
@@ -72,7 +76,7 @@ PICO-8 0.2.7 can bundle up to 32 carts per export.
 
 Matches never overlap their source, so `memcpy` is always correct.
 
-**Gamma LZ** (planned; prototype in `carts/compress_bench/src/codecs.js`):
+**Gamma LZ** (planned; the historical prototype is not included in this repository):
 - Control bits are read LSB first from bytes fetched when needed. Literals and offset low bytes sit byte-aligned in the same stream.
 - The stream is `gamma(n+1)`, then tokens:
   - literal: `0`, `gamma(L)`, then L bytes
@@ -104,8 +108,13 @@ end
 
 ## Reproducing
 
-The bench is in `pico-8/carts/compress_bench/`. The encoders and generators are in its `src/` folder.
+This repository does **not** contain `pico-8/carts/compress_bench/`, its generators/analyzer, the demo input carts or the timing logs. The tables cannot be regenerated from this checkout alone.
 
-1. `node src/gen.js <bench dir> <data carts…>` writes the packed carts, the source carts, `bench.p8` and the token-count carts.
-2. `pico8.exe -x bench.p8` writes `bench_out.txt`: codec, cart, packed size, raw size, reload frames, unpack frames, and whether the bytes match.
-3. `node src/analyze.js` prints the tables above.
+With the original benchmark checkout and matching data carts available, the historical procedure was:
+
+1. From the benchmark directory, `node src/gen.js <bench dir> <data carts…>` generated packed/source carts, `bench.p8` and token-count carts.
+2. `pico8.exe -x bench.p8` wrote `bench_out.txt` with sizes, timings and byte comparisons.
+3. `node src/analyze.js` summarized the results.
+
+For checks available here, see [CONTRIBUTING.md](../CONTRIBUTING.md). A JavaScript encoder/decoder round trip checks internal consistency; it does not independently validate PICO-8 runtime compatibility.
+

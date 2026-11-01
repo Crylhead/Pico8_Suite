@@ -1,95 +1,91 @@
-# Demo projects in the suite: phase 1 spec
+# Demo project model and Cart Builder
 
-Goal: the suite knows a demo's data (images, palettes, fades, tiles, maps, tables), packs it into data carts, and tells the fx code where each piece is. No guessing about addresses or formats, and no extra tokens.
+This describes the implementation in the standalone Pico8_Suite repository as reviewed on 2026-11-01 at [1432860512e85a13dab0d1bd2ff0b4d4de780a05](https://github.com/Crylhead/Pico8_Suite/commit/1432860512e85a13dab0d1bd2ff0b4d4de780a05). It replaces the older phase-1 proposal. Open defects are tracked in the [health review](HEALTH_REVIEW_2026-11-01.md); implemented behavior below is not a guarantee that those defects are resolved.
 
-Decided with the user (2026-10-28):
-- The project folder is wherever the user puts it (any folder outside `AppData`, so the browser may write to it).
-- The fx find their data through `--@data` anchor comments.
-- Maps follow PICO-8 / Modulator / Nuova (8-bit cells). Bigger maps in data carts are an option.
-- Order: project model and cart builder first, then the live tile link, then the map editor.
+## Folder and persistence
 
-## 1. Project folder
+Cart Builder uses Chrome/Edge's File System Access API with read/write permission. Pick a project containing `demo/`, or a flat folder containing `main.p8`. Work in a browser-writable location; protected locations such as `AppData` may be rejected. The selected folder handle is remembered in IndexedDB; reconnect if permission must be granted again.
 
-The user picks the folder once (File System Access API, read/write). The suite remembers the handle in IndexedDB and asks for permission again on the next visit. The layout is demoframe's, plus two entries:
+| Path | Current use |
+| --- | --- |
+| `demo/*.p8` | FX and data carts; Cart Builder scans this directory, not arbitrary nested FX folders. |
+| `demo/suite.json` | Project format version 1, prefix, generated cart layout, unmanaged carts and adoption bookkeeping. |
+| `assets/<name>.json` | One asset per file, at the selected project root; parts are stored as base64 bytes. |
+| `demo/unused/` | Source/previously generated carts retired by Write Carts. |
+| `music/`, `tools/`, `release/` | Optional directories belonging to the external demo framework; the Suite does not provide them. |
 
-| Path | Content |
-|---|---|
-| `demo/` | fx carts, data carts (generated ones too), `main.p8`, … |
-| `demo/suite.json` | the project file: assets, carts, layout (below) |
-| `assets/` | asset sources, one file per asset (`<name>.json`, versioned) |
-| `music/`, `tools/`, `release/` | as in demoframe |
+For a flat project, replace `demo/` with the selected folder itself; `assets/` and `unused/` are then children of that folder. `suite.json` stores each placed part's ref, offset, stored length and LZ flag.
 
-A project can also be adopted from an existing demo. The Data Carts analysis (sections + `reload()` lines) proposes assets and anchors, and the user confirms. Nuova and Modulator are the first test cases.
+Opening a folder reads its files. **Adopt writes immediately:** it adds anchors to FX carts, creates asset files and writes `suite.json`, then prepares an automatic layout. It does not wait for Write Carts. Later asset edits and rearrangements are staged in memory until Write Carts.
 
-## 2. Asset types and their bytes
+Adoption recognizes literal cart names and supported literal cart lists. Music/track carts and unsupported computed references are left outside conversion and reported where detected. Conservative evaluation, remaining-reference checks and recoverable writes still need fixes ([#1](https://github.com/Crylhead/Pico8_Suite/issues/1), [#2](https://github.com/Crylhead/Pico8_Suite/issues/2), [#3](https://github.com/Crylhead/Pico8_Suite/issues/3), [#4](https://github.com/Crylhead/Pico8_Suite/issues/4)).
 
-Every asset has a `name` (Lua-identifier style), a `type`, and its parts. A part is a run of bytes that one `reload()` brings in. Encodings are header-less: the project file knows sizes, and the fx code knows its own formats.
+## Assets and bytes
 
-| Type | Parts | Bytes |
-|---|---|---|
-| `image` | `.img` | w×h pixels, row-major, 2 pixels per byte, low nibble = left pixel (PICO-8 memory layout). w is even. 128-wide images are sprite-sheet compatible. |
-| `layered` | `.img`, `.mask`, `.fades` | `.img` as `image`. `.mask` is the same size; a pixel's value is its layer (Modulator's skull format). The layer count is stored in the project, and the fx code has it too. |
-| `palette` | `.pal` | 16 bytes, screen colors (0–15, 128–143) |
-| `fades` | `.fades` | Row 0 = screen palette. Rows 1…2N = `pal(…,2)` rows of packed color pairs (low nibble = this level, high nibble = next brighter level). Row N+1 = no fade. Default N = 16: 33 rows, 528 bytes (Modulator's format, read with `memread_table8(16)` and `fillp` dither). |
-| `tiles` | `.gfx`, `.map` | `.gfx`: 8×8 tiles in sprite-sheet layout (128 px wide `image`). `.map`: cells row-major, 1 byte per cell (PICO-8 map; at width 128 identical to `__map__`). Option: 2 bytes per cell (little-endian) for more than 256 tiles. |
-| `table` | `.bin` | raw bytes (uv maps, line data, waves, …) |
+An asset has `format`, `name`, `type`, `meta`, and `parts`. Each part contains `bytes`, `lz` and optional `group`. Names use Lua-identifier-style text; `asset.part` identifies a part. The FX is responsible for interpreting the headerless raw bytes.
 
-Options per part: `lz` (byte LZ from `cart-core.js`; the fx needs the 60-token `unlz()` once). Which codecs the suite offers, and why: `docs/COMPRESSION.md`.
+| Type | Conventional parts | Representation |
+| --- | --- | --- |
+| `image` | `img` | Two palette slots per byte, low nibble = left pixel; even-width rows. 128-wide images match sprite-sheet memory layout. |
+| `layered` | `img`, `mask`, `fades` | Image plus layer mask and fade bytes, interpreted by the consuming FX. |
+| `palette` | `pal` | 16 screen-color bytes: 0–15 or 128–143. |
+| `fades` | `fades` | Demo-specific packed palette/fade rows. The Modulator convention uses a screen-palette row followed by packed secondary-palette color pairs. |
+| `tiles` | `gfx`, `map` | 128-pixel-wide sheet packed as 4-bit slots; map cells are row-major **8-bit** tile IDs. At width 128, map bytes match `__map__`. |
+| `table` | `bin` | Raw bytes such as UV tables, lines or waves. |
+| `cartset` | `c1`, `c2`, … | Ordered parts corresponding to a literal list of source carts. These parts remain raw. |
 
-Images carry their palette and, if any, their fades (asset `meta`), so every tool shows them in the right colors. This already works between Data Carts, Pixel Studio, Palette & Fades and Tile Maker.
+These are supported type names/conventions, not separate creation wizards for every type. Existing-demo adoption and the Add Image / Add Map / Add File actions create the appropriate assets. Assets may contain arbitrary named parts.
 
-## 3. Anchors: how the fx find their data (0 tokens)
+The Map Editor supports up to 256×256 cells for editing/export, but **Add Map currently rejects a map part over 0x4300 (17,152) bytes**. It does not split large maps automatically. Two-byte tile IDs and more than 256 tiles are not implemented. Add File has the same one-part capacity limit. General images can also exceed one cart; packing reports oversized parts.
 
-The fx code keeps its own `reload()` calls. A comment names the part:
+A part may be stored raw or byte-LZ compressed. Raw is the default; LZ needs the generated `unlz()` decoder in the FX. Gamma LZ and target-cart-count compression remain planned; see [COMPRESSION.md](COMPRESSION.md).
+
+Image/palette metadata can carry screen colors and inferred segment information. This does not establish a lossless universal fade round trip: Add Image currently reduces incoming fade metadata to a flag. Preserve actual fade bytes as project parts when the FX needs them.
+
+## Anchors and rewriting
+
+The FX keeps its own destination address and loading code:
 
 ```lua
-reload(0,0x2000,0x2000,"d1.p8") --@data seqgrid.img
-reload(0x8000,0x2300,0x2000,"spr_logocolor.p8") --@data litcntr_bg.img
-reload(tmp,0x0123,0x0456,"d2.p8") unlz(tmp,0x8000) --@data wormhole.uv
+reload(0x8000,0x2000,0x2000,"source.p8") --@data background.img
+reload(tmp,0x0123,0x0456,"source.p8") unlz(tmp,0x8000) --@data wormhole.bin
 ```
 
-A range inside a bigger part of the same cart is anchored as `--@data asset.part+offset`. `demo/suite.json` stores every part's cart, offset and length, so `build.py` can check the lines without decoding assets.
+A bare `--@data asset.part` follows the whole stored part, including its length. For raw parts, `--@data asset.part+offset` denotes a subrange: the existing call's length is retained, clamped to the remaining part bytes. Explicit `+0` also means a subrange. The decoder expects a complete LZ stream; ranged compressed reads are unsafe and current validation does not reject all of them ([#7](https://github.com/Crylhead/Pico8_Suite/issues/7)).
 
-When the builder places the parts, it rewrites the source address, length and cart name of each anchored line in the fx `.p8` files. It never changes the destination: where the data goes in memory is the fx's business.
-- Comments cost no tokens, and dev, test and release builds read the same lines.
-- `build.py` checks that every anchor's part exists in `suite.json` and fits the line, and fails the release build otherwise.
-- Errors the builder reports:
-  - an anchor naming a missing part
-  - a part no anchor uses (a warning: wasted cart space)
-  - a part whose length differs from the line's
+Write Carts rewrites the source address, stored length and cart name, leaving the destination expression unchanged. Anchors are comments and add no Lua tokens. Current validation checks missing refs, unused-part warnings, raw/LZ call consistency and cart-set offsets; it is not a complete static verifier of arbitrary Lua.
 
 ### Cart sets
 
-A loop over a literal list of carts reads every cart with the same line:
-
 ```lua
-local cartnames={"d0.p8", "d1.p8", "d2.p8"} -- rewritten by the builder
-reload(0x0,0x0000,0x4300,cartnames[i]) --@data skull_cartnames[]
+local cartnames={"d0.p8","d1.p8"}
+reload(0,0,0x4300,cartnames[i]) --@data skull_cartnames[]
 ```
 
-The asset (type `cartset`) has one part per cart (`c1`, `c2`, …). Its parts always sit at offset 0, one per cart. Other parts may fill the rest of those carts.
+The builder rewrites the literal list and reload source/length. Auto-pack places each set part at offset zero in its own cart; other parts may fill remaining space. Manual layouts must keep set parts at a common offset.
 
-### Segments
+### Segments and editing
 
-A part can hold several things: Logolit's part is a 16 KB image plus tables, Litcntr's holds sprites, tiles and a fade table. `meta.segments[part]` lists them (`name`, `off`, `len`, `kind`: img / pal / hex, the palette the fx shows an image in). The suite uses this to open a segment in its palette in the other tools, and to write an edited one back into the part (same size).
+`meta.segments[part]` describes regions inside a part: name, offset, length and kind (`img`, `pal`, `hex`), with optional width/palette. Data Carts analysis infers these from FX code; they are not guaranteed exact.
 
-## 4. Cart builder ("stacks")
+**→ Library** publishes a segment for editing. **← Library** applies an edited image of the same byte size, or a palette row, back into that part. Write Carts commits the edited bytes to the demo. This is an explicit round trip, not automatic synchronization.
 
-A new workspace:
-- **Left:** the project's parts, with size, type and a thumbnail.
-- **Middle:** the data carts as stacks of 0x4300 bytes, with the gfx / map / flags / music / sfx bands. Each part is a block; the free space is visible.
-- **Manual:** drag parts onto stacks and reorder them. The LZ toggle per part shows the size it would have.
-- **Auto-pack:** best-fit decreasing, fewest carts first, then fewest `reload()` calls. Constraints:
-  - parts with the same `group` go into the same cart, next to each other (one `reload()` can cover them)
-  - pinned parts (cart + offset) stay where they are
-  - generated cart names are `<prefix><n>.p8` (default `d`); the prefix must not clash with the music carts (`m<n>`, `p<n>`)
-- **Write:** writes the carts into `demo/`, rewrites the anchors, saves `suite.json`, reads every cart back and compares it byte for byte.
-- **Report:** carts, bytes used and free, number of `reload()` calls at boot, LZ token cost.
+## Packing and writing
 
-Flat demo folders (`main.p8` directly in the folder, like Modulator's) work too: the folder itself is `demo/`.
+- Each data cart has 0x4300 bytes, spanning gfx, map, flags, music and SFX.
+- Drag parts between stacks to arrange them manually. Offsets are recomputed contiguously within each stack.
+- Auto-pack uses best-fit decreasing after placing cart sets. Grouped parts stay adjacent. This is a heuristic, not a proof of the smallest possible cart count.
+- Generated names are `<prefix><n>.p8`, default prefix `d`; foreign cart names are reserved.
+- Pinned offsets are **not implemented**. Auto-pack replaces the manual arrangement.
+- Write Carts checks placement/capacity, builds and parses generated cart strings for byte/LZ comparison, computes anchor rewrites, requests confirmation, then writes carts/FX/assets/manifest and retires old carts.
 
-## 5. Out of scope for phase 1
+The current comparison is **in memory before disk writes**, not a disk readback. Multi-file writes are not transactional, and current retirement/conflict handling has open defects. See issues #1–#4 in the [health review](HEALTH_REVIEW_2026-11-01.md).
 
-- Live tile editing between Pixel Studio and Tile Maker (phase 2).
-- The map editor (phase 3). A first version exists: the Map Editor workspace edits 8-bit maps up to 256×256 and adds them to a project as `tiles` assets (`.gfx` + `.map`).
-- Running PICO-8 from the browser. Byte checks happen in the suite, timing checks stay in PICO-8 (see the optimization notes in `carts/Notes`).
+There is **no `tools/build.py` release builder in this repository**. Anchor validation runs in Cart Builder; if the surrounding demo framework supplies a release checker, configure and run it there separately.
+
+## Related tools and future work
+
+Map Editor and Code Editor/Run already exist; they are no longer future phases. Run uses the optional Python bridge and your installed PICO-8. Byte checks in JavaScript do not replace running the generated demo in PICO-8.
+
+Live tile editing, shared document/revision semantics and a permanent Send to action remain design proposals. See the [historical review index](https://github.com/Crylhead/Demotools/blob/4a2855b99efb2e7a265961c63f1ac809adea3ed2/reviews/README.md); do not treat those proposals as delivered features.
+

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """PICO-8 bridge for the PICO-8 Dev Suite: lets the Code Editor run carts in PICO-8.
 
-A browser page cannot start programs, so this small local server does it. It only listens on
-127.0.0.1 and only answers pages served from file://, localhost or 127.0.0.1.
+A browser page cannot start programs, so this small local server does it. It listens on
+127.0.0.1. Its origin filter accepts null/file, localhost and 127.0.0.1 origins, plus
+requests without an Origin header; this filter is not caller authentication.
 
-    python pico8_bridge.py [--pico8 PATH] [--root FOLDER ...] [--port 8708]
+    python pico8_bridge.py [--pico8 PATH] [--root FOLDER] ... [--port 8708]
 
 The editor sends the cart's name and text. The bridge looks for that file (same name, same
 content: the editor saves it first) in the roots - PICO-8's carts folder (root_path in
@@ -273,3 +274,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

@@ -1,21 +1,39 @@
 # PICO-8 Dev Suite
 
-Browser-based PICO-8 graphics suite. It grew out of `palette_tool_web` and puts several tools behind one app bar, connected by a shared asset library.
+Browser-based PICO-8 graphics suite, developed in this standalone repository. It grew out of `palette_tool_web` in Crylhead/Demotools and puts several tools behind one app bar, connected by a shared asset library.
 
 | Tool | What it does |
 |---|---|
-| **Pixel Studio** (new) | Pixel editor restricted to PICO-8: 16 slots mapped to the 32 PICO-8 colors, `fillp()` patterns, a sieve (APaint-style dither mask), brush preview under the cursor, tiled view you can draw across, layers, frames with onion skin, canvases from 1×1 to 1024×1024, `[gfx]` clipboard in/out, `.p8` sprite sheet import, new carts and writing into existing carts |
+| **Pixel Studio** | Pixel editor restricted to PICO-8: 16 slots mapped to the 32 PICO-8 colors, `fillp()` patterns, a sieve (APaint-style dither mask), brush preview under the cursor, tiled view you can draw across, layers, frames with onion skin, canvases from 1×1 to 1024×1024, `[gfx]` clipboard in/out, `.p8` sprite sheet import, new carts and writing into existing carts |
 | **Palette & Fades** | Port of `palette_tool`: custom palettes, dark/bright fade tables, greyscale conversion, Lua/GPL/PNG/.p8 exports |
 | **Tile Maker** | Port of `tilemaker`: 8×8 tile packing, VRAM heatmap, tile editor, .p8/Aseprite/PNG exports |
-| **Map Editor** | PICO-8 tile maps painted with tiles or blocks of a sprite sheet (library image, `.p8` `__gfx__` or Tile Maker result): draw, rectangle and flood fill, pick, select / copy as brush, undo. 128×32 cart maps, 128×64 with the shared sprite rows, up to 256×256 for data carts. `.p8` import, new cart with viewer, write into an existing cart, map bytes / hex / PNG; maps are library assets and go into Cart Builder projects as `tiles` assets |
-| **Code Editor** | PICO-8 Lua editor for the `__lua__` section of a `.p8` (or a `.lua` file): PICO-8 syntax highlighting, API completion and signature hints, auto-indent, find / replace, code tabs (`-->8`), function list, live token / character count. Saves straight back into the cart (Chrome / Edge) without touching the other sections. Folders with `#include` followed (tokens counted). **Run** (Ctrl+R) starts the cart in PICO-8 through `tools/pico8_bridge.py` and shows `printh()` output |
+| **Map Editor** | PICO-8 tile maps painted with tiles or blocks of a sprite sheet (library image, `.p8` `__gfx__` or Tile Maker result): draw, rectangle and flood fill, pick, select / copy as brush, undo. 128×32 cart maps, 128×64 with the shared sprite rows, up to 256×256 for raw-byte export. Cart Builder accepts a map part only up to 17,152 bytes; larger maps need splitting outside the current UI. `.p8` import, new cart with viewer, write into an existing cart, map bytes / hex / PNG; maps are library assets and go into Cart Builder projects as `tiles` assets |
+| **Code Editor** | PICO-8 Lua editor for the `__lua__` section of a `.p8` (or a `.lua` file): PICO-8 syntax highlighting, API completion and signature hints, auto-indent, find / replace, code tabs (`-->8`), function list, live estimated token / character count. Saves into the cart in Chrome / Edge, retaining the other sections captured when opened; external changes need reopening (see issue #4). Folders with `#include` followed (tokens counted). **Run** (Ctrl+R) starts the cart in PICO-8 through `tools/pico8_bridge.py` and shows `printh()` output |
 | **Data Tools** | Ports of `binary_data_converter` (bytes → PICO-8 string literal; library images added as input) and `nibble_converter` (greyscale → hi/lo nibble images) |
-| **Project Audit** | Port of `project_audit`: scans a project folder (picked or dropped, read in the browser) for tokens / characters per cart with `#include` expanded, includes in both directions, `load` / `run` / `reload` / `cstore` references, used and unused carts; CSV / JSON export |
-| **Cart Builder** | A demo project folder (read/write): adopts its data as assets, packs them into data carts (drag or auto-pack, LZ per part), writes and checks the carts and rewrites the `--@data` anchor lines the fx load from. See `docs/PROJECT_MODEL.md` |
+| **Project Audit** | Port of `project_audit`: scans a project folder (picked or dropped, read in the browser) for estimated tokens / characters per cart with `#include` expanded, includes in both directions, `load` / `run` / `reload` / `cstore` references, used and unused carts; CSV / JSON export |
+| **Cart Builder** | A demo project folder (read/write): adopts its data as assets, packs them into data carts (drag or auto-pack, LZ per part), checks generated cart text before writing and rewrites the `--@data` anchor lines the fx load from. See `docs/PROJECT_MODEL.md` |
 | **Data Carts** | Exact reader / writer for the cart data area (0x0000–0x42ff incl. `__sfx__` / `__music__`), memory map per cart with the ranges the project's `reload()` calls read, sections per cart (what each fx cuts out with `mem_store`), viewer in the palette and fade row the fx uses (read from its code and data), hex, fixed-point plots, packer for new data carts (raw or LZ per entry) with generated `reload()` lines |
 | **Extra Tools** | Smaller tools behind one tab bar: **LUT Creator** (port of `lut_creator`: 2D motion paths, 3D ball formations incl. OBJ models, slots, `.p8` data cart / Lua / Picotron POD), **Wave Designer** (port of `osc_designer`: 16 scope waveforms → `waves.p8`), **Line Tool** (port of `line_tool`: 128×128 lines → Lua table, pixels → library), **Terrain Lab** (port of `terrain_lab_v0_4`: seamless terrain from noise or an imported heightmap, brushes, text / image / SVG stamps, erosion, terraces and sea level, baked light → 128×128 PICO-8 color map in the best 16/12/8/4 of 32 colors or the live palette of Palette & Fades / Pixel Studio, optionally shaded along their fade tables, + 16-level height map, `.p8` viewer cart, library; history window, status bar, any installed font) |
 
-There is no build step and no dependencies. Running carts from the Code Editor needs the local helper `tools/pico8_bridge.py` (Python standard library only; double-click `tools/run_pico8_bridge.bat`), because a web page cannot start PICO-8 itself. Open `index.html` in a browser, or host the folder on any static web server.
+## Run locally
+
+The web app has no build step, package installation or third-party runtime dependencies. Open `index.html` directly for basic use. For a stable local origin and the broadest browser API support, serve the repository root:
+
+```sh
+python -m http.server 8000 --bind 127.0.0.1
+```
+
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Keep using the same host and port: browser storage belongs to that origin. Chrome or Edge is needed for Cart Builder's writable folder access and Code Editor's in-place saves; other browsers can use supported import/download workflows. Clipboard, folder access and installed-font features depend on browser permissions and a secure context (localhost or HTTPS). Browser restrictions can prevent writing protected folders such as `AppData`; use a separate working copy of your demo.
+
+**Run in PICO-8** is optional and needs your own PICO-8 installation plus Python 3:
+
+```sh
+python tools/pico8_bridge.py --pico8 "C:/path/to/pico8.exe" --root "C:/path/to/demo"
+```
+
+On Windows, double-click `tools/run_pico8_bridge.bat` for auto-detection. Keep the helper window open while using Run. It listens on `127.0.0.1:8708` and currently permits local-file/localhost origins, not an arbitrary hosted HTTPS page. It searches PICO-8's carts folder and each `--root`; unmatched carts run from a temporary copy under `_suite_run/`, where neighboring includes/data carts may be missing.
+
+The app can be hosted on a static server for the browser tools. A remote host does not make the local Run helper available automatically. Development checks use Node.js and Python; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## How the tools talk to each other
 
@@ -26,7 +44,7 @@ There is no build step and no dependencies. Running carts from the Code Editor n
   - Pixel Studio → File → Send to → Tile Maker, then Export → Tile Sprite Sheet → Library → open the sheet in Pixel Studio.
   - Palette & Fades palette → Pixel Studio palette panel → *From Palette & Fades* (or save it to the library).
   - Any library image → Data Tools → string literal for your cart.
-- **Back up** with Library → Export Library Backup (one JSON file). Clearing site data in the browser deletes the library.
+- **Back up** with Library → Export Library Backup (one JSON file of saved assets). This does not include every tool's working session, settings or project-folder files. Export before changing host/port/browser or clearing site data. When IndexedDB is unavailable the library is memory-only; failed transactions are a known issue ([#5](https://github.com/Crylhead/Pico8_Suite/issues/5)).
 
 ## Files
 
@@ -37,6 +55,8 @@ There is no build step and no dependencies. Running carts from the Code Editor n
 - `js/suite.js`: asset library, "Open in…" registry, asset picker, Home page (`window.Suite`)
 - `js/tiles-core.js`, `js/tiles.js`: Tile Maker
 - `js/studio-core.js`, `js/studio.js`: Pixel Studio (pure logic / UI)
+- `js/map-core.js`, `js/map.js`: Map Editor (pure logic / UI)
+- `js/code-core.js`, `js/code.js`: Code Editor (pure logic / UI)
 - `js/datatools.js`: Data Tools
 - `js/audit-core.js`, `js/audit.js`: Project Audit (pure logic / UI)
 - `js/extras-core.js`, `js/extras.js`: Extra Tools (pure logic / UI)
@@ -45,7 +65,10 @@ There is no build step and no dependencies. Running carts from the Code Editor n
 - `js/project-core.js`, `js/project.js`: demo projects, anchors, packing (pure logic) / Cart Builder UI
 - `js/datacarts-core.js`: sections and palettes of data carts, read from the fx code (pure logic)
 - `js/cart-core.js`, `js/datacarts.js`: .p8 data area reader / writer, `reload()` analysis, LZ codec (pure logic) / Data Carts UI
+- `tools/pico8_bridge.py`, `tools/run_pico8_bridge.bat`: optional local PICO-8 launcher
+- `tests/regress.js`: six focused regression checks
 - `EXTENDING.md`: how to add a tool
+- `CONTRIBUTING.md`: setup, checks and focused agent/collaborator workflow
 
 ## Changes compared to `palette_tool_web`
 
@@ -55,20 +78,32 @@ There is no build step and no dependencies. Running carts from the Code Editor n
 - PNG export (`P8.encodeIndexedPng`) can write a transparent color.
 - Dialog action buttons can close their dialog with `dlg.finish(value)`.
 
-## Reviews
+## Reviews and current work
 
-Code reviews and agent remediation instructions live in the repository's [reviews directory](../../reviews/README.md).
+Start with the [2026-11-01 standalone repository health review](docs/HEALTH_REVIEW_2026-11-01.md), reviewed at [1432860512e85a13dab0d1bd2ff0b4d4de780a05](https://github.com/Crylhead/Pico8_Suite/commit/1432860512e85a13dab0d1bd2ff0b4d4de780a05). It links the prioritized [GitHub issues](https://github.com/Crylhead/Pico8_Suite/issues) with evidence, scope and acceptance checks.
 
-- [PICO-8 suite health review — 2026-10-31](../../reviews/2026-10-31-pico8-suite-79fef49.md), reviewed at commit [79fef49a607141ee86def6a0b7fff122ebed4b6f](https://github.com/Crylhead/Demotools/commit/79fef49a607141ee86def6a0b7fff122ebed4b6f): prioritized findings, reproductions, fix guidance and acceptance checks.
-- [Workflow and menu UX review — 2026-10-31](../../reviews/2026-10-31-pico8-suite-ux-c086077.md), reviewed at [c086077151122f78055fc287b5ff5977f8e92402](https://github.com/Crylhead/Demotools/commit/c086077151122f78055fc287b5ff5977f8e92402): transfer matrix, menu vocabulary, linked editing, design references and phased acceptance checks.
-- [Suite-wide UX blueprint — 2026-10-31](../../reviews/2026-10-31-suite-wide-ux-c45211f.md), reviewed at [c45211f3058e01b1aa424c49f1779d5048810536](https://github.com/Crylhead/Demotools/commit/c45211f3058e01b1aa424c49f1779d5048810536): per-tool workflows, shared UX rules, seven implementation work packages and ten required journeys across the whole suite.
-- Every review must identify the full source commit SHA it examined. See the [review template](../../reviews/REVIEW_TEMPLATE.md); fixes record their own commit separately.
+The earlier reviews remain in Demotools, not this repository. Their [historical index](https://github.com/Crylhead/Demotools/blob/4a2855b99efb2e7a265961c63f1ac809adea3ed2/reviews/README.md) includes the health reassessment, Tile Maker reconstruction plan and permanent **Send to + Library** UX proposal. Those are historical findings/design proposals; no final Send to layout has been selected or implemented here.
 
-## Testing notes
+Every new review should record the full source commit SHA, methods, results and validation limits. Record fix commits separately; do not change the reviewed SHA.
 
-- `studio-core.js` (clipboard format, cart reading/writing, sprite layout, raster primitives) is covered by a Node test script used during development; all checks pass.
+## Testing
+
+Run the committed regression entry point from the repository root:
+
+```sh
+node tests/regress.js
+```
+
+On 2026-11-01 its six cases passed, all 23 JavaScript files passed `node --check`, and the Python bridge passed syntax compilation. The cases cover raw subrange anchor preservation and repeated/diamond/cyclic includes. They do not cover every core module or browser workflow. There is currently no CI workflow; [#14](https://github.com/Crylhead/Pico8_Suite/issues/14) tracks a small automated gate. See [CONTRIBUTING.md](CONTRIBUTING.md) for commands.
+
+### Historical validation reports
+
+The following reports were inherited from development in Demotools. Their complete fixtures, browser automation and PICO-8 benchmarks are not included here and were **not rerun** for the standalone repository review. They are historical evidence, not a current clean bill of health.
+
+- `studio-core.js` (clipboard format, cart reading/writing, sprite layout, raster primitives) was reported covered by a Node test script used during development; that full script is not included here.
 - The UI flows (drawing, selection, layers, frames, undo/redo, dialogs, paste, session restore, library round trips across all tools, light/dark theme, phone width) were run in headless Chrome without console errors.
 - `cart-core.js` was checked against PICO-8 0.2.7 itself: all 113 `.p8` files of the Modulator and Nuova standalone demos read to the same bytes PICO-8 loads with `reload()`, and the same carts rewritten by `writeP8()` load identically (226/226). A pack made in the browser (raw + LZ entries) was read back in PICO-8 and matched the source carts.
 - `terrain-core.js` gives the same heights as `terrain_lab_v0_4` bit for bit (512 and 1024, with and without erosion, on the v0.4 sample scene). In Chrome, against v0.4 at 512 with a mixed erosion pass: a light change reaches the final render in 0.14 s instead of 0.72 s, a brush stroke 0.10 s after release instead of 0.62 s, a new seed in 0.12 s instead of 0.42 s. The exported `.p8` was read back in PICO-8 (sprite sheet and `hget()` match).
 - `extras-core.js` matches the Python tools (waves, motion paths, formations, `.p8` exports byte for byte); `audit-core.js` matches `project_audit` on 69 real carts (except the deliberate `..` token count).
 - Not yet checked inside PICO-8 itself: pasting `[gfx]` clipboard text into the sprite editor and running the generated viewer carts. The `__gfx__` text layout matches the Tile Maker carts, which were verified in PICO-8.
+

@@ -634,9 +634,9 @@ This cannot be undone.`, 'Delete')) {
     renderHome();
   }
 
-  // Desktop tools in this repository that are not part of the web suite.
+  // Historical Demotools desktop tools; not bundled in this standalone repository.
   const DESKTOP_TOOLS = [
-    { name: 'Filename Optimizer', dir: 'filename_optimizer', desc: 'Batch-renames carts and updates code references (writes files, so it stays a desktop tool).' },
+    { name: 'Filename Optimizer', dir: 'Demotools/filename_optimizer', desc: 'External historical tool; not included here. Batch-renames carts and updates code references.' },
   ];
 
   function renderHome() {
@@ -809,3 +809,4 @@ This cannot be undone.`, 'Delete')) {
   registerTool({ ws: 'tiles', name: 'Tile Maker', desc: 'Packs images into 8×8 tiles + map, VRAM viewport heatmap, tile editor, .p8 carts.', color: '#00e436', tags: ['tiles', 'map', '.p8'] });
   assets.ready = loadAll();
 })();
+

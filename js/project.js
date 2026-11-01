@@ -272,11 +272,11 @@
       pj.dirtyAssets.clear();
       pj.renamed.clear();
     }
-    // lengths too: tools/build.py checks the anchors against them without decoding assets
+    // Store lengths for manifest inspection and optional external release checkers.
     const saved = layout.map((c) => ({ name: c.name, items: c.items.map((i) => ({ ref: i.ref, off: i.off, len: partOf(i.ref).bytes.length, lz: partOf(i.ref).lz })) }));
     pj.project = { ...(pj.project || { format: P.FORMAT, prefix: 'd', unmanaged: [] }), carts: saved, adoptedFrom: [] };
     await writeText(pj.demo, 'suite.json', JSON.stringify(pj.project, null, 1));
-    toast(`Wrote ${layout.length} carts and ${rewrites.reduce((s, r) => s + r.changes.length, 0)} anchor lines. Build the release with tools/build.py.`, 'info', 4000);
+    toast(`Wrote ${layout.length} carts and ${rewrites.reduce((s, r) => s + r.changes.length, 0)} anchor lines.`, 'info', 4000);
     render();
   }
 
@@ -640,3 +640,4 @@
   bind();
   render();
 })();
+

@@ -1024,9 +1024,9 @@
     await modal({
       title: 'Run in PICO-8',
       body: el('div', { className: 'dialog-form' },
-        el('p', { textContent: 'A web page cannot start programs, so Run goes through a small helper on your computer (Python, no installs).' }),
+        el('p', { textContent: 'A web page cannot start programs, so Run goes through a small helper on your computer (Python, standard library only).' }),
         el('ol', {},
-          el('li', {}, 'Start pico8_suite/tools/run_pico8_bridge.bat (double-click), or in a terminal:', el('pre', { className: 'ce-cmd', textContent: cmd })),
+          el('li', {}, 'Start tools/run_pico8_bridge.bat (double-click), or in a terminal:', el('pre', { className: 'ce-cmd', textContent: cmd })),
           el('li', { textContent: 'Keep its window open. Press Run (Ctrl+R): the cart is saved, PICO-8 starts it, printh() output shows up below the code.' })),
         el('p', { className: 'muted', textContent: 'The bridge runs carts where they are, so #include, reload() and load() find their files. It looks in PICO-8\'s carts folder and in every --root folder; --pico8 PATH if PICO-8 is not installed in the usual place.' }),
         el('pre', { className: 'ce-cmd', textContent: status })),
@@ -1283,3 +1283,4 @@
   bind();
   S.assets.ready.then(restoreSession);
 })();
+
