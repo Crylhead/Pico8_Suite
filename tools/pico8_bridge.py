@@ -2,10 +2,19 @@
 """PICO-8 bridge for the PICO-8 Dev Suite: lets the Code Editor run carts in PICO-8.
 
 A browser page cannot start programs, so this small local server does it. It listens on
-127.0.0.1. Its origin filter accepts null/file, localhost and 127.0.0.1 origins, plus
-requests without an Origin header; this filter is not caller authentication.
+127.0.0.1 only.
 
     python pico8_bridge.py [--pico8 PATH] [--root FOLDER] ... [--port 8708]
+
+Pairing: at startup the bridge prints a random token. Paste it once into the Code Editor
+(Cart -> Set Up Run...); the editor sends it in the X-Bridge-Token header. /run, /stop and
+/log need that token, and /ping only reports paths to a paired caller. The token changes
+every time the bridge starts. Loopback binding and CORS are not authentication: the token is.
+
+Every request must use Host 127.0.0.1:<port> or localhost:<port> (blocks DNS rebinding).
+Browser origins allowed: null (a file:// page), file://, and http(s)://127.0.0.1 or
+http(s)://localhost on any port; other web origins are refused. Requests without an Origin
+header (command-line clients) are allowed but still need the token.
 
 The editor sends the cart's name and text. The bridge looks for that file (same name, same
 content: the editor saves it first) in the roots - PICO-8's carts folder (root_path in
@@ -18,9 +27,11 @@ Only the Python standard library is used.
 
 import argparse
 import collections
+import hmac
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -29,10 +40,16 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-VERSION = 1
+VERSION = 2
 SKIP_DIRS = {'.git', 'node_modules', '__pycache__', 'backup', 'bbs', '.vs', '.idea'}
 MAX_DEPTH = 6
-ALLOWED_ORIGIN = re.compile(r'^(null|file://.*|https?://(localhost|127\.0\.0\.1)(:\d+)?)$')
+ALLOWED_ORIGIN = re.compile(r'^(null|file://|https?://(localhost|127\.0\.0\.1)(:\d{1,5})?)$')
+TOKEN_HEADER = 'X-Bridge-Token'
+MAX_BODY = 4 * 1024 * 1024  # a .p8 is far smaller, even JSON-escaped
+MAX_NAME = 255
+CART_NAME = re.compile(r'^[^/\\:*?"<>|\x00-\x1f\x7f]+\.p8$', re.IGNORECASE)
+# path -> (method, needs token)
+ROUTES = {'/ping': ('GET', False), '/log': ('GET', True), '/run': ('POST', True), '/stop': ('POST', True)}
 
 
 def find_pico8(explicit):
@@ -78,14 +95,17 @@ def norm(text):
 class Runner:
     """One PICO-8 process at a time, with its printh() output."""
 
-    def __init__(self, exe, roots):
+    def __init__(self, exe, roots, launcher=None):
         self.exe = exe
         self.roots = roots
+        self.launcher = launcher or subprocess.Popen  # tests inject a fake process
         self.proc = None
         self.path = None
         self.log = collections.deque(maxlen=2000)
         self.seq = 0
-        self.lock = threading.Lock()
+        self.lock = threading.Lock()  # log
+        # process lifecycle: run/stop are serialized so no started process is ever lost
+        self.proc_lock = threading.Lock()
         self.known = {}  # name (lower) -> path that matched before
 
     def add_log(self, line):
@@ -129,6 +149,10 @@ class Runner:
         return found[0]
 
     def stop(self):
+        with self.proc_lock:
+            self._stop_locked()
+
+    def _stop_locked(self):
         p = self.proc
         self.proc = None
         if p and p.poll() is None:
@@ -137,30 +161,36 @@ class Runner:
                 p.wait(3)
             except subprocess.TimeoutExpired:
                 p.kill()
+                try:
+                    p.wait(3)
+                except subprocess.TimeoutExpired:
+                    self.add_log('--- pico-8 did not exit after kill')
 
     def run(self, name, text):
         if not self.exe:
             raise RuntimeError('pico8 executable not found: start the bridge with --pico8 PATH')
-        name = os.path.basename(name) or 'cart.p8'
-        path = self.find(name, text)
-        temp = path is None
-        if temp:
-            folder = os.path.join(self.roots[0], '_suite_run')
-            os.makedirs(folder, exist_ok=True)
-            path = os.path.join(folder, name)
-            with open(path, 'w', encoding='utf-8', newline='\n') as f:
-                f.write(norm(text))
-        self.stop()
-        self.add_log(f'--- run {path}')
-        kw = {}
-        if os.name == 'nt':
-            kw['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
-        self.proc = subprocess.Popen([self.exe, '-run', path], cwd=os.path.dirname(path), stdout=subprocess.PIPE,
-                                     stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, **kw)
-        self.path = path
-        proc = self.proc
-        threading.Thread(target=self._pump, args=(proc,), daemon=True).start()
-        return path, temp
+        if not CART_NAME.match(name) or len(name) > MAX_NAME or os.path.basename(name) != name:
+            raise ValueError('name must be a plain .p8 file name')
+        with self.proc_lock:
+            path = self.find(name, text)
+            temp = path is None
+            if temp:
+                folder = os.path.join(self.roots[0], '_suite_run')
+                os.makedirs(folder, exist_ok=True)
+                path = os.path.join(folder, name)
+                with open(path, 'w', encoding='utf-8', newline='\n') as f:
+                    f.write(norm(text))
+            self._stop_locked()
+            self.add_log(f'--- run {path}')
+            kw = {}
+            if os.name == 'nt':
+                kw['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
+            proc = self.launcher([self.exe, '-run', path], cwd=os.path.dirname(path), stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, **kw)
+            self.proc = proc
+            self.path = path
+            threading.Thread(target=self._pump, args=(proc,), daemon=True).start()
+            return path, temp
 
     def _pump(self, proc):
         for raw in iter(proc.stdout.readline, b''):
@@ -169,82 +199,188 @@ class Runner:
         self.add_log(f'--- pico-8 exited ({code})')
 
     def running(self):
-        return bool(self.proc and self.proc.poll() is None)
+        p = self.proc
+        return bool(p and p.poll() is None)
 
 
-def make_handler(runner):
-    class Handler(BaseHTTPRequestHandler):
-        server_version = 'PICO8Bridge/1'
+class BadRequest(Exception):
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
 
-        def log_message(self, fmt, *args):
-            pass
 
-        def origin_ok(self):
-            origin = self.headers.get('Origin')
-            return origin is None or bool(ALLOWED_ORIGIN.match(origin))
+class Handler(BaseHTTPRequestHandler):
+    server_version = 'PICO8Bridge/2'
 
-        def send_json(self, code, obj):
-            body = json.dumps(obj).encode('utf-8')
-            self.send_response(code)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Content-Length', str(len(body)))
-            origin = self.headers.get('Origin')
-            if origin and self.origin_ok():
-                self.send_header('Access-Control-Allow-Origin', origin)
-                self.send_header('Vary', 'Origin')
+    def log_message(self, fmt, *args):
+        pass
+
+    @property
+    def runner(self):
+        return self.server.runner
+
+    def host_ok(self):
+        port = self.server.server_address[1]
+        host = (self.headers.get('Host') or '').strip().lower()
+        allowed = {f'127.0.0.1:{port}', f'localhost:{port}'}
+        if port == 80:
+            allowed |= {'127.0.0.1', 'localhost'}
+        return host in allowed and len(self.headers.get_all('Host') or []) == 1
+
+    def origin_ok(self):
+        origins = self.headers.get_all('Origin') or []
+        return not origins or (len(origins) == 1 and bool(ALLOWED_ORIGIN.match(origins[0])))
+
+    def token_ok(self):
+        given = self.headers.get(TOKEN_HEADER)
+        return given is not None and hmac.compare_digest(given.encode('utf-8', 'replace'), self.server.token.encode('utf-8'))
+
+    def cors_headers(self):
+        origin = self.headers.get('Origin')
+        if origin and self.origin_ok():
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Vary', 'Origin')
             # Chrome's private network access preflight
             self.send_header('Access-Control-Allow-Private-Network', 'true')
-            self.end_headers()
-            self.wfile.write(body)
 
-        def do_OPTIONS(self):
-            if not self.origin_ok():
-                self.send_json(403, {'ok': False, 'error': 'origin not allowed'})
-                return
-            self.send_response(204)
-            self.send_header('Access-Control-Allow-Origin', self.headers.get('Origin') or '*')
-            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-            self.send_header('Access-Control-Allow-Private-Network', 'true')
-            self.send_header('Access-Control-Max-Age', '600')
-            self.end_headers()
+    def send_json(self, code, obj, extra=None):
+        body = json.dumps(obj).encode('utf-8')
+        self.send_response(code)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
+        for k, v in (extra or {}).items():
+            self.send_header(k, v)
+        if code >= 400:
+            # the request body may be unread: never reuse this connection
+            self.close_connection = True
+            self.send_header('Connection', 'close')
+        self.cors_headers()
+        self.end_headers()
+        self.wfile.write(body)
 
-        def do_GET(self):
-            if not self.origin_ok():
-                self.send_json(403, {'ok': False, 'error': 'origin not allowed'})
-                return
-            url = urlparse(self.path)
-            if url.path == '/ping':
-                self.send_json(200, {'ok': True, 'version': VERSION, 'pico8': runner.exe, 'roots': runner.roots, 'running': runner.running(), 'path': runner.path})
-            elif url.path == '/log':
-                since = int((parse_qs(url.query).get('since') or ['0'])[0] or 0)
-                with runner.lock:
-                    lines = [(n, l) for n, l in runner.log if n > since]
-                    last = runner.seq
-                self.send_json(200, {'ok': True, 'lines': [l for _, l in lines], 'next': last, 'running': runner.running()})
+    def fail(self, code, message, extra=None):
+        self.send_json(code, {'ok': False, 'error': message}, extra)
+
+    def check(self, method):
+        """common validation; -> (path, query) or None after answering"""
+        if not self.host_ok():
+            self.fail(403, 'host not allowed')
+            return None
+        if not self.origin_ok():
+            self.fail(403, 'origin not allowed')
+            return None
+        url = urlparse(self.path)
+        if not self.path.startswith('/') or url.scheme or url.netloc or url.path not in ROUTES:
+            self.fail(404, 'unknown path')
+            return None
+        want, needs_token = ROUTES[url.path]
+        if method != 'OPTIONS':
+            if method != want:
+                self.fail(405, 'method not allowed', {'Allow': f'{want}, OPTIONS'})
+                return None
+            if url.query and url.path != '/log':
+                self.fail(400, 'unexpected query')
+                return None
+            if needs_token and not self.token_ok():
+                self.fail(401, 'not paired: paste the token printed by the bridge into Cart > Set Up Run')
+                return None
+        return url.path, url.query
+
+    def read_json(self):
+        if self.headers.get('Transfer-Encoding'):
+            raise BadRequest(411, 'chunked bodies are not supported')
+        ctype = (self.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+        if ctype != 'application/json':
+            raise BadRequest(415, 'Content-Type must be application/json')
+        lengths = self.headers.get_all('Content-Length') or []
+        if not lengths:
+            raise BadRequest(411, 'Content-Length required')
+        if len(lengths) != 1 or not lengths[0].strip().isdigit():
+            raise BadRequest(400, 'invalid Content-Length')
+        n = int(lengths[0])
+        if n > MAX_BODY:
+            raise BadRequest(413, f'body larger than {MAX_BODY} bytes')
+        raw = self.rfile.read(n)
+        if len(raw) != n:
+            raise BadRequest(400, 'body shorter than Content-Length')
+        try:
+            data = json.loads(raw.decode('utf-8'))
+        except (UnicodeDecodeError, ValueError):
+            raise BadRequest(400, 'invalid JSON') from None
+        if not isinstance(data, dict):
+            raise BadRequest(400, 'JSON body must be an object')
+        return data
+
+    def do_OPTIONS(self):
+        if not self.check('OPTIONS'):
+            return
+        if not self.headers.get('Origin'):
+            self.fail(400, 'preflight without Origin')
+            return
+        self.send_response(204)
+        self.cors_headers()
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', f'Content-Type, {TOKEN_HEADER}')
+        self.send_header('Access-Control-Max-Age', '600')
+        self.end_headers()
+
+    def do_GET(self):
+        route = self.check('GET')
+        if not route:
+            return
+        path, query = route
+        runner = self.runner
+        if path == '/ping':
+            info = {'ok': True, 'version': VERSION, 'paired': self.token_ok()}
+            if info['paired']:
+                info.update(pico8=runner.exe, roots=runner.roots, running=runner.running(), path=runner.path)
+            self.send_json(200, info)
+            return
+        since = (parse_qs(query).get('since') or ['0'])[0] or '0'
+        if not since.isdigit():
+            self.fail(400, 'invalid since')
+            return
+        since = int(since)
+        with runner.lock:
+            lines = [l for n, l in runner.log if n > since]
+            last = runner.seq
+        self.send_json(200, {'ok': True, 'lines': lines, 'next': last, 'running': runner.running()})
+
+    def do_POST(self):
+        route = self.check('POST')
+        if not route:
+            return
+        path = route[0]
+        try:
+            data = self.read_json()
+            if path == '/run':
+                name, text = data.get('name'), data.get('text')
+                if not isinstance(name, str) or not isinstance(text, str):
+                    raise BadRequest(400, 'name and text must be strings')
+                try:
+                    cart, temp = self.runner.run(name, text)
+                except ValueError as err:
+                    raise BadRequest(400, str(err)) from None
+                self.send_json(200, {'ok': True, 'path': cart, 'temp': temp})
             else:
-                self.send_json(404, {'ok': False, 'error': 'unknown path'})
+                self.runner.stop()
+                self.send_json(200, {'ok': True})
+        except BadRequest as err:
+            self.fail(err.code, str(err))
+        except Exception as err:  # reported to the paired editor
+            self.fail(500, str(err))
 
-        def do_POST(self):
-            if not self.origin_ok():
-                self.send_json(403, {'ok': False, 'error': 'origin not allowed'})
-                return
-            url = urlparse(self.path)
-            try:
-                n = int(self.headers.get('Content-Length') or 0)
-                data = json.loads(self.rfile.read(n) or b'{}') if n else {}
-                if url.path == '/run':
-                    path, temp = runner.run(str(data.get('name') or 'cart.p8'), str(data.get('text') or ''))
-                    self.send_json(200, {'ok': True, 'path': path, 'temp': temp})
-                elif url.path == '/stop':
-                    runner.stop()
-                    self.send_json(200, {'ok': True})
-                else:
-                    self.send_json(404, {'ok': False, 'error': 'unknown path'})
-            except Exception as err:  # reported to the editor
-                self.send_json(500, {'ok': False, 'error': str(err)})
 
-    return Handler
+class BridgeServer(ThreadingHTTPServer):
+    """HTTP server for one Runner; port 0 picks a free port (tests)."""
+
+    daemon_threads = True
+
+    def __init__(self, runner, token=None, port=8708, host='127.0.0.1'):
+        self.runner = runner
+        self.token = token or secrets.token_urlsafe(24)
+        super().__init__((host, port), Handler)
 
 
 def main():
@@ -257,17 +393,23 @@ def main():
     exe = find_pico8(args.pico8)
     roots = [carts_root()] + [os.path.abspath(r) for r in args.root]
     runner = Runner(exe, roots)
-    server = ThreadingHTTPServer(('127.0.0.1', args.port), make_handler(runner))
+    server = BridgeServer(runner, port=args.port)
     print(f'PICO-8 bridge on http://127.0.0.1:{args.port}')
     print(f'  pico8: {exe or "NOT FOUND (use --pico8 PATH)"}')
     for r in roots:
         print(f'  carts: {r}')
+    print()
+    print(f'  Pairing token: {server.token}')
+    print('  Paste it into the Code Editor: Cart > Set Up Run... (needed again whenever the bridge restarts).')
+    print()
     print('Keep this window open while you use Run in the Code Editor. Ctrl+C stops it.')
+    sys.stdout.flush()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        server.server_close()
         runner.stop()
         time.sleep(0.1)
 

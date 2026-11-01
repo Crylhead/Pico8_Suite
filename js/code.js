@@ -964,11 +964,19 @@
 
   const BRIDGE = `http://127.0.0.1:${saved.bridgePort || 8708}`;
   const bridge = { since: 0, timer: 0, running: false };
+  // pairing token printed by the bridge; valid until it restarts, so this tab's session is enough
+  const TOKEN_KEY = 'p8suite.bridgeToken';
+  const bridgeToken = {
+    get() { try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } },
+    set(v) { try { if (v) sessionStorage.setItem(TOKEN_KEY, v); else sessionStorage.removeItem(TOKEN_KEY); } catch { /* storage blocked */ } },
+  };
 
-  async function call(path, body = null) {
-    const r = await fetch(BRIDGE + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  async function call(path, body = null, token = bridgeToken.get()) {
+    const headers = token ? { 'X-Bridge-Token': token } : {};
+    if (body) headers['Content-Type'] = 'application/json';
+    const r = await fetch(BRIDGE + path, body ? { method: 'POST', headers, body: JSON.stringify(body) } : { headers });
     const j = await r.json();
-    if (!j.ok) throw new Error(j.error || `bridge error ${r.status}`);
+    if (!j.ok) throw Object.assign(new Error(j.error || `bridge error ${r.status}`), { status: r.status });
     return j;
   }
 
@@ -999,7 +1007,7 @@
     try {
       res = await call('/run', { name: target.name, text: await target.text() });
     } catch (err) {
-      if (err instanceof TypeError) { runSetup(); return; }
+      if (err instanceof TypeError || err.status === 401) { runSetup(); return; }
       showMessage('Run', err.message);
       return;
     }
@@ -1031,7 +1039,7 @@
     clearTimeout(bridge.timer);
     bridge.timer = setTimeout(async () => {
       try {
-        const j = await (await fetch(`${BRIDGE}/log?since=${bridge.since}`)).json();
+        const j = await call(`/log?since=${bridge.since}`);
         for (const l of j.lines) appendOut(l);
         bridge.since = j.next;
         if (j.running) poll(); else setRunning(false);
@@ -1039,20 +1047,43 @@
     }, 400);
   }
 
+  /** -> { paired, text } for the setup dialog; checks `token` without storing it */
+  async function bridgeStatus(token) {
+    let j;
+    try { j = await call('/ping', null, token); } catch { return { paired: false, text: 'The bridge is not running.' }; }
+    if (!j.paired) {
+      return { paired: false, text: token
+        ? 'The bridge is running, but this token was not accepted. Copy the current one from the bridge window: it changes every time the bridge starts.'
+        : 'The bridge is running. Paste the pairing token shown in its window, then press Pair.' };
+    }
+    return { paired: true, text: `The bridge is running and paired.\npico8: ${j.pico8 || 'not found'}\ncarts folders:\n${j.roots.join('\n')}` };
+  }
+
   async function runSetup() {
-    let status;
-    try { const j = await call('/ping'); status = `The bridge is running.\npico8: ${j.pico8 || 'not found'}\ncarts folders:\n${j.roots.join('\n')}`; } catch { status = 'The bridge is not running.'; }
     const cmd = 'python tools/pico8_bridge.py --root "C:/path/to/your/demo"';
+    const status = el('pre', { className: 'ce-cmd', textContent: 'Checking the bridge…' });
+    const input = el('input', { type: 'text', value: bridgeToken.get(), spellcheck: false, autocomplete: 'off', placeholder: 'token printed by the bridge' });
+    const pair = async () => {
+      const token = input.value.trim();
+      const st = await bridgeStatus(token);
+      status.textContent = st.text;
+      if (st.paired) bridgeToken.set(token);
+    };
+    pair();
     await modal({
       title: 'Run in PICO-8',
       body: el('div', { className: 'dialog-form' },
         el('p', { textContent: 'A web page cannot start programs, so Run goes through a small helper on your computer (Python, standard library only).' }),
         el('ol', {},
           el('li', {}, 'Start tools/run_pico8_bridge.bat (double-click), or in a terminal:', el('pre', { className: 'ce-cmd', textContent: cmd })),
+          el('li', { textContent: 'Copy the pairing token it prints, paste it below and press Pair (again whenever the bridge restarts).' }),
           el('li', { textContent: 'Keep its window open. Press Run (Ctrl+R): the cart is saved, PICO-8 starts it, printh() output shows up below the code.' })),
-        el('p', { className: 'muted', textContent: 'The bridge runs carts where they are, so #include, reload() and load() find their files. It looks in PICO-8\'s carts folder and in every --root folder; --pico8 PATH if PICO-8 is not installed in the usual place.' }),
-        el('pre', { className: 'ce-cmd', textContent: status })),
-      buttons: [{ label: 'Close', value: true, primary: true }],
+        formField('Pairing token', input),
+        el('p', { className: 'muted', textContent: 'The bridge runs carts where they are, so #include, reload() and load() find their files. It looks in PICO-8\'s carts folder and in every --root folder; --pico8 PATH if PICO-8 is not installed in the usual place. It only accepts this page from a local file, localhost or 127.0.0.1.' }),
+        status),
+      actions: [{ label: 'Pair', primary: true, onClick: pair }],
+      buttons: [{ label: 'Close', value: true }],
+      onOpen: () => input.focus(),
     });
   }
 
