@@ -1,4 +1,4 @@
-// Cart Builder project mutation (issues #1, #2, #7): conservative adoption and anchor rewriting.
+// Cart Builder project mutation (issues #1, #2, #3, #4, #7): conservative adoption, anchor rewriting, recoverable writes, disk conflicts.
 const assert = require('assert');
 const { t } = require('./harness.js');
 const P = require('../js/project-core.js');
@@ -102,4 +102,85 @@ t('#2 load/cstore/include/multi-line/traceable references keep their carts, also
   const inc = P.retirement(['gone.p8'], [{ name: 'main.p8', text: '#include ../lib/fx.lua\n' }]);
   assert.deepStrictEqual(inc.retire, [], 'an include that cannot be read keeps every candidate');
   assert.match(inc.unresolved[0].why, /fx\.lua/);
+});
+// #3: recoverable multi-file writes over File System Access handles (in-memory fake)
+const { makeFs } = require('./fake-fs.js');
+const original = () => ({ demo: { 'fx.p8': 'fx v1', 'd0.p8': 'd0 v1', 'old.p8': 'old', 'suite.json': '{"v":1}' }, assets: { 'a.json': 'a v1', 'gone.json': 'gone' } });
+const dirsOf = (fs) => ({
+  demo: async () => fs.root.getDirectoryHandle('demo'),
+  assets: async (create) => fs.root.getDirectoryHandle('assets', { create }),
+  unused: async (create) => (await fs.root.getDirectoryHandle('demo')).getDirectoryHandle('unused', { create }),
+});
+const plan = () => ({
+  writes: [
+    { dir: 'demo', name: 'd0.p8', text: 'd0 v2', stage: 'cart' }, { dir: 'demo', name: 'd1.p8', text: 'd1 new', stage: 'cart' },
+    { dir: 'demo', name: 'fx.p8', text: 'fx v2', stage: 'fx' },
+    { dir: 'assets', name: 'a.json', text: 'a v2', stage: 'asset' }, { dir: 'assets', name: 'gone.json', text: null, stage: 'asset' },
+    { dir: 'demo', name: 'suite.json', text: '{"v":2}', stage: 'manifest' },
+  ],
+  retire: [{ from: 'demo', to: 'unused', name: 'old.p8' }],
+});
+
+t('#3 a failure at the cart, fx, asset or manifest stage restores every file and retires nothing', async () => {
+  for (const [stage, path] of [['cart', 'demo/d1.p8'], ['fx', 'demo/fx.p8'], ['asset', 'assets/gone.json'], ['manifest', 'demo/suite.json']]) {
+    const fs = makeFs(original());
+    const start = fs.snapshot();
+    let hit = false;
+    fs.fail((op, p) => (!hit && op !== 'read' && p === path ? (hit = true) : null));
+    const e = await P.transact(dirsOf(fs), plan()).then(() => null, (x) => x);
+    assert.ok(e instanceof P.WriteError, `${stage}: rejected`);
+    assert.deepStrictEqual([e.stage, e.restored, e.journalKept], [stage, true, false], stage);
+    assert.deepStrictEqual(fs.snapshot(), start, `${stage}: folder unchanged, old.p8 still in place`);
+  }
+});
+t('#3 success reads every file back and retires only after the manifest commit', async () => {
+  const fs = makeFs(original());
+  const r = await P.transact(dirsOf(fs), plan());
+  assert.deepStrictEqual(r, { retired: ['old.p8'], retireErrors: [], journalKept: false });
+  const snap = fs.snapshot();
+  assert.deepStrictEqual(Object.keys(snap).sort(), ['assets/a.json', 'demo/d0.p8', 'demo/d1.p8', 'demo/fx.p8', 'demo/suite.json', 'demo/unused/old.p8']);
+  assert.deepStrictEqual([snap['demo/fx.p8'], snap['demo/unused/old.p8']], ['fx v2', 'old']);
+  for (const w of plan().writes.filter((x) => x.text !== null)) {
+    const at = fs.log.lastIndexOf(`close ${w.dir}/${w.name}`);
+    assert.ok(at >= 0 && fs.log.indexOf(`read ${w.dir}/${w.name}`, at) > at, `${w.name} read back after writing`);
+  }
+  assert.ok(fs.log.indexOf('remove demo/old.p8') > fs.log.lastIndexOf('close demo/suite.json'), 'retired after the commit');
+});
+t('#3 an interrupted write whose restore also fails keeps the journal; recover() restores the originals', async () => {
+  const fs = makeFs(original());
+  const start = fs.snapshot();
+  let broken = false;
+  fs.fail((op, p) => { if (p === 'assets/a.json' && op === 'close') broken = true; return broken && op !== 'read' && !p.endsWith('journal.json') ? true : null; });
+  const e = await P.transact(dirsOf(fs), plan()).then(() => null, (x) => x);
+  assert.deepStrictEqual([e.stage, e.restored, e.journalKept], ['asset', false, true]);
+  assert.notDeepStrictEqual(fs.snapshot(), start, 'the crash left a half-written folder');
+  await assert.rejects(P.transact(dirsOf(fs), plan()), /recover/, 'no new write over a pending journal');
+  fs.clearFaults();
+  const r = await P.recover(dirsOf(fs));
+  assert.deepStrictEqual([r.state, r.problems], ['writing', []]);
+  assert.deepStrictEqual(fs.snapshot(), start);
+  assert.strictEqual(await P.recover(dirsOf(fs)), null);
+});
+
+// #4: a write computed from what was read stops when the disk changed meanwhile
+t('#4 external fx/asset/new-cart changes stop the write untouched; a matching baseline writes', async () => {
+  const baseline = original();
+  const expecting = (fs) => {
+    const p = plan();
+    p.writes = p.writes.map((w) => ({ ...w, expect: baseline[w.dir]?.[w.name] ?? null }));
+    p.checks = [{ dir: 'assets', name: 'other.json', expect: null }, { dir: 'demo', name: 'new.p8', expect: null }];
+    return P.transact(dirsOf(fs), p);
+  };
+  const fs = makeFs(original());
+  fs.put('demo/fx.p8', 'fx edited in pico-8');
+  fs.put('assets/a.json', 'a edited in another tab');
+  fs.put('demo/new.p8', 'reload(0,0,1,"old.p8")');
+  const changed = fs.snapshot();
+  fs.log.length = 0;
+  const e = await expecting(fs).then(() => null, (x) => x);
+  assert.deepStrictEqual([e.stage, e.conflicts], ['conflict', ['demo/fx.p8', 'assets/a.json', 'demo/new.p8']]);
+  assert.deepStrictEqual(fs.snapshot(), changed, 'both versions survive: disk untouched');
+  assert.ok(fs.log.every((l) => l.startsWith('read ')), 'only reads happened');
+  const clean = makeFs(original());
+  assert.deepStrictEqual((await expecting(clean)).retired, ['old.p8']);
 });

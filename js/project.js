@@ -31,6 +31,8 @@
     parts: [],
     adoptPlan: null,
     pendingHandle: null, // remembered folder that still needs permission
+    journalPending: false, // an interrupted write left suite.journal.json: no writes until it is recovered
+    disk: new Map(),     // "demo/x.p8" | "assets/x.json" | "demo/suite.json" -> raw text as read (null: absent); writes expect it unchanged
   };
 
   const dom = {
@@ -46,11 +48,6 @@
   async function readText(dir, name) {
     const f = await (await dir.getFileHandle(name)).getFile();
     return (await f.text()).replace(/\r\n/g, '\n');
-  }
-  async function writeText(dir, name, text) {
-    const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
-    await w.write(text);
-    await w.close();
   }
   async function exists(dir, name) {
     try { await dir.getFileHandle(name); return true; } catch { return false; }
@@ -96,6 +93,63 @@
   }
 
   // ------------------------------------------------------------------ //
+  // Recoverable writes (P.transact, docs/PROJECT_MODEL.md)              //
+  // ------------------------------------------------------------------ //
+
+  function projectDirs() {
+    return {
+      demo: pj.demo,
+      assets: (create) => pj.root.getDirectoryHandle('assets', { create }),
+      unused: (create) => pj.demo.getDirectoryHandle('unused', { create }),
+    };
+  }
+  const inDemo = (name) => `${pj.demo === pj.root ? '' : 'demo/'}${name}`;
+
+  /** runs a transaction; on failure explains what happened and returns null (the in-memory state stays dirty) */
+  async function commit(plan, title) {
+    if (pj.journalPending) { showMessage(title, `${inDemo(P.JOURNAL)} from an interrupted write is still there. Reopen the project to restore it first. Nothing was written.`); return null; }
+    // everything the write was computed from must still be on disk as it was read (issue #4)
+    const key = (dir, name) => `${dir}/${name}`;
+    const writes = plan.writes.map((w) => ({ ...w, expect: pj.disk.has(key(w.dir, w.name)) ? pj.disk.get(key(w.dir, w.name)) : null }));
+    const written = new Set(writes.map((w) => key(w.dir, w.name)));
+    const checks = [...pj.disk].filter(([k]) => !written.has(k)).map(([k, expect]) => ({ dir: k.split('/')[0], name: k.slice(k.indexOf('/') + 1), expect }));
+    // files that appeared since: a new cart may reference what is about to retire, a new asset may be overwritten
+    let assetDir = null;
+    try { assetDir = await pj.root.getDirectoryHandle('assets'); } catch { /* none yet */ }
+    for (const [dir, handle, re] of [['demo', pj.demo, /\.p8$/i], ['assets', assetDir, /\.json$/i]]) {
+      if (handle) for await (const [n, h] of handle.entries()) if (h.kind === 'file' && re.test(n) && !pj.disk.has(key(dir, n)) && !written.has(key(dir, n))) checks.push({ dir, name: n, expect: null });
+    }
+    try {
+      const r = await P.transact(projectDirs(), { ...plan, writes, checks });
+      for (const w of writes) pj.disk.set(key(w.dir, w.name), w.text);
+      for (const n of r.retired) pj.disk.delete(key('demo', n));
+      if (r.retireErrors.length) showMessage(title, `Everything was written, but some old carts could not be moved to ${inDemo('unused/')} and stay where they are:\n${r.retireErrors.join('\n')}`);
+      return r;
+    } catch (e) {
+      if (!(e instanceof P.WriteError)) throw e;
+      pj.journalPending = e.journalKept;
+      if (e.stage === 'conflict') {
+        showMessage(title, `These files changed on disk after Cart Builder read them (in PICO-8, another tab or another program):\n${e.conflicts.join('\n')}\n\nNothing was written: the files on disk keep the external changes and Cart Builder keeps its own changes in memory. To continue from the disk versions, open the folder again (Cart Builder's unsaved changes are then dropped).`);
+        return null;
+      }
+      showMessage(title, `${e.message}${pj.project ? '\n\nYour unsaved changes are still here.' : ''}`);
+      return null;
+    }
+  }
+
+  /** a journal left by an interrupted write: finish or undo it before anything else */
+  async function recoverWrites() {
+    pj.journalPending = false;
+    if (!(await exists(pj.demo, P.JOURNAL))) return;
+    let committed = false;
+    try { committed = JSON.parse(await readText(pj.demo, P.JOURNAL)).state === 'committed'; } catch { /* recover() reports it */ }
+    if (!committed && !(await confirmDialog('Interrupted write', `An earlier write did not finish (${inDemo(P.JOURNAL)}). Restore the files it changed to their state before that write? Until then Cart Builder writes nothing.`, 'Restore'))) { pj.journalPending = true; return; }
+    const r = await P.recover(projectDirs());
+    if (r.problems.length) { pj.journalPending = true; showMessage('Interrupted write', `Could not finish the recovery; ${inDemo(P.JOURNAL)} stays:\n${r.problems.join('\n')}`); return; }
+    toast(r.state === 'committed' ? `Finished an earlier write (${r.retired.length} carts moved to unused/).` : 'Restored the files of an interrupted write.', 'info', 4000);
+  }
+
+  // ------------------------------------------------------------------ //
   // Loading                                                            //
   // ------------------------------------------------------------------ //
 
@@ -123,8 +177,15 @@
 
   async function load() {
     dom.status.textContent = 'reading…';
+    await recoverWrites();
     pj.texts = new Map();
-    for await (const [name, h] of pj.demo.entries()) if (h.kind === 'file' && /\.p8$/i.test(name)) pj.texts.set(name, (await (await h.getFile()).text()).replace(/\r\n/g, '\n'));
+    pj.disk = new Map([['demo/suite.json', null]]);
+    for await (const [name, h] of pj.demo.entries()) {
+      if (h.kind !== 'file' || !(/\.p8$/i.test(name) || name === 'suite.json')) continue;
+      const raw = await (await h.getFile()).text();
+      pj.disk.set(`demo/${name}`, raw);
+      if (name !== 'suite.json') pj.texts.set(name, raw.replace(/\r\n/g, '\n'));
+    }
     pj.project = null;
     pj.assets = [];
     pj.dirtyAssets = new Set();
@@ -132,13 +193,15 @@
     pj.renamed = new Map();
     pj.layout = [];
     if (await exists(pj.demo, 'suite.json')) {
-      try { pj.project = JSON.parse(await readText(pj.demo, 'suite.json')); } catch (e) { showMessage('Cart Builder', `demo/suite.json could not be read: ${e.message}`); }
+      try { pj.project = JSON.parse(pj.disk.get('demo/suite.json').replace(/\r\n/g, '\n')); } catch (e) { showMessage('Cart Builder', `demo/suite.json could not be read: ${e.message}`); }
     }
     try {
       const ad = await pj.root.getDirectoryHandle('assets');
       for await (const [name, h] of ad.entries()) {
         if (h.kind !== 'file' || !name.endsWith('.json')) continue;
-        try { pj.assets.push(P.assetFromJson(await (await h.getFile()).text())); } catch { /* skip broken asset files */ }
+        const raw = await (await h.getFile()).text();
+        pj.disk.set(`assets/${name}`, raw);
+        try { pj.assets.push(P.assetFromJson(raw)); } catch { /* skip broken asset files */ }
       }
     } catch { /* no assets/ yet */ }
     pj.adoptPlan = pj.project ? null : P.adopt(cartsFromTexts(pj.texts));
@@ -192,21 +255,27 @@
     // anchors into the fx files
     const byFile = new Map();
     for (const e of plan.edits) { if (!byFile.has(e.file)) byFile.set(e.file, []); byFile.get(e.file).push(e); }
+    const fxTexts = new Map();
     for (const [file, es] of byFile) {
       const lines = pj.texts.get(file).split('\n');
       for (const e of es) {
         if (lines[e.line - 1] !== e.before) { showMessage('Adopt', `${file}:${e.line} changed meanwhile. Nothing was adopted.`); return; }
         lines[e.line - 1] = e.after;
       }
-      const t = lines.join('\n');
-      await writeText(pj.demo, file, t);
-      pj.texts.set(file, t);
+      fxTexts.set(file, lines.join('\n'));
     }
-    const ad = await pj.root.getDirectoryHandle('assets', { create: true });
-    for (const a of plan.assets) await writeText(ad, `${a.name}.json`, P.assetToJson(a));
+    const project = { ...plan.project, carts: [], adoptedFrom: plan.adoptedCarts };
+    const result = await commit({
+      writes: [
+        ...[...fxTexts].map(([name, text]) => ({ dir: 'demo', name, text, stage: 'fx' })),
+        ...plan.assets.map((a) => ({ dir: 'assets', name: `${a.name}.json`, text: P.assetToJson(a), stage: 'asset' })),
+        { dir: 'demo', name: 'suite.json', text: JSON.stringify(project, null, 1), stage: 'manifest' },
+      ],
+    }, 'Adopt');
+    if (!result) return;
+    for (const [file, t] of fxTexts) pj.texts.set(file, t);
     pj.assets = plan.assets.slice();
-    pj.project = { ...plan.project, carts: [], adoptedFrom: plan.adoptedCarts };
-    await writeText(pj.demo, 'suite.json', JSON.stringify(pj.project, null, 1));
+    pj.project = project;
     pj.adoptPlan = null;
     syncLayout();
     autoPack();
@@ -261,30 +330,35 @@
     const files = [...finalTexts].map(([name, text]) => ({ name, text }));
     for await (const [name, h] of pj.demo.entries()) if (h.kind === 'file' && /\.lua$/i.test(name)) files.push({ name, text: await (await h.getFile()).text() });
     const { retire, kept, unresolved } = P.retirement(candidates, files);
-    const unusedDir = `${pj.demo === pj.root ? '' : 'demo/'}unused/`;
+    const unusedDir = inDemo('unused/');
     const keptNote = kept.length ? `\n\nStays in place because it is still referenced:\n${kept.map((k) => `${k.cart} (${k.by})`).join('\n')}` : '';
     const unresolvedNote = unresolved.length ? `\n\nReferences that cannot be resolved, so no cart is moved:\n${unresolved.map((u) => `${u.file}:${u.line} ${u.call} (${u.why})`).join('\n')}` : '';
     const ok = await confirmDialog('Write carts', `Writes ${layout.length} data carts (${layout.map((c) => c.name).join(', ')}), rewrites ${rewrites.reduce((s, r) => s + r.changes.length, 0)} reload() lines in ${rewrites.length} fx carts${retire.length ? ` and moves ${retire.length} carts nobody references any more (${retire.join(', ')}) to ${unusedDir}` : ''}.${keptNote}${unresolvedNote}`, 'Write');
     if (!ok) return;
-    if (retire.length) {
-      const un = await pj.demo.getDirectoryHandle('unused', { create: true });
-      for (const n of retire) { await writeText(un, n, pj.texts.get(n)); await pj.demo.removeEntry(n); pj.texts.delete(n); }
-    }
-    for (const [name, text] of Object.entries(texts)) { await writeText(pj.demo, name, text); pj.texts.set(name, text); }
-    for (const r of rewrites) { await writeText(pj.demo, r.name, r.text); pj.texts.set(r.name, r.text); }
-    pj.dirtyTexts.clear();
-    if (pj.dirtyAssets.size) {
-      const ad = await pj.root.getDirectoryHandle('assets', { create: true });
-      for (const n of pj.dirtyAssets) { const a = pj.assets.find((x) => x.name === n); if (a) await writeText(ad, `${a.name}.json`, P.assetToJson(a)); }
-      // renamed assets: the file under the old name goes
-      for (const [to, from] of pj.renamed) if (to !== from) { try { await ad.removeEntry(`${from}.json`); } catch { /* already gone */ } }
-      pj.dirtyAssets.clear();
-      pj.renamed.clear();
-    }
     // Store lengths for manifest inspection and optional external release checkers.
     const saved = layout.map((c) => ({ name: c.name, items: c.items.map((i) => ({ ref: i.ref, off: i.off, len: partOf(i.ref).bytes.length, lz: partOf(i.ref).lz })) }));
-    pj.project = { ...(pj.project || { format: P.FORMAT, prefix: 'd', unmanaged: [] }), carts: saved, adoptedFrom: [] };
-    await writeText(pj.demo, 'suite.json', JSON.stringify(pj.project, null, 1));
+    const project = { ...(pj.project || { format: P.FORMAT, prefix: 'd', unmanaged: [] }), carts: saved, adoptedFrom: [] };
+    const assetWrites = [];
+    for (const n of pj.dirtyAssets) { const a = pj.assets.find((x) => x.name === n); if (a) assetWrites.push({ dir: 'assets', name: `${a.name}.json`, text: P.assetToJson(a), stage: 'asset' }); }
+    // renamed assets: the file under the old name goes
+    for (const [to, from] of pj.renamed) if (to !== from && !pj.assets.some((a) => a.name === from)) assetWrites.push({ dir: 'assets', name: `${from}.json`, text: null, stage: 'asset' });
+    const result = await commit({
+      writes: [
+        ...Object.entries(texts).map(([name, text]) => ({ dir: 'demo', name, text, stage: 'cart' })),
+        ...rewrites.map((r) => ({ dir: 'demo', name: r.name, text: r.text, stage: 'fx' })),
+        ...assetWrites,
+        { dir: 'demo', name: 'suite.json', text: JSON.stringify(project, null, 1), stage: 'manifest' },
+      ],
+      retire: retire.map((name) => ({ from: 'demo', to: 'unused', name })),
+    }, 'Write carts');
+    if (!result) return;
+    for (const [name, text] of Object.entries(texts)) pj.texts.set(name, text);
+    for (const r of rewrites) pj.texts.set(r.name, r.text);
+    for (const n of result.retired) pj.texts.delete(n);
+    pj.dirtyTexts.clear();
+    pj.dirtyAssets.clear();
+    pj.renamed.clear();
+    pj.project = project;
     toast(`Wrote ${layout.length} carts and ${rewrites.reduce((s, r) => s + r.changes.length, 0)} anchor lines.`, 'info', 4000);
     render();
   }
@@ -375,8 +449,8 @@
       el('p', { textContent: plan && plan.assets.length ? `The suite found ${plan.assets.length} pieces of data in ${plan.sourceCarts.length} carts (${plan.sourceCarts.join(', ')}), read by ${plan.edits.length} reload() lines. Adopting stores them as assets, marks those lines with --@data anchors and packs new carts. The demo runs the same.` : 'No reload() of a data cart found in demo/.' }),
       plan?.skipped.length ? el('p', { className: 'muted', textContent: `Left as they are: ${plan.skipped.map((s) => `${s.file}:${s.line} (${s.why})`).join('; ')}` }) : null,
       plan?.keptCarts.length ? el('p', { className: 'muted', textContent: `Still read by lines left as they are, so they stay in demo/: ${plan.keptCarts.join(', ')}` }) : null,
-    plan?.assets.length ? el('button', { className: 'btn btn-primary', type: 'button', textContent: 'Adopt', onclick: adoptNow }) : null,
-  ].filter(Boolean));
+      plan?.assets.length ? el('button', { className: 'btn btn-primary', type: 'button', textContent: 'Adopt', onclick: adoptNow }) : null,
+    ].filter(Boolean));
   }
 
   function anchorsByRef() {

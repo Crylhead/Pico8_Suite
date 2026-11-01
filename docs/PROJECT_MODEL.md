@@ -12,6 +12,7 @@ Cart Builder uses Chrome/Edge's File System Access API with read/write permissio
 | `demo/suite.json` | Project format version 1, prefix, generated cart layout, unmanaged carts and adoption bookkeeping. |
 | `assets/<name>.json` | One asset per file, at the selected project root; parts are stored as base64 bytes. |
 | `demo/unused/` | Source/previously generated carts retired by Write Carts. |
+| `demo/suite.journal.json` | Present only while a write is in progress or after one was interrupted; holds the original file contents for recovery. |
 | `music/`, `tools/`, `release/` | Optional directories belonging to the external demo framework; the Suite does not provide them. |
 
 For a flat project, replace `demo/` with the selected folder itself; `assets/` and `unused/` are then children of that folder. `suite.json` stores each placed part's ref, offset, stored length and LZ flag.
@@ -81,7 +82,7 @@ The builder rewrites the literal list and reload source/length. Auto-pack places
 - Auto-pack uses best-fit decreasing after placing cart sets. Grouped parts stay adjacent. This is a heuristic, not a proof of the smallest possible cart count.
 - Generated names are `<prefix><n>.p8`, default prefix `d`; foreign cart names are reserved.
 - Pinned offsets are **not implemented**. Auto-pack replaces the manual arrangement.
-- Write Carts checks placement/capacity, builds and parses generated cart strings for byte/LZ comparison, computes anchor rewrites, requests confirmation, then writes carts/FX/assets/manifest and retires old carts.
+- Write Carts checks placement/capacity, builds and parses generated cart strings for byte/LZ comparison, computes anchor rewrites, requests confirmation, then writes carts/FX/assets/manifest and retires old carts as one recoverable write (see *Recoverable writes*).
 
 ### Retiring old carts
 
@@ -95,7 +96,31 @@ Retirement candidates are carts the project wrote before, or adopted, that the n
 
 Partial adoption does not grant permission to retire a cart: a source cart is retired only when this check passes at write time.
 
-The current comparison is **in memory before disk writes**, not a disk readback. Multi-file writes are not transactional, and conflict handling has open defects. See issues #3–#4 in the [health review](HEALTH_REVIEW_2026-11-01.md).
+### Recoverable writes
+
+Write Carts and Adopt change several files. Both go through `P8Project.transact()`:
+
+1. **Preflight.** Every target file is read and its current contents kept. A read error stops the write before anything changes.
+2. **Journal.** The original contents go to `demo/suite.journal.json` (next to `suite.json`).
+3. **Write.** Order: data carts, FX carts, assets (including removal of renamed asset files), then `suite.json` last. Each file is **read back from disk** and compared with what was written.
+4. **Commit.** The journal is marked `committed`.
+5. **Retire.** Only now do old carts move to `unused/`: copied, read back, then removed. A cart that cannot be moved stays where it is and is reported.
+6. **Clean up.** The journal is removed.
+
+If any write or readback fails, every file touched so far is restored, and the journal goes once the restore succeeds. The in-memory project stays dirty, so you can try again. If the restore also fails (or the browser stops mid-write), the journal stays. Cart Builder then refuses further writes until the project is reopened.
+
+On opening, a leftover `writing` journal offers to restore the original contents. A `committed` journal only finishes the retirement. The File System Access API has no atomic rename, so a single file is only as atomic as the browser's swap-file `close()`; the journal is what makes the whole operation recoverable.
+
+### External edits
+
+When it opens the folder, Cart Builder keeps the raw text of every demo `.p8`, `suite.json` and `assets/*.json` as its disk baseline. Write Carts and Adopt compare the disk against that baseline in the preflight. A conflict is any of the following:
+- a file it writes, or one its result depends on, now reads differently;
+- a file has appeared;
+- a file has gone.
+
+On a conflict nothing is written. The dialog lists the files, the disk keeps the external version and Cart Builder keeps its own changes in memory. Opening the folder again continues from the disk versions. Cancelling the confirmation writes nothing. After a successful write the baseline becomes what was written.
+
+The check runs immediately before the journal and the writes. An edit in the short window between that check and the writes themselves is not detected.
 
 There is **no `tools/build.py` release builder in this repository**. Anchor validation runs in Cart Builder; if the surrounding demo framework supplies a release checker, configure and run it there separately.
 
