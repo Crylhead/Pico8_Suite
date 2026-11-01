@@ -566,9 +566,124 @@ const P8Project = (() => {
     return { anchors, errors, warnings };
   }
 
+
+  // ------------------------------------------------------------------ //
+  // Retiring carts: only what the final sources no longer reference     //
+  // ------------------------------------------------------------------ //
+
+  /** Lua with comments blanked (newlines and strings kept, so offsets and line numbers stay) */
+  function blankComments(src) {
+    let out = '';
+    let i = 0;
+    const longEnd = (j) => { const m = /^\[(=*)\[/.exec(src.slice(j, j + 64)); return m ? { open: m[0].length, close: `]${m[1]}]` } : null; };
+    const blank = (s) => s.replace(/[^\n]/g, ' ');
+    while (i < src.length) {
+      const ch = src[i];
+      if (ch === '-' && src[i + 1] === '-') {
+        const lb = longEnd(i + 2);
+        let end = lb ? src.indexOf(lb.close, i + 2 + lb.open) : src.indexOf('\n', i);
+        end = end < 0 ? src.length : end + (lb ? lb.close.length : 0);
+        out += blank(src.slice(i, end));
+        i = end;
+      } else if (ch === '"' || ch === "'") {
+        let j = i + 1;
+        while (j < src.length && src[j] !== ch && src[j] !== '\n') j += src[j] === '\\' ? 2 : 1;
+        out += src.slice(i, j + 1);
+        i = j + 1;
+      } else if (ch === '[' && longEnd(i)) {
+        const lb = longEnd(i);
+        let end = src.indexOf(lb.close, i + lb.open);
+        end = end < 0 ? src.length : end + lb.close.length;
+        out += src.slice(i, end);
+        i = end;
+      } else { out += ch; i++; }
+    }
+    return out;
+  }
+
+  /** the Lua of a cart text (or the whole text of a .lua file) -> {code, firstLine (0-based)} */
+  function luaOf(text) {
+    const lines = text.split('\n');
+    const at = lines.findIndex((l) => /^__lua__\s*$/.test(l));
+    if (at < 0) return { code: text, firstLine: 0 };
+    let end = lines.findIndex((l, i) => i > at && /^__\w+__\s*$/.test(l));
+    if (end < 0) end = lines.length;
+    return { code: lines.slice(at + 1, end).join('\n'), firstLine: at + 1 };
+  }
+
+  const baseName = (p) => p.replace(/\\/g, '/').split('/').pop().toLowerCase();
+  // the cart argument of the calls that name other carts (run() takes a parameter, not a cart)
+  const CART_ARG = { reload: 3, cstore: 3, load: 0 };
+
+  /**
+   * Which candidate carts can go: the ones no remaining source references.
+   * candidates: cart names that are about to be unused by the project (old data carts, adopted carts)
+   * files:      [{name, text}] the final texts of the folder (fx carts after their rewrite, .lua files, ...)
+   * Sources are every file that is not a candidate plus every candidate that has to stay. A reference
+   * that cannot be resolved (computed name, unreadable #include) keeps all candidates.
+   * -> {retire: [names], kept: [{cart, by}], unresolved: [{file, line, call, why}]}
+   */
+  function retirement(candidates, files) {
+    const cand = new Map(candidates.map((n) => [n.toLowerCase(), n]));
+    const byName = new Map(files.map((f) => [baseName(f.name), f]));
+    const kept = new Map();
+    const unresolved = [];
+    const scanned = new Set();
+    const queue = files.filter((f) => !cand.has(baseName(f.name)));
+    const keep = (lc, by) => {
+      if (!cand.has(lc) || kept.has(lc)) return;
+      kept.set(lc, { cart: cand.get(lc), by });
+      if (byName.has(lc)) queue.push(byName.get(lc));
+    };
+    while (queue.length) {
+      const f = queue.shift();
+      if (scanned.has(f.name)) continue;
+      scanned.add(f.name);
+      const { code: raw, firstLine } = luaOf(f.text);
+      const code = blankComments(raw);
+      const lineAt = (i) => firstLine + code.slice(0, i).split('\n').length;
+      for (const m of code.matchAll(/^[ \t]*#include[ \t]+([^\s]+)/gm)) {
+        const path = m[1].replace(/:\d+$/, '');
+        const lc = baseName(path);
+        const where = `${f.name}:${lineAt(m.index)}`;
+        if (cand.has(lc)) keep(lc, `${where} #include ${m[1]}`);
+        else if (!/[\\/]/.test(path) && byName.has(lc)) queue.push(byName.get(lc));
+        else unresolved.push({ file: f.name, line: lineAt(m.index), call: m[0].trim(), why: `the included ${m[1]} cannot be read here, its references are unknown` });
+      }
+      for (const m of code.matchAll(/(^|[^.:\w])(reload|cstore|load)\s*\(/g)) {
+        if (/\bfunction\s*$/.test(code.slice(Math.max(0, m.index - 20), m.index + m[1].length))) continue;
+        const at = m.index + m[1].length;
+        const open = code.indexOf('(', at);
+        const call = V.callArgs(code, open);
+        const text = call ? code.slice(at, call.end + 1).replace(/\s+/g, ' ') : code.slice(at, open + 1);
+        const where = { file: f.name, line: lineAt(at), call: text };
+        const expr = call ? (call.args[CART_ARG[m[2]]] || '') : null;
+        if (expr === null) { unresolved.push({ ...where, why: 'the call is not closed' }); continue; }
+        if (!expr || expr === 'nil') continue; // the running cart itself
+        const ident = /^[A-Za-z_]\w*$/.test(expr);
+        const assigned = ident ? (code.match(new RegExp(`\\b${expr}\\s*=(?!=)`, 'g')) || []).length : 0;
+        const target = ident && assigned !== 1 ? null : C.reloadTarget(expr, code);
+        if (!target) {
+          unresolved.push({ ...where, why: ident && assigned > 1 ? `${expr} is assigned more than once` : `the cart name ${expr} cannot be resolved` });
+          continue;
+        }
+        const by = `${f.name}:${where.line} ${text}`;
+        if (!target.inferred) {
+          const n = baseName(target.label);
+          keep(n, by);
+          keep(`${n}.p8`, by);
+        } else {
+          for (const lc of cand.keys()) if (target.match(lc) || target.match(lc.replace(/\.p8$/, ''))) keep(lc, by);
+        }
+      }
+    }
+    if (unresolved.length) for (const lc of cand.keys()) if (!kept.has(lc)) kept.set(lc, { cart: cand.get(lc), by: 'unresolved references' });
+    return { retire: [...cand.keys()].filter((lc) => !kept.has(lc)).map((lc) => cand.get(lc)), kept: [...kept.values()], unresolved };
+  }
+
   return {
     FORMAT, CART, TYPES, hex, safeName, assetToJson, assetFromJson, findAnchors, rewriteAnchors, renameInText, listLiteral,
-    constExpr, constRange, adopt, segmentsOf, segmentImage, setSegment, imageBytes, partsOf, autoPack, placements, buildCarts, verifyCarts, checkAnchors, isMusic, isTracks,
+    constExpr, constRange, retirement, adopt, segmentsOf, segmentImage, setSegment, imageBytes, partsOf, autoPack, placements, buildCarts, verifyCarts, checkAnchors, isMusic, isTracks,
   };
 })();
 

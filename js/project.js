@@ -253,10 +253,18 @@
     }
     errors.push(...P.checkAnchors(rewrites.length ? anchorFiles().map((f) => rewrites.find((r) => r.name === f.name) || f) : anchorFiles(), pj.parts, layout).errors);
     if (errors.length) { showMessage('Write carts', `Anchors that cannot be resolved, nothing was written:\n${[...new Set(errors)].join('\n')}`); return; }
-    // carts the project wrote before (or adopted) that the new layout no longer uses -> demo/unused/
-    const keep = new Set(layout.map((c) => c.name.toLowerCase()));
-    const retire = [...new Set([...(pj.project?.carts || []).map((c) => c.name), ...(pj.project?.adoptedFrom || [])])].filter((n) => !keep.has(n.toLowerCase()) && pj.texts.has(n));
-    const ok = await confirmDialog('Write carts', `Writes ${layout.length} data carts (${layout.map((c) => c.name).join(', ')}), rewrites ${rewrites.reduce((s, r) => s + r.changes.length, 0)} reload() lines in ${rewrites.length} fx carts${retire.length ? ` and moves ${retire.length} carts nobody uses any more to ${pj.demo === pj.root ? '' : 'demo/'}unused/` : ''}.`, 'Write');
+    // carts the project wrote before (or adopted) that the new layout no longer uses go to demo/unused/,
+    // but only when nothing in the final sources still references them (docs/PROJECT_MODEL.md)
+    const inLayout = new Set(layout.map((c) => c.name.toLowerCase()));
+    const candidates = [...new Set([...(pj.project?.carts || []).map((c) => c.name), ...(pj.project?.adoptedFrom || [])])].filter((n) => !inLayout.has(n.toLowerCase()) && pj.texts.has(n));
+    const finalTexts = new Map([...pj.texts, ...Object.entries(texts), ...rewrites.map((r) => [r.name, r.text])]);
+    const files = [...finalTexts].map(([name, text]) => ({ name, text }));
+    for await (const [name, h] of pj.demo.entries()) if (h.kind === 'file' && /\.lua$/i.test(name)) files.push({ name, text: await (await h.getFile()).text() });
+    const { retire, kept, unresolved } = P.retirement(candidates, files);
+    const unusedDir = `${pj.demo === pj.root ? '' : 'demo/'}unused/`;
+    const keptNote = kept.length ? `\n\nStays in place because it is still referenced:\n${kept.map((k) => `${k.cart} (${k.by})`).join('\n')}` : '';
+    const unresolvedNote = unresolved.length ? `\n\nReferences that cannot be resolved, so no cart is moved:\n${unresolved.map((u) => `${u.file}:${u.line} ${u.call} (${u.why})`).join('\n')}` : '';
+    const ok = await confirmDialog('Write carts', `Writes ${layout.length} data carts (${layout.map((c) => c.name).join(', ')}), rewrites ${rewrites.reduce((s, r) => s + r.changes.length, 0)} reload() lines in ${rewrites.length} fx carts${retire.length ? ` and moves ${retire.length} carts nobody references any more (${retire.join(', ')}) to ${unusedDir}` : ''}.${keptNote}${unresolvedNote}`, 'Write');
     if (!ok) return;
     if (retire.length) {
       const un = await pj.demo.getDirectoryHandle('unused', { create: true });
@@ -362,12 +370,13 @@
     const plan = pj.adoptPlan;
     dom.adopt.hidden = !(pj.root && !pj.project);
     if (dom.adopt.hidden) return;
-    dom.adopt.replaceChildren(
+    dom.adopt.replaceChildren(...[
       el('h3', { textContent: 'Adopt this demo' }),
       el('p', { textContent: plan && plan.assets.length ? `The suite found ${plan.assets.length} pieces of data in ${plan.sourceCarts.length} carts (${plan.sourceCarts.join(', ')}), read by ${plan.edits.length} reload() lines. Adopting stores them as assets, marks those lines with --@data anchors and packs new carts. The demo runs the same.` : 'No reload() of a data cart found in demo/.' }),
       plan?.skipped.length ? el('p', { className: 'muted', textContent: `Left as they are: ${plan.skipped.map((s) => `${s.file}:${s.line} (${s.why})`).join('; ')}` }) : null,
       plan?.keptCarts.length ? el('p', { className: 'muted', textContent: `Still read by lines left as they are, so they stay in demo/: ${plan.keptCarts.join(', ')}` }) : null,
-      plan?.assets.length ? el('button', { className: 'btn btn-primary', type: 'button', textContent: 'Adopt', onclick: adoptNow }) : null);
+      plan?.assets.length ? el('button', { className: 'btn btn-primary', type: 'button', textContent: 'Adopt', onclick: adoptNow }) : null,
+    ].filter(Boolean));
   }
 
   function anchorsByRef() {

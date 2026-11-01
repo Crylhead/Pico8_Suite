@@ -83,7 +83,19 @@ The builder rewrites the literal list and reload source/length. Auto-pack places
 - Pinned offsets are **not implemented**. Auto-pack replaces the manual arrangement.
 - Write Carts checks placement/capacity, builds and parses generated cart strings for byte/LZ comparison, computes anchor rewrites, requests confirmation, then writes carts/FX/assets/manifest and retires old carts.
 
-The current comparison is **in memory before disk writes**, not a disk readback. Multi-file writes are not transactional, and current retirement/conflict handling has open defects. See issues #1–#4 in the [health review](HEALTH_REVIEW_2026-11-01.md).
+### Retiring old carts
+
+Retirement candidates are carts the project wrote before, or adopted, that the new layout no longer uses. A candidate moves to `unused/` only if the **final** sources no longer reference it. The final sources are every demo cart after its anchor rewrite, the new data carts and top-level `.lua` files. A candidate that stays is scanned as a source too, so carts it references also stay.
+
+- References counted are the cart argument of `reload()` and `cstore()` (4th) and `load()` (1st), plus `#include` lines. The scan ignores comments, and calls may span lines. `run()` takes a parameter string, not a cart, so it is not counted. A name without an extension also matches `<name>.p8`.
+- Names are resolved as in adoption: literals, a variable assigned once to a literal, `"m"..i..".p8"` patterns and `list[i]` with a literal list.
+- A reference that cannot be resolved keeps **every** candidate in place. This covers a computed name, a variable assigned more than once, and an `#include` that is neither a demo cart nor a top-level `.lua` file.
+- The Write confirmation lists the carts that will move, the carts that stay with the line that references them, and any unresolved references.
+- Carts that stay are no longer owned by the project afterwards. Their names are reserved, and later writes never overwrite or retire them.
+
+Partial adoption does not grant permission to retire a cart: a source cart is retired only when this check passes at write time.
+
+The current comparison is **in memory before disk writes**, not a disk readback. Multi-file writes are not transactional, and conflict handling has open defects. See issues #3–#4 in the [health review](HEALTH_REVIEW_2026-11-01.md).
 
 There is **no `tools/build.py` release builder in this repository**. Anchor validation runs in Cart Builder; if the surrounding demo framework supplies a release checker, configure and run it there separately.
 
