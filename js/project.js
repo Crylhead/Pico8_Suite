@@ -186,7 +186,8 @@
   async function adoptNow() {
     const plan = pj.adoptPlan;
     if (!plan) return;
-    const ok = await confirmDialog('Adopt this demo', `The suite takes over the data of ${plan.adoptedCarts.length} carts as ${plan.assets.length} assets (assets/), adds ${plan.edits.length} --@data anchors to the fx code and then packs new data carts. The old carts move to demo/unused/. The demo runs the same as before.\n\nNothing is written until you press “Write carts”, except the anchors and assets now.`, 'Adopt');
+    const kept = plan.keptCarts.length ? ` Kept in place, because reload() lines left as they are still read them: ${plan.keptCarts.join(', ')}.` : '';
+    const ok = await confirmDialog('Adopt this demo', `The suite takes over the data of ${plan.sourceCarts.length} carts as ${plan.assets.length} assets (assets/), adds ${plan.edits.length} --@data anchors to the fx code and then packs new data carts. Old carts nothing reads any more move to demo/unused/.${kept} The demo runs the same as before.\n\nNothing is written until you press “Write carts”, except the anchors and assets now.`, 'Adopt');
     if (!ok) return;
     // anchors into the fx files
     const byFile = new Map();
@@ -363,8 +364,9 @@
     if (dom.adopt.hidden) return;
     dom.adopt.replaceChildren(
       el('h3', { textContent: 'Adopt this demo' }),
-      el('p', { textContent: plan && plan.assets.length ? `The suite found ${plan.assets.length} pieces of data in ${plan.adoptedCarts.length} carts (${plan.adoptedCarts.join(', ')}), read by ${plan.edits.length} reload() lines. Adopting stores them as assets, marks those lines with --@data anchors and packs new carts. The demo runs the same.` : 'No reload() of a data cart found in demo/.' }),
+      el('p', { textContent: plan && plan.assets.length ? `The suite found ${plan.assets.length} pieces of data in ${plan.sourceCarts.length} carts (${plan.sourceCarts.join(', ')}), read by ${plan.edits.length} reload() lines. Adopting stores them as assets, marks those lines with --@data anchors and packs new carts. The demo runs the same.` : 'No reload() of a data cart found in demo/.' }),
       plan?.skipped.length ? el('p', { className: 'muted', textContent: `Left as they are: ${plan.skipped.map((s) => `${s.file}:${s.line} (${s.why})`).join('; ')}` }) : null,
+      plan?.keptCarts.length ? el('p', { className: 'muted', textContent: `Still read by lines left as they are, so they stay in demo/: ${plan.keptCarts.join(', ')}` }) : null,
       plan?.assets.length ? el('button', { className: 'btn btn-primary', type: 'button', textContent: 'Adopt', onclick: adoptNow }) : null);
   }
 
