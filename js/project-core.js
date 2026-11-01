@@ -681,9 +681,144 @@ const P8Project = (() => {
     return { retire: [...cand.keys()].filter((lc) => !kept.has(lc)).map((lc) => cand.get(lc)), kept: [...kept.values()], unresolved };
   }
 
+
+  // ------------------------------------------------------------------ //
+  // Recoverable multi-file writes (File System Access handles)         //
+  // ------------------------------------------------------------------ //
+
+  const JOURNAL = 'suite.journal.json';
+
+  class WriteError extends Error {
+    constructor(msg, props) { super(msg); this.name = 'WriteError'; Object.assign(this, props); }
+  }
+
+  const notFound = (e) => e?.name === 'NotFoundError';
+  async function readOrNull(dir, name) {
+    if (!dir) return null;
+    let h;
+    try { h = await dir.getFileHandle(name); } catch (e) { if (notFound(e)) return null; throw e; }
+    return (await h.getFile()).text();
+  }
+  /** writes (or with text null removes) one file, then reads it back */
+  async function put(dir, name, text) {
+    if (text === null) {
+      try { await dir.removeEntry(name); } catch (e) { if (!notFound(e)) throw e; }
+    } else {
+      const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
+      try { await w.write(text); } catch (e) { try { await w.abort(); } catch { /* already failed */ } throw e; }
+      await w.close();
+    }
+    if ((await readOrNull(dir, name)) !== text) throw new Error(`${name} reads back different from what was written`);
+  }
+  /** dirs: {key: handle | async (create) => handle}; a missing directory resolves to null unless create */
+  function dirResolver(dirs) {
+    const cache = new Map();
+    return async (key, create = false) => {
+      if (cache.has(key)) return cache.get(key);
+      const d = dirs[key];
+      let h = null;
+      if (typeof d === 'function') { try { h = await d(create); } catch (e) { if (create || !notFound(e)) throw e; } } else h = d || null;
+      if (h) cache.set(key, h);
+      return h;
+    };
+  }
+
+  /**
+   * Writes several files so that a failure part-way leaves the folder as it was.
+   *   writes: [{dir, name, text | null (remove), stage}] in order; the last one (the manifest) commits
+   *   retire: [{from, to, name}] moved only after the commit: copied, read back, then removed
+   * Every target is read first (preflight), the original contents go into a journal next to the
+   * manifest, each write is read back, and any failure restores the originals. If the restore itself
+   * fails, the journal stays for recover() the next time the project opens.
+   * -> {retired, retireErrors, journalKept} or throws WriteError {stage, file, restored, journalKept}
+   */
+  async function transact(dirs, { writes, retire = [] }, { journalDir = 'demo', now = () => new Date().toISOString() } = {}) {
+    const dir = dirResolver(dirs);
+    const label = (w) => `${w.dir}/${w.name}`;
+    const jdir = await dir(journalDir);
+    const before = [];
+    try {
+      if ((await readOrNull(jdir, JOURNAL)) !== null) throw new Error(`an earlier write left ${JOURNAL}; reopen the project to recover it first`);
+      for (const w of writes) before.push(await readOrNull(await dir(w.dir), w.name));
+    } catch (e) {
+      throw new WriteError(`Preflight failed, nothing was written: ${e.message}`, { stage: 'preflight', file: label(writes[before.length] || { dir: journalDir, name: JOURNAL }), restored: true, journalKept: false, cause: e });
+    }
+    const journal = { format: 1, started: now(), state: 'writing', writes: writes.map((w, i) => ({ dir: w.dir, name: w.name, before: before[i] })), retire };
+    try { await put(jdir, JOURNAL, JSON.stringify(journal)); } catch (e) {
+      try { await put(jdir, JOURNAL, null); } catch { /* nothing else was touched */ }
+      throw new WriteError(`Could not write the recovery journal, nothing was written: ${e.message}`, { stage: 'journal', file: `${journalDir}/${JOURNAL}`, restored: true, journalKept: false, cause: e });
+    }
+    let i = 0;
+    try {
+      for (; i < writes.length; i++) await put(await dir(writes[i].dir, true), writes[i].name, writes[i].text);
+      await put(jdir, JOURNAL, JSON.stringify({ ...journal, state: 'committed' }));
+    } catch (e) {
+      const failed = writes[i] || { dir: journalDir, name: JOURNAL, stage: 'commit' };
+      const problems = await restore(dir, journal.writes.slice(0, i + 1));
+      let journalKept = !!problems.length;
+      if (!journalKept) { try { await put(jdir, JOURNAL, null); } catch { journalKept = true; } }
+      throw new WriteError(problems.length
+        ? `Writing ${label(failed)} failed (${e.message}) and ${problems.length} files could not be restored: ${problems.join('; ')}. ${journalDir}/${JOURNAL} keeps the original contents; reopen the project to restore them.`
+        : `Writing ${label(failed)} failed (${e.message}). All files were restored to their state before the write.`,
+      { stage: failed.stage || 'commit', file: label(failed), restored: !problems.length, journalKept, cause: e });
+    }
+    const { retired, errors: retireErrors } = await retireAll(dir, retire);
+    let journalKept = false;
+    try { await put(jdir, JOURNAL, null); } catch { journalKept = true; }
+    return { retired, retireErrors, journalKept };
+  }
+
+  async function restore(dir, entries) {
+    const problems = [];
+    for (const w of entries.slice().reverse()) {
+      try { await put(await dir(w.dir, w.before !== null), w.name, w.before); } catch (e) {
+        if (w.before === null && !(await dir(w.dir))) continue; // the directory never existed
+        problems.push(`${w.dir}/${w.name}: ${e.message}`);
+      }
+    }
+    return problems;
+  }
+
+  /** after the commit: copy, read back, remove the original. A failure leaves the original in place. */
+  async function retireAll(dir, retire) {
+    const retired = [];
+    const errors = [];
+    for (const r of retire) {
+      try {
+        const from = await dir(r.from);
+        const text = await readOrNull(from, r.name);
+        if (text === null) continue;
+        const to = await dir(r.to, true);
+        if ((await readOrNull(to, r.name)) !== text) await put(to, r.name, text);
+        await from.removeEntry(r.name);
+        retired.push(r.name);
+      } catch (e) { errors.push(`${r.name}: ${e.message}`); }
+    }
+    return { retired, errors };
+  }
+
+  /**
+   * An interrupted transact() left its journal: 'writing' -> restore the originals,
+   * 'committed' -> finish the retirement. -> null (no journal) | {state, problems, retired}
+   */
+  async function recover(dirs, { journalDir = 'demo' } = {}) {
+    const dir = dirResolver(dirs);
+    const jdir = await dir(journalDir);
+    const text = await readOrNull(jdir, JOURNAL);
+    if (text === null) return null;
+    let j;
+    try { j = JSON.parse(text); } catch (e) { return { state: 'unreadable', problems: [`${JOURNAL}: ${e.message}`], retired: [] }; }
+    let problems = [];
+    let retired = [];
+    if (j.state === 'committed') ({ retired, errors: problems } = await retireAll(dir, j.retire || []));
+    else problems = await restore(dir, j.writes || []);
+    if (!problems.length) await put(jdir, JOURNAL, null);
+    return { state: j.state, problems, retired };
+  }
+
   return {
     FORMAT, CART, TYPES, hex, safeName, assetToJson, assetFromJson, findAnchors, rewriteAnchors, renameInText, listLiteral,
-    constExpr, constRange, retirement, adopt, segmentsOf, segmentImage, setSegment, imageBytes, partsOf, autoPack, placements, buildCarts, verifyCarts, checkAnchors, isMusic, isTracks,
+    constExpr, constRange, retirement, JOURNAL, WriteError, transact, recover, adopt, segmentsOf, segmentImage, setSegment, imageBytes, partsOf, autoPack, placements, buildCarts, verifyCarts, checkAnchors, isMusic, isTracks,
   };
 })();
 
