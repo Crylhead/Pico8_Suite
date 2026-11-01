@@ -1,0 +1,1996 @@
+// js/app.js
+// UI controller for the PICO-8 Palette Tool web version.
+// Mirrors the behaviour of palette_ui.py / ui/*.py on top of the pure logic in core.js.
+
+'use strict';
+
+(() => {
+  const {
+    BASE_INDICES, HIDDEN_INDICES, DEFAULT_RAMP_PRESETS, STOPS_PER_ROW, FADE_STEPS,
+    rgbOf, isValidPico, lum709, emptyPalette, emptyStops, cloneStops, fullPalette, fullPaletteRgb,
+    usedColorIndices, slotIndexOfPico, resolveTargetSlot, buildSlotRamps, generateWithRamps, combineTwoSided,
+    sliderToStep, autoFillStops, paletteToLua, paletteToGpl, fadeToLua, renderFade, quantize, renderImageFade,
+    isValidPreviewSize, autoAssignMapping, convertGreyscaleManual, parsePngPalette, uniqueColors,
+    matchColorsToPico8, encodeIndexedPng, buildDataCart, buildViewerCart, presetToDict, presetFromDict,
+    rampPresetsToConfigJson, rampPresetsFromConfig,
+  } = P8;
+
+  const VERSION = '2.0.0';
+  const KEYS = {
+    ramps: 'p8pal.rampPresets',
+    recent: 'p8pal.recentProjects',
+    session: 'p8pal.session',
+    theme: 'p8pal.theme',
+    indices: 'p8pal.showIndices',
+    workspace: 'p8pal.workspace',
+  };
+  const MAX_RECENT = 5;
+  const LONG_PRESS_MS = 500;
+
+  // Swatch roles (same names as ColorSwatch roles in the Python version)
+  const DROP_TARGETS = new Set(['palette_slot', 'ramp_slot', 'fade_target', 'greyscale_assignment']);
+  const CLEARABLE = new Set(['palette_slot', 'ramp_slot', 'fade_target', 'greyscale_assignment']);
+  const NOT_DRAGGABLE = new Set(['greyscale_display']);
+
+  // ------------------------------------------------------------------ //
+  // Small helpers                                                      //
+  // ------------------------------------------------------------------ //
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+  function el(tag, props = {}, ...children) {
+    const node = document.createElement(tag);
+    const { dataset, attrs, ...rest } = props;
+    Object.assign(node, rest);
+    if (dataset) Object.assign(node.dataset, dataset);
+    if (attrs) for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    for (const c of children) if (c != null) node.append(c);
+    return node;
+  }
+
+  const store = {
+    get(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw == null ? fallback : JSON.parse(raw);
+      } catch {
+        return fallback;
+      }
+    },
+    set(key, value) {
+      try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ }
+    },
+    remove(key) {
+      try { localStorage.removeItem(key); } catch { /* storage unavailable */ }
+    },
+  };
+
+  const sanitizeFilename = (name) => name.trim().replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, ' ') || 'untitled';
+
+  function loadRampPresets() {
+    const saved = store.get(KEYS.ramps, null);
+    if (saved) {
+      try { return rampPresetsFromConfig(saved); } catch { /* fall back to defaults */ }
+    }
+    return DEFAULT_RAMP_PRESETS.map((r) => r.slice());
+  }
+
+  // ------------------------------------------------------------------ //
+  // State                                                              //
+  // ------------------------------------------------------------------ //
+
+  const state = {
+    custom: emptyPalette(),       // normal custom palette (pico index per slot)
+    ramp: emptyPalette(),         // ramp-mode palette
+    mode: 'normal',               // 'normal' | 'ramp'
+    rampIndex: 0,                 // 1-based loaded ramp preset, 0 = new
+    rampPresets: loadRampPresets(),
+    stops: emptyStops(),          // ramp editor contents (16 x 15 pico|null)
+    savedNormalStops: null,
+    target: null,                 // "Fade to" swatch (pico|null)
+    direction: 'dark',
+    dirStops: { dark: null, bright: null },
+    dirTargets: { dark: null, bright: null }, // slot indices
+    gamma: 1.0,
+    covMin: 0,
+    covMax: 16,
+    fade: null,                   // {tables, coverage}
+    imported: null,               // fade tables an image brought along: {dark, bright, from, sig: {dark, bright}}
+    slider: 16,
+    orientation: 'vertical',
+    showIndices: true,
+    selected: null,               // selected palette slot index
+    img: null,                    // {src: ImageData, w, h, indices, scrollX, scrollY}
+    grey: null,                   // {src, mapping, dither, inBlack, inWhite, outDark, outBright}
+    useDither: true,
+    presetName: '',
+  };
+
+  const activePalette = () => (state.mode === 'ramp' ? state.ramp : state.custom);
+
+  // ------------------------------------------------------------------ //
+  // DOM references                                                     //
+  // ------------------------------------------------------------------ //
+
+  const dom = {
+    baseGrid: $('#baseGrid'),
+    hiddenGrid: $('#hiddenGrid'),
+    paletteSlots: $('#paletteSlots'),
+    rampEditor: $('#rampEditor'),
+    fadeTarget: $('#fadeTarget'),
+    modeSeg: $('#modeSeg'),
+    dirSeg: $('#dirSeg'),
+    rampTools: $('#rampTools'),
+    rampStatus: $('#rampStatus'),
+    paletteHint: $('#paletteHint'),
+    gradientCanvas: $('#gradientCanvas'),
+    imageCanvas: $('#imageCanvas'),
+    imageFrame: $('#imageFrame'),
+    imageEmpty: $('#imageEmpty'),
+    scrollHint: $('#scrollHint'),
+    orientationBtn: $('#orientationBtn'),
+    gammaInput: $('#gammaInput'),
+    covMinInput: $('#covMinInput'),
+    covMaxInput: $('#covMaxInput'),
+    fadeSlider: $('#fadeSlider'),
+    sliderReadout: $('#sliderReadout'),
+    greyControls: $('#greyControls'),
+    greyInBlack: $('#greyInBlack'),
+    greyInWhite: $('#greyInWhite'),
+    greyOutDark: $('#greyOutDark'),
+    greyOutBright: $('#greyOutBright'),
+    loadedPreset: $('#loadedPreset'),
+    toggleIndices: $('#toggleIndices'),
+    themeToggle: $('#themeToggle'),
+    reassignItem: $('#reassignItem'),
+    recentList: $('#recentList'),
+    toasts: $('#toasts'),
+    system: [],
+    slots: [],
+    rampBase: [],
+    rampStops: [],
+  };
+
+  // ------------------------------------------------------------------ //
+  // Building the static UI                                             //
+  // ------------------------------------------------------------------ //
+
+  function makeSwatch(role, data = {}, focusable = false) {
+    const node = el('div', { className: 'sw empty', dataset: { role, ...data } });
+    if (focusable) node.tabIndex = 0;
+    return node;
+  }
+
+  function buildSystemPalette() {
+    for (const [grid, indices] of [[dom.baseGrid, BASE_INDICES], [dom.hiddenGrid, HIDDEN_INDICES]]) {
+      for (const pico of indices) {
+        const sw = makeSwatch('system', { pico }, true);
+        grid.append(sw);
+        dom.system.push(sw);
+      }
+    }
+  }
+
+  function buildPaletteSlots() {
+    for (let i = 0; i < 16; i++) {
+      const sw = makeSwatch('palette_slot', { i }, true);
+      dom.paletteSlots.append(sw);
+      dom.slots.push(sw);
+    }
+  }
+
+  function buildRampEditor() {
+    for (let block = 0; block < 2; block++) {
+      const blockEl = el('div', { className: 'ramp-block' });
+      const head = el('div', { className: 'ramp-head', attrs: { 'aria-hidden': 'true' } },
+        el('span'), el('span', { textContent: 'B' }), el('span'));
+      for (let c = 1; c <= STOPS_PER_ROW; c++) head.append(el('span', { textContent: String(c) }));
+      blockEl.append(head);
+
+      for (let local = 0; local < 8; local++) {
+        const r = block * 8 + local;
+        const row = el('div', { className: 'ramp-row' });
+        row.append(el('span', { className: 'row-label', textContent: String(r) }));
+        const base = makeSwatch('ramp_base', { r });
+        dom.rampBase[r] = base;
+        row.append(base, el('span'));
+        dom.rampStops[r] = [];
+        for (let c = 0; c < STOPS_PER_ROW; c++) {
+          const sw = makeSwatch('ramp_slot', { r, c });
+          dom.rampStops[r][c] = sw;
+          row.append(sw);
+        }
+        blockEl.append(row);
+      }
+      dom.rampEditor.append(blockEl);
+    }
+  }
+
+  // ------------------------------------------------------------------ //
+  // Rendering                                                          //
+  // ------------------------------------------------------------------ //
+
+  function paintSwatch(node, pico, showIndex, rgbOverride = null) {
+    const rgb = rgbOverride || rgbOf(pico);
+    if (!rgb) {
+      node.classList.add('empty');
+      node.classList.remove('light');
+      node.style.backgroundColor = '';
+      node.textContent = '';
+      node.title = 'Empty';
+      return;
+    }
+    node.classList.remove('empty');
+    node.style.backgroundColor = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    node.classList.toggle('light', lum709(rgb) >= 128);
+    const hasIndex = pico != null && pico >= 0;
+    node.textContent = showIndex && hasIndex ? String(pico) : '';
+    const hex = rgb.map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+    node.title = hasIndex ? `Color ${pico} · #${hex}` : `Grey ${rgb[0]} · #${hex}`;
+  }
+
+  function renderSwatches() {
+    const pal = activePalette();
+    dom.system.forEach((sw) => paintSwatch(sw, +sw.dataset.pico, state.showIndices));
+    dom.slots.forEach((sw, i) => {
+      paintSwatch(sw, pal[i], state.showIndices);
+      sw.classList.toggle('selected', state.selected === i);
+    });
+    for (let r = 0; r < 16; r++) {
+      paintSwatch(dom.rampBase[r], pal[r], false);
+      for (let c = 0; c < STOPS_PER_ROW; c++) paintSwatch(dom.rampStops[r][c], state.stops[r][c], false);
+    }
+    paintSwatch(dom.fadeTarget, state.target, false);
+    if (mapDlg) renderMapping();
+  }
+
+  function setSeg(seg, value) {
+    for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.value === value));
+  }
+
+  function setInput(input, value) {
+    if (document.activeElement !== input) input.value = value;
+  }
+
+  function renderControls() {
+    setSeg(dom.modeSeg, state.mode);
+    setSeg(dom.dirSeg, state.direction);
+
+    const ramp = state.mode === 'ramp';
+    dom.rampTools.hidden = !ramp;
+    dom.rampStatus.hidden = !ramp;
+    dom.rampStatus.textContent = state.rampIndex === 0
+      ? 'Ramp: New'
+      : `Ramp: #${state.rampIndex} of ${state.rampPresets.length}`;
+    dom.paletteHint.textContent = ramp
+      ? 'Ramp mode: build a gradient here and save it as a ramp preset for Auto Fill. Your normal palette is kept.'
+      : 'Drag slots to reorder. Right-click (or long-press) to clear. Drag a slot onto the ramp grid to add a fade stop.';
+
+    setInput(dom.gammaInput, state.gamma.toFixed(2));
+    setInput(dom.covMinInput, state.covMin);
+    setInput(dom.covMaxInput, state.covMax);
+
+    dom.fadeSlider.value = state.slider;
+    renderSliderReadout();
+    dom.orientationBtn.textContent = state.orientation === 'vertical' ? '↔ Horizontal' : '↕ Vertical';
+
+    dom.loadedPreset.hidden = !state.presetName;
+    dom.loadedPreset.textContent = state.presetName ? `Loaded: ${state.presetName}` : '';
+    dom.loadedPreset.title = dom.loadedPreset.textContent;
+
+    dom.toggleIndices.textContent = state.showIndices ? 'Hide indices' : 'Show indices';
+    dom.toggleIndices.setAttribute('aria-pressed', String(state.showIndices));
+
+    dom.reassignItem.disabled = !state.grey;
+    dom.greyControls.hidden = !state.grey;
+    if (state.grey) {
+      setInput(dom.greyInBlack, state.grey.inBlack);
+      setInput(dom.greyInWhite, state.grey.inWhite);
+      setInput(dom.greyOutDark, state.grey.outDark);
+      setInput(dom.greyOutBright, state.grey.outBright);
+    }
+    renderImageChrome();
+  }
+
+  function renderSliderReadout() {
+    const v = state.slider;
+    const step = sliderToStep(v);
+    dom.sliderReadout.textContent = v === 16 ? 'Normal' : `${v < 16 ? 'Dark' : 'Bright'} · step ${step}`;
+  }
+
+  function renderImageChrome() {
+    const img = state.img;
+    dom.imageEmpty.hidden = !!img;
+    const scrollable = !!img && (img.w > 128 || img.h > 128);
+    dom.imageFrame.classList.toggle('scrollable', scrollable);
+    dom.scrollHint.hidden = !scrollable;
+  }
+
+  function renderAll() {
+    renderControls();
+    renderSwatches();
+  }
+
+  // ------------------------------------------------------------------ //
+  // Fade generation + previews                                         //
+  // ------------------------------------------------------------------ //
+
+  // an imported fade (from the image's data cart) is used per direction while the palette
+  // and that direction's ramps are unchanged; any edit generates the fades again
+  const fadeSig = (stops) => JSON.stringify([state.custom, stops, state.gamma, state.covMin, state.covMax, state.mode]);
+
+  function generateFade() {
+    const imp = state.imported;
+    if (imp && imp[state.direction]) {
+      if (fadeSig(state.stops) === imp.sig[state.direction]) {
+        const f = imp[state.direction];
+        state.fade = { tables: f.tables.map((r) => r.slice()), coverage: f.coverage.slice() };
+        drawGradient();
+        drawImagePreview();
+        emit('p8:fade');
+        return;
+      }
+      imp[state.direction] = null;
+      toast(`Edited: the ${state.direction} fade is generated again (no longer the table from ${imp.from}).`, 'info', 3200);
+    }
+    let target = resolveTargetSlot(state.custom, state.target, state.direction);
+    if (target == null) target = 0;
+    try {
+      const ramps = buildSlotRamps(state.custom, state.stops, target);
+      state.fade = generateWithRamps(ramps, {
+        steps: FADE_STEPS, gamma: state.gamma, covMin: state.covMin, covMax: state.covMax,
+      });
+    } catch (e) {
+      showMessage('Fade generator', e.message, 'error');
+      return;
+    }
+    drawGradient();
+    drawImagePreview();
+    scheduleAutosave();
+    emit('p8:fade');
+  }
+
+  /** Notifies other workspaces (Tile Maker) about palette / fade changes. */
+  function emit(name) {
+    document.dispatchEvent(new CustomEvent(name));
+  }
+
+  function drawGradient() {
+    if (!state.fade) return;
+    const img = renderFade(fullPaletteRgb(activePalette()), state.fade, state.orientation);
+    const c = dom.gradientCanvas;
+    if (c.width !== img.width || c.height !== img.height) { c.width = img.width; c.height = img.height; }
+    c.getContext('2d').putImageData(img, 0, 0);
+  }
+
+  const offscreen = document.createElement('canvas');
+
+  function drawImagePreview() {
+    const c = dom.imageCanvas;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, c.width, c.height);
+    const img = state.img;
+    if (!img || !state.fade) return;
+
+    const { image } = renderImageFade(img.indices, img.w, img.h, fullPaletteRgb(activePalette()), state.fade, sliderToStep(state.slider));
+    offscreen.width = img.w;
+    offscreen.height = img.h;
+    offscreen.getContext('2d').putImageData(image, 0, 0);
+
+    // 2x scale, 256x256 viewport, scrollable for 128x256 / 256x128 images
+    const tw = img.w * 2;
+    const th = img.h * 2;
+    const vw = Math.min(256, tw);
+    const vh = Math.min(256, th);
+    img.scrollX = Math.round(clamp(img.scrollX, 0, tw - vw) / 2) * 2;
+    img.scrollY = Math.round(clamp(img.scrollY, 0, th - vh) / 2) * 2;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(offscreen, img.scrollX / 2, img.scrollY / 2, vw / 2, vh / 2, (256 - vw) / 2, (256 - vh) / 2, vw, vh);
+  }
+
+  function setPreviewImage(imageData, { keepScroll = false, indices = null } = {}) {
+    if (!isValidPreviewSize(imageData.width, imageData.height)) {
+      throw new Error('Preview image must be 128x128, 128x256, or 256x128 pixels.');
+    }
+    const prev = state.img;
+    state.img = {
+      src: imageData,
+      w: imageData.width,
+      h: imageData.height,
+      // given slot indices keep duplicate colors in their own slots (images that carry a palette)
+      indices: indices && indices.length === imageData.width * imageData.height ? Uint8Array.from(indices, (v) => v & 15) : quantize(imageData, fullPaletteRgb(activePalette())),
+      scrollX: keepScroll && prev ? prev.scrollX : 0,
+      scrollY: keepScroll && prev ? prev.scrollY : 0,
+    };
+    renderImageChrome();
+    drawImagePreview();
+  }
+
+  /** PalettePanel.palette_changed -> FadePanel.on_palette_changed */
+  function onPaletteChanged() {
+    clearInvalidStops();
+    if (state.img) state.img.indices = quantize(state.img.src, fullPaletteRgb(activePalette()));
+    renderSwatches();
+    generateFade();
+    emit('p8:palette');
+  }
+
+  function clearInvalidStops() {
+    const valid = new Set(state.custom.filter((p) => p != null));
+    for (const row of state.stops) {
+      for (let c = 0; c < row.length; c++) if (row[c] != null && !valid.has(row[c])) row[c] = null;
+    }
+  }
+
+  // ------------------------------------------------------------------ //
+  // Swatch model access (shared by drag & drop, clicks, clearing)      //
+  // ------------------------------------------------------------------ //
+
+  let mapDlg = null; // open greyscale mapping dialog state
+
+  function refOf(node) {
+    const d = node.dataset;
+    const num = (v) => (v == null ? null : Number(v));
+    return { node, role: d.role, i: num(d.i), r: num(d.r), c: num(d.c), pico: num(d.pico) };
+  }
+
+  function getColor(ref) {
+    switch (ref.role) {
+      case 'system': return ref.pico;
+      case 'palette_slot': return activePalette()[ref.i];
+      case 'ramp_base': return activePalette()[ref.r];
+      case 'ramp_slot': return state.stops[ref.r][ref.c];
+      case 'fade_target': return state.target;
+      case 'source_palette': return state.custom[ref.i];
+      case 'greyscale_assignment': return mapDlg ? mapDlg.mapping[ref.i] : null;
+      default: return null;
+    }
+  }
+
+  /** Sets a swatch value and returns which part of the app needs updating. */
+  function setColor(ref, pico) {
+    switch (ref.role) {
+      case 'palette_slot': activePalette()[ref.i] = pico; return 'palette';
+      case 'ramp_slot': state.stops[ref.r][ref.c] = pico; return 'fade';
+      case 'fade_target': state.target = pico; return 'fade';
+      case 'greyscale_assignment': if (mapDlg) mapDlg.mapping[ref.i] = pico; return 'mapping';
+      default: return null;
+    }
+  }
+
+  function commit(kinds) {
+    const k = new Set([].concat(kinds).filter(Boolean));
+    if (k.has('palette')) onPaletteChanged();
+    else if (k.has('fade')) { renderSwatches(); generateFade(); }
+    if (k.has('mapping')) renderMapping();
+  }
+
+  function clearSwatch(ref) {
+    if (!CLEARABLE.has(ref.role) || getColor(ref) == null) return false;
+    commit(setColor(ref, null));
+    return true;
+  }
+
+  /** ColorSwatch.dropEvent rules. Returns a function performing the drop, or null if not allowed. */
+  function planDrop(src, tgt) {
+    const sr = src.role;
+    const tr = tgt.role;
+    if (!DROP_TARGETS.has(tr) || NOT_DRAGGABLE.has(sr)) return null;
+    if (tr === 'greyscale_assignment' && !mapDlg) return null;
+    const entry = getColor(src);
+    if (entry == null || src.node === tgt.node) return null;
+
+    const copy = () => setColor(tgt, entry);
+    const swap = () => {
+      const old = getColor(tgt);
+      return [setColor(tgt, entry), setColor(src, old)];
+    };
+
+    if (tr === 'fade_target') return copy;                                   // always copy
+    if (sr === 'palette_slot' && tr === 'palette_slot') {                    // reorder (shift)
+      return () => { reorderPalette(src.i, tgt.i); return 'palette'; };
+    }
+    if (sr === 'system' && tr === 'ramp_slot') return null;                  // blocked
+    if (sr === 'ramp_slot' && tr === 'ramp_slot') return swap;               // swap
+    if (sr === 'greyscale_assignment' && tr === 'greyscale_assignment') return swap;
+    if (tr === 'greyscale_assignment') {
+      return sr === 'source_palette' || sr === 'palette_slot' ? copy : null;
+    }
+    return copy;                                                             // everything else copies
+  }
+
+  /** PalettePanel.reorder_palette_slots + _reorder_fade_stops */
+  function reorderPalette(from, to) {
+    if (from === to) return;
+    const pal = activePalette();
+    const [color] = pal.splice(from, 1);
+    pal.splice(to, 0, color);
+    const [row] = state.stops.splice(from, 1);
+    state.stops.splice(to, 0, row);
+    if (state.selected === from) state.selected = to;
+  }
+
+  function onSwatchClick(ref) {
+    if (ref.role === 'system') {
+      const pal = activePalette();
+      const i = state.selected != null ? state.selected : pal.indexOf(null);
+      if (i < 0) {
+        toast('All 16 slots are filled. Select a slot to replace its color.', 'warn');
+        return;
+      }
+      pal[i] = ref.pico;
+      commit('palette');
+    } else if (ref.role === 'palette_slot') {
+      state.selected = state.selected === ref.i ? null : ref.i;
+      renderSwatches();
+    } else if (ref.role === 'greyscale_assignment' && mapDlg) {
+      mapDlg.selected = mapDlg.selected === ref.i ? null : ref.i;
+      renderMapping();
+    } else if (ref.role === 'source_palette' && mapDlg) {
+      const color = getColor(ref);
+      if (color == null) return;
+      let i = mapDlg.selected != null ? mapDlg.selected : mapDlg.mapping.indexOf(null);
+      if (i < 0) return;
+      mapDlg.mapping[i] = color;
+      if (mapDlg.selected != null) mapDlg.selected = i < 15 ? i + 1 : null;
+      renderMapping();
+    }
+  }
+
+  // ------------------------------------------------------------------ //
+  // Pointer-based drag & drop (mouse, pen and touch)                   //
+  // ------------------------------------------------------------------ //
+
+  let drag = null;
+
+  function endDrag() {
+    if (!drag) return;
+    clearTimeout(drag.timer);
+    drag.ghost?.remove();
+    drag.ref.node.classList.remove('drag-source');
+    drag.over?.classList.remove('drop-ok');
+    document.body.style.cursor = '';
+    drag = null;
+  }
+
+  function dropTargetAt(x, y) {
+    const node = document.elementFromPoint(x, y)?.closest('.sw');
+    return node ? refOf(node) : null;
+  }
+
+  document.addEventListener('pointerdown', (e) => {
+    const node = e.target.closest('.sw');
+    if (!node || e.button !== 0) return;
+    if (e.pointerType === 'mouse') e.preventDefault(); // no text selection while dragging
+    endDrag();
+    const ref = refOf(node);
+    drag = { ref, id: e.pointerId, x0: e.clientX, y0: e.clientY, started: false, ghost: null, over: null, suppressClick: false };
+    if (e.pointerType !== 'mouse' && CLEARABLE.has(ref.role) && getColor(ref) != null) {
+      drag.timer = setTimeout(() => {
+        if (drag && !drag.started && clearSwatch(ref)) {
+          drag.suppressClick = true;
+          navigator.vibrate?.(15);
+        }
+      }, LONG_PRESS_MS);
+    }
+  });
+
+  document.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.started) {
+      if (Math.abs(e.clientX - drag.x0) + Math.abs(e.clientY - drag.y0) <= 4) return;
+      clearTimeout(drag.timer);
+      const color = getColor(drag.ref);
+      if (color == null || NOT_DRAGGABLE.has(drag.ref.role)) { drag = null; return; }
+      drag.started = true;
+      const small = drag.ref.role === 'ramp_base' || drag.ref.role === 'ramp_slot';
+      drag.size = small ? 18 : 32;
+      const rgb = rgbOf(color);
+      drag.ghost = el('div', { className: 'drag-ghost' });
+      Object.assign(drag.ghost.style, {
+        width: `${drag.size}px`, height: `${drag.size}px`, background: `rgb(${rgb.join(',')})`,
+      });
+      (drag.ref.node.closest('dialog') || document.body).append(drag.ghost);
+      drag.ref.node.classList.add('drag-source');
+      document.body.style.cursor = 'grabbing';
+    }
+    e.preventDefault();
+    drag.ghost.style.transform = `translate(${e.clientX - drag.size / 2}px, ${e.clientY - drag.size / 2}px)`;
+    const tgt = dropTargetAt(e.clientX, e.clientY);
+    const node = tgt && planDrop(drag.ref, tgt) ? tgt.node : null;
+    if (node !== drag.over) {
+      drag.over?.classList.remove('drop-ok');
+      node?.classList.add('drop-ok');
+      drag.over = node;
+    }
+  }, { passive: false });
+
+  document.addEventListener('pointerup', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag;
+    endDrag();
+    if (d.started) {
+      const tgt = dropTargetAt(e.clientX, e.clientY);
+      const action = tgt && planDrop(d.ref, tgt);
+      if (action) commit(action());
+    } else if (!d.suppressClick) {
+      onSwatchClick(d.ref);
+    }
+  });
+
+  document.addEventListener('pointercancel', endDrag);
+
+  document.addEventListener('contextmenu', (e) => {
+    const node = e.target.closest('.sw');
+    if (!node) return;
+    e.preventDefault();
+    if (clearSwatch(refOf(node)) && drag) drag.suppressClick = true;
+  });
+
+  // ------------------------------------------------------------------ //
+  // Palette mode + ramp presets                                        //
+  // ------------------------------------------------------------------ //
+
+  function setMode(mode) {
+    if (mode === state.mode) return;
+    state.mode = mode;
+    state.selected = null;
+    if (mode === 'ramp') {
+      state.savedNormalStops = cloneStops(state.stops);
+      state.stops = emptyStops();
+    } else if (state.savedNormalStops) {
+      state.stops = state.savedNormalStops;
+      state.savedNormalStops = null;
+    }
+    renderControls();
+    onPaletteChanged();
+  }
+
+  function persistRampPresets() {
+    store.set(KEYS.ramps, state.rampPresets);
+  }
+
+  function saveRampPreset() {
+    const colors = state.ramp.filter((p) => p != null);
+    if (!colors.length) {
+      showMessage('Empty Palette', 'Cannot save an empty palette as a ramp preset.\nPlease add some colors first.', 'warn');
+      return;
+    }
+    const total = () => state.rampPresets.length;
+    if (state.rampIndex > 0 && state.rampIndex <= total()) {
+      state.rampPresets[state.rampIndex - 1] = colors;
+      persistRampPresets();
+      toast(`Ramp preset #${state.rampIndex} updated · ${colors.length} color(s) · ${total()} presets total`);
+    } else {
+      const key = JSON.stringify(colors);
+      const existing = state.rampPresets.findIndex((r) => JSON.stringify(r) === key);
+      if (existing >= 0) {
+        state.rampIndex = existing + 1;
+        showMessage('Ramp Already in Database', `This color ramp already exists in the database as preset #${existing + 1}`);
+      } else {
+        state.rampPresets.push(colors);
+        persistRampPresets();
+        state.rampIndex = total();
+        toast(`Color ramp saved as preset #${total()} · ${colors.length} color(s)`);
+      }
+    }
+    renderControls();
+  }
+
+  function stepRamp(delta) {
+    const total = state.rampPresets.length;
+    if (!total) {
+      showMessage('No Ramps', 'No ramp presets saved yet.');
+      return;
+    }
+    if (delta < 0) state.rampIndex = state.rampIndex <= 1 ? total : state.rampIndex - 1;
+    else state.rampIndex = state.rampIndex >= total ? 1 : state.rampIndex + 1;
+    const ramp = state.rampPresets[state.rampIndex - 1];
+    state.ramp = emptyPalette();
+    ramp.slice(0, 16).forEach((p, i) => { if (isValidPico(p)) state.ramp[i] = p; });
+    renderControls();
+    commit('palette');
+  }
+
+  function newRamp() {
+    state.ramp = emptyPalette();
+    state.rampIndex = 0;
+    renderControls();
+    commit('palette');
+  }
+
+  // ------------------------------------------------------------------ //
+  // Direction handling                                                 //
+  // ------------------------------------------------------------------ //
+
+  /** FadePanel._on_direction_changed / slider-driven switch. */
+  function switchDirection(newDir, { fromSlider = false } = {}) {
+    if (newDir === state.direction) return;
+    state.dirStops[state.direction] = cloneStops(state.stops);
+    state.dirTargets[state.direction] = slotIndexOfPico(state.custom, state.target);
+    state.direction = newDir;
+    const stops = state.dirStops[newDir];
+    state.stops = stops ? cloneStops(stops) : emptyStops();
+    const t = state.dirTargets[newDir];
+    state.target = t != null ? state.custom[t] : null;
+    if (!fromSlider) state.slider = 16;
+    renderAll();
+    generateFade();
+  }
+
+  function autoFill() {
+    const stops = autoFillStops(state.custom, state.direction, state.rampPresets);
+    if (!stops) {
+      toast('Add colors to the custom palette first.', 'warn');
+      return;
+    }
+    state.stops = stops;
+    renderSwatches();
+    generateFade();
+  }
+
+  // ------------------------------------------------------------------ //
+  // Presets / projects                                                 //
+  // ------------------------------------------------------------------ //
+
+  /** FadePresetHandler.capture_preset */
+  function capturePreset() {
+    const editorStops = state.mode === 'ramp' && state.savedNormalStops ? state.savedNormalStops : state.stops;
+    state.dirStops[state.direction] = cloneStops(editorStops);
+    if (state.target != null) state.dirTargets[state.direction] = slotIndexOfPico(state.custom, state.target);
+    const dark = state.dirStops.dark ? cloneStops(state.dirStops.dark) : null;
+    const bright = state.dirStops.bright ? cloneStops(state.dirStops.bright) : null;
+    return {
+      palette_name: state.presetName || 'Untitled Palette',
+      palette_indices: state.custom.slice(),
+      fade_target_index: state.dirTargets.dark,
+      ramps: dark || [],
+      steps: FADE_STEPS,
+      gamma: state.gamma,
+      cov_min: state.covMin,
+      cov_max: state.covMax,
+      dark_ramps: dark,
+      dark_target_index: state.dirTargets.dark,
+      bright_ramps: bright,
+      bright_target_index: state.dirTargets.bright,
+    };
+  }
+
+  /** FadePresetHandler.apply_preset */
+  function applyPreset(p) {
+    state.mode = 'normal';
+    state.savedNormalStops = null;
+    state.selected = null;
+    state.custom = p.palette_indices.slice();
+    state.dirStops = {
+      dark: p.dark_ramps ? cloneStops(p.dark_ramps) : null,
+      bright: p.bright_ramps ? cloneStops(p.bright_ramps) : null,
+    };
+    state.dirTargets = { dark: p.dark_target_index, bright: p.bright_target_index };
+    const cur = state.dirStops[state.direction];
+    state.stops = cur ? cloneStops(cur) : emptyStops();
+    const t = state.dirTargets[state.direction];
+    state.target = t != null ? state.custom[t] : null;
+    state.gamma = Math.round(clamp(p.gamma, 0.2, 5) * 100) / 100;
+    state.covMin = clamp(Math.round(p.cov_min), 0, 16);
+    state.covMax = clamp(Math.round(p.cov_max), 0, 16);
+    state.presetName = p.palette_name;
+    renderControls();
+    onPaletteChanged();
+  }
+
+  function getRecent() {
+    const list = store.get(KEYS.recent, []);
+    return Array.isArray(list) ? list.filter((r) => r && r.name && r.data) : [];
+  }
+
+  function addRecent(name, data) {
+    const list = getRecent().filter((r) => r.name !== name);
+    list.unshift({ name, data, time: Date.now() });
+    store.set(KEYS.recent, list.slice(0, MAX_RECENT));
+    renderRecent();
+  }
+
+  function renderRecent() {
+    const list = getRecent();
+    dom.recentList.replaceChildren();
+    if (!list.length) {
+      dom.recentList.append(el('div', { className: 'menu-empty', textContent: 'No recent projects' }));
+      return;
+    }
+    list.forEach((r, i) => {
+      const when = new Date(r.time).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      dom.recentList.append(el('button', {
+        attrs: { role: 'menuitem' }, dataset: { action: 'recent-open', index: i }, title: r.name,
+      }, el('span', { textContent: r.name }), el('small', { textContent: when })));
+    });
+    dom.recentList.append(el('button', {
+      attrs: { role: 'menuitem' }, dataset: { action: 'recent-clear' }, textContent: 'Clear Recent Projects',
+    }));
+  }
+
+  let autosaveTimer = 0;
+  function scheduleAutosave() {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
+      store.set(KEYS.session, {
+        preset: presetToDict(capturePreset()),
+        presetName: state.presetName,
+        direction: state.direction,
+        mode: state.mode,
+        ramp: state.ramp,
+        rampIndex: state.rampIndex,
+        orientation: state.orientation,
+      });
+    }, 400);
+  }
+
+  function restoreSession() {
+    const s = store.get(KEYS.session, null);
+    if (!s || !s.preset) return;
+    try {
+      state.direction = s.direction === 'bright' ? 'bright' : 'dark';
+      state.orientation = s.orientation === 'horizontal' ? 'horizontal' : 'vertical';
+      if (Array.isArray(s.ramp)) state.ramp = Array.from({ length: 16 }, (_, i) => (isValidPico(s.ramp[i]) ? s.ramp[i] : null));
+      state.rampIndex = Number.isInteger(s.rampIndex) && s.rampIndex <= state.rampPresets.length ? Math.max(0, s.rampIndex) : 0;
+      applyPreset(presetFromDict(s.preset));
+      state.presetName = typeof s.presetName === 'string' ? s.presetName : '';
+      if (s.mode === 'ramp') setMode('ramp');
+      renderControls();
+    } catch {
+      store.remove(KEYS.session);
+    }
+  }
+
+  // ------------------------------------------------------------------ //
+  // Dialogs, toasts, files                                             //
+  // ------------------------------------------------------------------ //
+
+  function toast(message, kind = 'info', ms = 3400) {
+    const t = el('div', { className: `toast ${kind}`, textContent: message });
+    dom.toasts.append(t);
+    setTimeout(() => t.remove(), ms);
+  }
+
+  /**
+   * Generic modal. buttons: [{label, value, primary, danger, validate}] close the dialog;
+   * actions: [{label, onClick, primary}] stay open (left side).
+   */
+  function modal({ title, body, buttons = [{ label: 'OK', value: true, primary: true }], actions = [], wide = false, onOpen }) {
+    return new Promise((resolve) => {
+      const dlg = el('dialog', { className: `modal${wide ? ' wide' : ''}` });
+      const closeBtn = el('button', { type: 'button', className: 'btn btn-ghost icon-btn', textContent: '✕', attrs: { 'aria-label': 'Close' } });
+      const head = el('header', { className: 'modal-head' }, el('h2', { textContent: title }), closeBtn);
+      const bodyEl = el('div', { className: 'modal-body' });
+      if (typeof body === 'string') bodyEl.append(el('pre', { className: 'msg', textContent: body }));
+      else if (body) bodyEl.append(body);
+      const foot = el('footer', { className: 'modal-foot' });
+
+      let done = false;
+      const finish = (value) => {
+        if (done) return;
+        done = true;
+        dlg.close();
+        dlg.remove();
+        resolve(value);
+      };
+      dlg.finish = finish; // lets action handlers close the dialog with a result
+
+      if (actions.length) {
+        const left = el('div', { className: 'left' });
+        for (const a of actions) {
+          const b = el('button', { type: 'button', className: `btn${a.primary ? ' btn-primary' : ''}`, textContent: a.label });
+          b.addEventListener('click', () => a.onClick(dlg));
+          left.append(b);
+        }
+        foot.append(left);
+      }
+      for (const b of buttons) {
+        const btn = el('button', {
+          type: 'button',
+          className: `btn${b.primary ? ' btn-primary' : ''}${b.danger ? ' btn-danger' : ''}`,
+          textContent: b.label,
+        });
+        btn.addEventListener('click', async () => {
+          if (b.validate && !(await b.validate())) return;
+          finish(typeof b.value === 'function' ? b.value() : b.value);
+        });
+        foot.append(btn);
+      }
+      closeBtn.addEventListener('click', () => finish(null));
+      dlg.addEventListener('cancel', (e) => { e.preventDefault(); finish(null); });
+      dlg.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') {
+          e.preventDefault();
+          foot.querySelector('.btn-primary')?.click();
+        }
+      });
+
+      dlg.append(head, bodyEl, foot);
+      document.body.append(dlg);
+      dlg.showModal();
+      onOpen?.(dlg);
+    });
+  }
+
+  const showMessage = (title, message) => modal({ title, body: message });
+
+  const confirmDialog = (title, message, yes = 'Yes') =>
+    modal({ title, body: message, buttons: [{ label: 'No', value: false }, { label: yes, value: true, primary: true }] })
+      .then((v) => v === true);
+
+  async function copyText(text, textarea) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      textarea.select();
+      document.execCommand('copy');
+    }
+    toast('Copied to clipboard');
+  }
+
+  function codeDialog(title, text, filename) {
+    const ta = el('textarea', { className: 'code-out', readOnly: true, value: text, spellcheck: false });
+    return modal({
+      title,
+      body: ta,
+      wide: true,
+      actions: [
+        { label: 'Copy to clipboard', onClick: () => copyText(text, ta) },
+        { label: `Download ${filename}`, primary: true, onClick: () => download(text, filename) },
+      ],
+      buttons: [{ label: 'Close', value: null }],
+    });
+  }
+
+  function pickFile(accept) {
+    return new Promise((resolve) => {
+      const input = el('input', { type: 'file', accept });
+      input.addEventListener('change', () => resolve(input.files[0] || null), { once: true });
+      input.addEventListener('cancel', () => resolve(null), { once: true });
+      input.click();
+    });
+  }
+
+  function download(data, filename, type = 'text/plain;charset=utf-8') {
+    const blob = data instanceof Blob ? data : new Blob([data], { type });
+    const url = URL.createObjectURL(blob);
+    const a = el('a', { href: url, download: filename });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  async function decodeImage(blob) {
+    let source;
+    try {
+      source = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
+    } catch {
+      source = await new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(blob);
+        const im = new Image();
+        im.onload = () => { URL.revokeObjectURL(url); resolve(im); };
+        im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not decode image.')); };
+        im.src = url;
+      });
+    }
+    const c = document.createElement('canvas');
+    c.width = source.width;
+    c.height = source.height;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(source, 0, 0);
+    source.close?.();
+    return ctx.getImageData(0, 0, c.width, c.height);
+  }
+
+  function formField(labelText, input) {
+    return el('label', { className: 'row' }, el('span', { textContent: labelText }), input);
+  }
+
+  // ------------------------------------------------------------------ //
+  // File menu actions                                                  //
+  // ------------------------------------------------------------------ //
+
+  async function newProject() {
+    const ok = await confirmDialog('New Project', 'Clear all colors and settings?\n\nThis will reset everything to default.');
+    if (!ok) return;
+    Object.assign(state, {
+      custom: emptyPalette(),
+      ramp: emptyPalette(),
+      mode: 'normal',
+      rampIndex: 0,
+      stops: emptyStops(),
+      savedNormalStops: null,
+      target: null,
+      direction: 'dark',
+      dirStops: { dark: null, bright: null },
+      dirTargets: { dark: null, bright: null },
+      gamma: 1.0,
+      covMin: 0,
+      covMax: 16,
+      slider: 16,
+      selected: null,
+      img: null,
+      grey: null,
+      presetName: '',
+    });
+    store.remove(KEYS.session);
+    renderAll();
+    generateFade();
+  }
+
+  async function openProject() {
+    const file = await pickFile('.p8pal,.json,application/json');
+    if (!file) return;
+    let preset;
+    try {
+      preset = presetFromDict(JSON.parse(await file.text()));
+    } catch (e) {
+      showMessage('Error', `Invalid preset file:\n${e.message}`);
+      return;
+    }
+    applyPreset(preset);
+    addRecent(preset.palette_name, presetToDict(preset));
+    toast(`Loaded “${preset.palette_name}”`);
+  }
+
+  function openRecent(index) {
+    const r = getRecent()[index];
+    if (!r) return;
+    try {
+      const preset = presetFromDict(r.data);
+      applyPreset(preset);
+      addRecent(r.name, r.data);
+    } catch (e) {
+      showMessage('Error', `Could not load preset:\n${e.message}`);
+    }
+  }
+
+  async function clearRecent() {
+    if (await confirmDialog('Clear Recent Projects', 'Clear all recent projects from the list?')) {
+      store.set(KEYS.recent, []);
+      renderRecent();
+    }
+  }
+
+  async function saveProject() {
+    const input = el('input', { type: 'text', value: state.presetName || 'preset', spellcheck: false });
+    const name = await modal({
+      title: 'Save Project',
+      body: el('div', { className: 'dialog-form' },
+        formField('Project name (used as palette name and file name)', input)),
+      buttons: [{ label: 'Cancel', value: null }, { label: 'Save .p8pal', primary: true, value: () => input.value.trim() }],
+      onOpen: () => input.select(),
+    });
+    if (!name) return;
+    state.presetName = name;
+    const dict = presetToDict({ ...capturePreset(), palette_name: name });
+    download(JSON.stringify(dict, null, 2), `${sanitizeFilename(name)}.p8pal`, 'application/json');
+    addRecent(name, dict);
+    renderControls();
+    scheduleAutosave();
+    toast(`Palette preset '${name}' saved successfully!`);
+  }
+
+  async function importFromPng() {
+    const file = await pickFile('image/png,.png');
+    if (!file) return;
+    try {
+      const buffer = await file.arrayBuffer();
+      let colors = parsePngPalette(buffer);
+      const ordered = !!colors;
+      let imageData = null;
+      try { imageData = await decodeImage(file); } catch { /* handled below */ }
+      if (!colors) {
+        if (!imageData) { showMessage('Import', 'Failed to load image.'); return; }
+        colors = uniqueColors(imageData);
+      }
+
+      const { found, unmatched } = matchColorsToPico8(colors, ordered);
+      if (!found.length) {
+        showMessage('Import', 'No valid PICO-8 colors found in the image.\n\nMake sure the image uses exact PICO-8 palette colors.');
+        return;
+      }
+
+      if (state.mode !== 'normal') setMode('normal');
+      state.custom = Array.from({ length: 16 }, (_, i) => (i < found.length ? found[i] : null));
+      state.selected = null;
+      onPaletteChanged();
+
+      if (imageData && isValidPreviewSize(imageData.width, imageData.height)) {
+        state.grey = null;
+        setPreviewImage(imageData);
+        renderControls();
+      }
+
+      let msg = `Imported ${found.length} PICO-8 colors.`;
+      if (found.length > 16) msg += '\n(Only first 16 were used.)';
+      if (unmatched.length) {
+        msg += `\n\n${unmatched.length} color(s) were too different from PICO-8 colors and were skipped.`;
+        msg += '\n\nUnmatched colors (showing first 3):';
+        for (const u of unmatched.slice(0, 3)) {
+          msg += `\n  RGB(${u.rgb.join(', ')}) → closest: P8#${u.closest} RGB(${rgbOf(u.closest).join(', ')}), distance=${u.distance.toFixed(1)}`;
+        }
+      }
+      showMessage('Import Complete', msg);
+    } catch (e) {
+      showMessage('Error', `Failed to import palette:\n${e.message}`);
+    }
+  }
+
+  async function loadPreviewFromFile(file) {
+    let data;
+    try {
+      data = await decodeImage(file);
+    } catch {
+      showMessage('Error', 'Could not load image.');
+      return;
+    }
+    try {
+      setPreviewImage(data);
+    } catch (e) {
+      showMessage('Error', `Error loading preview image:\n${e.message}`);
+      return;
+    }
+    state.grey = null;
+    renderControls();
+  }
+
+  async function loadPreviewImage() {
+    const file = await pickFile('image/png,.png');
+    if (file) loadPreviewFromFile(file);
+  }
+
+  // ------------------------------------------------------------------ //
+  // Greyscale conversion                                               //
+  // ------------------------------------------------------------------ //
+
+  function renderMapping() {
+    if (!mapDlg) return;
+    mapDlg.els.assign.forEach((sw, i) => {
+      paintSwatch(sw, mapDlg.mapping[i], true);
+      sw.classList.toggle('selected', mapDlg.selected === i);
+    });
+    mapDlg.els.source.forEach((sw, i) => paintSwatch(sw, state.custom[i], true));
+  }
+
+  /** GreyscaleMappingDialog -> 16 picos (or null if cancelled). */
+  async function openMappingDialog(initial = null, title = 'Manual Greyscale to Palette Mapping') {
+    const mapping = initial ? initial.slice() : autoAssignMapping(state.custom) || Array(16).fill(null);
+    mapDlg = { mapping, selected: null, els: { assign: [], source: [] } };
+
+    const greyRow = el('div', { className: 'map-row grey' });
+    for (let i = 0; i < 16; i++) {
+      const g = Math.trunc((i / 15.0) * 255);
+      const sw = makeSwatch('greyscale_display', { i });
+      paintSwatch(sw, -1, false, [g, g, g]);
+      greyRow.append(sw);
+    }
+    const assignRow = el('div', { className: 'map-row' });
+    const sourceRow = el('div', { className: 'map-row map-palette' });
+    for (let i = 0; i < 16; i++) {
+      const a = makeSwatch('greyscale_assignment', { i }, true);
+      mapDlg.els.assign.push(a);
+      assignRow.append(a);
+      const s = makeSwatch('source_palette', { i }, true);
+      mapDlg.els.source.push(s);
+      sourceRow.append(s);
+    }
+
+    const body = el('div', {},
+      el('p', { textContent: 'Drag colors from your custom palette to the assignment slots below the greyscale swatches. The image will be converted using this mapping. Right-click (or long-press) an assignment slot to clear it.' }),
+      el('section', { className: 'map-section' }, el('h3', { textContent: 'Greyscale levels (black → white)' }), greyRow),
+      el('section', { className: 'map-section' }, el('h3', { textContent: 'Assigned palette colors' }), assignRow),
+      el('section', { className: 'map-section' }, el('h3', { textContent: 'Custom palette (drag from here, or select a slot above and tap a color)' }), sourceRow),
+    );
+    renderMapping();
+
+    try {
+      return await modal({
+        title,
+        body,
+        wide: true,
+        actions: [
+          {
+            label: 'Auto-Assign by Brightness',
+            onClick: () => {
+              const m = autoAssignMapping(state.custom);
+              if (!m) {
+                showMessage('No Palette Colors', 'The custom palette is empty. Please add colors to the palette first.');
+                return;
+              }
+              mapDlg.mapping = m;
+              renderMapping();
+            },
+          },
+          { label: 'Clear All', onClick: () => { mapDlg.mapping = Array(16).fill(null); renderMapping(); } },
+        ],
+        buttons: [
+          { label: 'Cancel', value: null },
+          {
+            label: 'OK',
+            primary: true,
+            value: () => mapDlg.mapping.slice(),
+            validate: () => {
+              const empty = mapDlg.mapping.filter((p) => p == null).length;
+              if (!empty) return true;
+              return confirmDialog('Incomplete Mapping',
+                `${empty} greyscale level(s) have no assigned color.\n\nMissing assignments will use black (color 0).\n\nContinue anyway?`);
+            },
+          },
+        ],
+      });
+    } finally {
+      mapDlg = null;
+    }
+  }
+
+  function applyGreyConversion({ keepScroll = true } = {}) {
+    const g = state.grey;
+    if (!g) return;
+    const converted = convertGreyscaleManual(g.src, g.mapping, g.inBlack, g.inWhite, g.outDark, g.outBright, g.dither);
+    setPreviewImage(converted, { keepScroll });
+  }
+
+  async function convertGreyscale() {
+    if (!state.custom.some((p) => p != null)) {
+      showMessage('Convert Greyscale', 'Please populate the custom palette first before converting a greyscale image.');
+      return;
+    }
+    const file = await pickFile('image/png,image/jpeg,image/bmp,.png,.jpg,.jpeg,.bmp');
+    if (!file) return;
+
+    const check = el('input', { type: 'checkbox', checked: state.useDither });
+    const ok = await modal({
+      title: 'Greyscale Conversion Options',
+      body: el('div', { className: 'dialog-form' },
+        el('p', { textContent: 'Choose dithering option for the greyscale image:' }),
+        el('label', { className: 'check', title: 'Dithering creates smoother gradients by blending colors. Disabling it gives a more posterized look.' },
+          check, el('span', { textContent: 'Enable dithering (smooth gradients)' }))),
+      buttons: [{ label: 'Cancel', value: null }, { label: 'OK', primary: true, value: true }],
+    });
+    if (!ok) return;
+    state.useDither = check.checked;
+
+    const mapping = await openMappingDialog();
+    if (!mapping) return;
+
+    let src;
+    try {
+      src = await decodeImage(file);
+    } catch {
+      showMessage('Error', `Failed to load image:\n${file.name}`);
+      return;
+    }
+    if (!isValidPreviewSize(src.width, src.height)) {
+      showMessage('Invalid Dimensions', `Image must be 128x128, 128x256, or 256x128 pixels.\nCurrent size: ${src.width}x${src.height}`);
+      return;
+    }
+
+    state.grey = { src, mapping, dither: state.useDither, inBlack: 0, inWhite: 255, outDark: 0, outBright: 15 };
+    state.slider = 16;
+    try {
+      applyGreyConversion({ keepScroll: false });
+    } catch (e) {
+      state.grey = null;
+      showMessage('Error', `Failed to convert greyscale image:\n${e.message}`);
+      return;
+    }
+    renderControls();
+    showMessage('Convert Greyscale',
+      `Successfully converted greyscale image.\nSize: ${src.width}x${src.height}\n\n` +
+      "Use 'Input Range' to adjust greyscale levels (0-255) mapped.\n" +
+      "Use 'Output Range' to select which of your 16 manual assignments to use (0-15).\n" +
+      "Use 'Tool → Reassign Greyscale Colors' to change color assignments.");
+  }
+
+  async function reassignGreyscale() {
+    if (!state.grey) return;
+    const mapping = await openMappingDialog(state.grey.mapping);
+    if (!mapping || !state.grey) return;
+    state.grey.mapping = mapping;
+    applyGreyConversion();
+  }
+
+  /** FadePanel._on_greyscale_range_changed */
+  function onGreyRange(sender) {
+    const g = state.grey;
+    if (!g) return;
+    const read = (input, lo, hi, fallback) => {
+      const v = parseInt(input.value, 10);
+      return Number.isFinite(v) ? clamp(v, lo, hi) : fallback;
+    };
+    let inB = read(dom.greyInBlack, 0, 255, g.inBlack);
+    let inW = read(dom.greyInWhite, 0, 255, g.inWhite);
+    let oD = read(dom.greyOutDark, 0, 15, g.outDark);
+    let oB = read(dom.greyOutBright, 0, 15, g.outBright);
+
+    if (inB >= inW) {
+      if (sender === 'inBlack') {
+        inB = Math.max(0, inW - 1);
+        if (inB >= inW) inW = inB + 1;
+      } else {
+        inW = Math.min(255, inB + 1);
+        if (inB >= inW) inB = inW - 1;
+      }
+    }
+    if (oD > oB) {
+      if (sender === 'outDark') oD = oB;
+      else oB = oD;
+    }
+    Object.assign(g, { inBlack: inB, inWhite: inW, outDark: oD, outBright: oB });
+    for (const [input, v] of [[dom.greyInBlack, inB], [dom.greyInWhite, inW], [dom.greyOutDark, oD], [dom.greyOutBright, oB]]) {
+      input.value = v;
+    }
+    applyGreyConversion();
+  }
+
+  // ------------------------------------------------------------------ //
+  // Export actions                                                     //
+  // ------------------------------------------------------------------ //
+
+  function exportPaletteLua() {
+    const entries = state.custom.filter((p) => p != null);
+    if (!entries.length) {
+      showMessage('Export Lua', 'No colors in custom palette.');
+      return;
+    }
+    codeDialog('Export Palette (Lua)', paletteToLua(entries), 'pico8_palette.lua');
+  }
+
+  async function exportPaletteGpl() {
+    const entries = state.custom.filter((p) => p != null);
+    if (!entries.length) {
+      showMessage('Export .gpl', 'No colors in custom palette.');
+      return;
+    }
+    const nameInput = el('input', { type: 'text', value: state.presetName || 'PICO8 Custom', spellcheck: false });
+    const colsInput = el('input', { type: 'number', min: 1, max: 32, step: 1, value: 16 });
+    const res = await modal({
+      title: 'GPL Export Settings',
+      body: el('div', { className: 'dialog-form' },
+        formField('Palette name', nameInput),
+        formField('Number of columns in palette layout (1–32)', colsInput)),
+      buttons: [
+        { label: 'Cancel', value: null },
+        {
+          label: 'Export',
+          primary: true,
+          value: () => ({
+            name: nameInput.value.trim() || 'PICO8 Custom',
+            columns: clamp(parseInt(colsInput.value, 10) || 16, 1, 32),
+          }),
+        },
+      ],
+      onOpen: () => nameInput.select(),
+    });
+    if (!res) return;
+    codeDialog('Export Palette (.gpl)', paletteToGpl(entries, res.name, res.columns), `${sanitizeFilename(res.name)}.gpl`);
+  }
+
+  function exportFadePng() {
+    if (!state.fade) {
+      showMessage('Export fades', 'No fade tables generated yet.');
+      return;
+    }
+    const base = renderFade(fullPaletteRgb(activePalette()), state.fade, state.orientation);
+    const src = el('canvas', { width: base.width, height: base.height });
+    src.getContext('2d').putImageData(base, 0, 0);
+    const scale = 4;
+    const out = el('canvas', { width: base.width * scale, height: base.height * scale });
+    const ctx = out.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(src, 0, 0, out.width, out.height);
+    out.toBlob((blob) => {
+      if (!blob) { showMessage('Error', 'Failed to save PNG.'); return; }
+      download(blob, 'pico8_fades.png');
+      toast('Saved pico8_fades.png (512×512)');
+    }, 'image/png');
+  }
+
+  /** FadeExportHandler.export_two_sided_fade */
+  function exportTwoSided() {
+    const editorStops = state.mode === 'ramp' && state.savedNormalStops ? state.savedNormalStops : state.stops;
+    state.dirStops[state.direction] = cloneStops(editorStops);
+    if (state.target != null) state.dirTargets[state.direction] = slotIndexOfPico(state.custom, state.target);
+
+    for (const dir of ['dark', 'bright']) {
+      const other = dir === 'dark' ? 'Dark' : 'Bright';
+      if (!state.dirStops[dir]) {
+        showMessage('Export two-sided', `Direction '${dir}' has no ramps defined.\n\nSwitch the direction to ${other} and set up its fade ramps first.`);
+        return;
+      }
+      if (state.dirTargets[dir] == null) {
+        showMessage('Export two-sided', `Direction '${dir}' has no 'Fade to' target set.\n\nSwitch the direction to ${other} and drop a palette color onto “Fade to”.`);
+        return;
+      }
+    }
+
+    const cfg = { steps: FADE_STEPS, gamma: state.gamma, covMin: state.covMin, covMax: state.covMax };
+    const dark = generateWithRamps(buildSlotRamps(state.custom, state.dirStops.dark, state.dirTargets.dark), cfg);
+    const bright = generateWithRamps(buildSlotRamps(state.custom, state.dirStops.bright, state.dirTargets.bright), cfg);
+    const lua = fadeToLua(combineTwoSided(dark, bright), usedColorIndices(activePalette()));
+    codeDialog('Export Two-Sided Fade (Lua)', lua, 'pico8_two_sided_fades.lua');
+  }
+
+  async function exportImagePng() {
+    if (!state.img) {
+      showMessage('Export Image', 'No preview image loaded. Please load an image first.');
+      return;
+    }
+    const img = state.img;
+    const pal = fullPaletteRgb(activePalette());
+    const { slots } = renderImageFade(img.indices, img.w, img.h, pal, state.fade, sliderToStep(state.slider));
+    // Same color -> first matching palette index (as the nearest-color pass in the desktop app)
+    const canon = pal.map((rgb) => pal.findIndex((o) => o[0] === rgb[0] && o[1] === rgb[1] && o[2] === rgb[2]));
+    const indexed = slots.map((s) => canon[s]);
+    try {
+      download(await encodeIndexedPng(img.w, img.h, indexed, pal), 'image.png');
+      toast('Image exported as indexed PNG (image.png)');
+    } catch (e) {
+      showMessage('Export Failed', `Failed to save image:\n${e.message}`);
+    }
+  }
+
+  async function exportImageP8() {
+    if (!state.img) {
+      showMessage('Export Image', 'No image loaded. Please load an image first.');
+      return;
+    }
+    const nameInput = el('input', { type: 'text', value: 'image_data', spellcheck: false });
+    const viewerCheck = el('input', { type: 'checkbox', checked: true });
+    const res = await modal({
+      title: 'Export Image Options',
+      body: el('div', { className: 'dialog-form' },
+        formField('Cart file name', nameInput),
+        el('label', { className: 'check' }, viewerCheck, el('span', { textContent: 'Generate separate viewer cart' }))),
+      buttons: [
+        { label: 'Cancel', value: null },
+        { label: 'Export .p8', primary: true, value: () => ({ name: nameInput.value, viewer: viewerCheck.checked }) },
+      ],
+      onOpen: () => nameInput.select(),
+    });
+    if (!res) return;
+
+    const base = sanitizeFilename(res.name.replace(/\.p8$/i, '')) || 'image_data';
+    const { indices, w, h } = state.img;
+    download(buildDataCart(indices, w, h), `${base}.p8`);
+    const files = [`${base}.p8`];
+    if (res.viewer) {
+      const viewer = buildViewerCart(w, h, base, fullPalette(activePalette()));
+      setTimeout(() => download(viewer, `${base}_viewer.p8`), 400);
+      files.push(`${base}_viewer.p8`);
+    }
+    toast(`Exported ${files.join(' + ')}`);
+  }
+
+  // ------------------------------------------------------------------ //
+  // Tool menu: ramp preset storage                                     //
+  // ------------------------------------------------------------------ //
+
+  async function importRampPresets() {
+    const file = await pickFile('.json,application/json');
+    if (!file) return;
+    let list;
+    try {
+      list = rampPresetsFromConfig(JSON.parse(await file.text()));
+    } catch (e) {
+      showMessage('Import Ramp Presets', `Could not read ramp presets:\n${e.message}`);
+      return;
+    }
+    const how = await modal({
+      title: 'Import Ramp Presets',
+      body: `Found ${list.length} ramp preset(s).\n\nMerge them into your ${state.rampPresets.length} existing presets (duplicates skipped), or replace all?`,
+      buttons: [
+        { label: 'Cancel', value: null },
+        { label: 'Replace all', value: 'replace', danger: true },
+        { label: 'Merge', value: 'merge', primary: true },
+      ],
+    });
+    if (!how) return;
+    if (how === 'replace') {
+      state.rampPresets = list;
+    } else {
+      const keys = new Set(state.rampPresets.map((r) => JSON.stringify(r)));
+      for (const r of list) {
+        const k = JSON.stringify(r);
+        if (!keys.has(k)) { keys.add(k); state.rampPresets.push(r); }
+      }
+    }
+    state.rampIndex = 0;
+    persistRampPresets();
+    renderControls();
+    toast(`Ramp presets: ${state.rampPresets.length} total`);
+  }
+
+  function exportRampPresets() {
+    download(rampPresetsToConfigJson(state.rampPresets), 'config.json', 'application/json');
+  }
+
+  async function resetRampPresets() {
+    const ok = await confirmDialog('Reset Ramp Presets',
+      `Replace your ${state.rampPresets.length} ramp preset(s) with the ${DEFAULT_RAMP_PRESETS.length} defaults?`, 'Reset');
+    if (!ok) return;
+    state.rampPresets = DEFAULT_RAMP_PRESETS.map((r) => r.slice());
+    state.rampIndex = 0;
+    persistRampPresets();
+    renderControls();
+  }
+
+  // ------------------------------------------------------------------ //
+  // Help                                                               //
+  // ------------------------------------------------------------------ //
+
+  function showDocs() {
+    const content = $('#docsTemplate').content.cloneNode(true);
+    const wrap = el('div', {}, content);
+    wrap.addEventListener('click', (e) => {
+      const a = e.target.closest('a[href^="#"]');
+      if (!a) return;
+      e.preventDefault();
+      wrap.querySelector(a.getAttribute('href'))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    modal({ title: 'Documentation', body: wrap, wide: true, buttons: [{ label: 'Close', value: null, primary: true }] });
+  }
+
+  function showAbout() {
+    const features = [
+      'Shared asset library: images and palettes move between all tools',
+      'Pixel Studio: PICO-8 pixel editor with fill patterns, layers, frames, onion skin, [gfx] clipboard and .p8 in/out',
+      'Data Tools: binary/text/image → PICO-8 string literals, greyscale nibble split',
+      '16-color custom palette editor',
+      'Ramped fade generation with gamma control',
+      'Two-direction fade support (dark/bright)',
+      'PNG palette import',
+      'Lua and GPL export formats',
+      'P8 cartridge export for images (128x128, 128x256, 256x128)',
+      'Image preview with fade effects',
+      'Recent projects with quick access',
+      'PNG image export with applied palette',
+      'Manual greyscale-to-palette mapping with visual assignment dialog',
+      'Greyscale conversion with optional dithering',
+      'Tile Maker: 8×8 tile packing with MAE merging, VRAM viewport heatmap, tile editor',
+      'Tile Maker: .p8 export (standard and large maps, viewer carts), Aseprite, sprite sheet PNG',
+    ];
+    const body = el('div', {},
+      el('p', {}, el('b', { textContent: 'Version: ' }), `${VERSION} (web)`),
+      el('p', {}, el('b', { textContent: 'Author: ' }), 'Acryl'),
+      el('p', { textContent: 'A development suite for PICO-8 graphics: pixel art, palettes and fades, tiles and maps, data.' }),
+      el('p', { textContent: 'Features:' }),
+      el('ul', { className: 'about-list' }, ...features.map((f) => el('li', { textContent: f }))));
+    modal({ title: 'About PICO-8 Dev Suite', body });
+  }
+
+  // ------------------------------------------------------------------ //
+  // Menus + shortcuts                                                  //
+  // ------------------------------------------------------------------ //
+
+  const actions = {
+    'new': newProject,
+    'open': openProject,
+    'save': saveProject,
+    'recent-open': (d) => openRecent(Number(d.index)),
+    'recent-clear': clearRecent,
+    'import-png': importFromPng,
+    'convert-greyscale': convertGreyscale,
+    'export-palette-lua': exportPaletteLua,
+    'export-palette-gpl': exportPaletteGpl,
+    'export-fade-png': exportFadePng,
+    'export-two-sided': exportTwoSided,
+    'export-image-png': exportImagePng,
+    'export-image-p8': exportImageP8,
+    'reassign-greyscale': reassignGreyscale,
+    'import-ramps': importRampPresets,
+    'export-ramps': exportRampPresets,
+    'reset-ramps': resetRampPresets,
+    'docs': showDocs,
+    'about': showAbout,
+  };
+
+  function closeMenus() {
+    for (const m of document.querySelectorAll('.menu.open')) {
+      m.classList.remove('open');
+      m.querySelector('.menu-btn').setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  function openMenu(menu, focusFirst = false) {
+    closeMenus();
+    menu.classList.add('open');
+    menu.querySelector('.menu-btn').setAttribute('aria-expanded', 'true');
+    if (focusFirst) menu.querySelector('.menu-pop button:not(:disabled)')?.focus();
+  }
+
+  function bindMenus() {
+    for (const menu of document.querySelectorAll('.menu')) {
+      const btn = menu.querySelector('.menu-btn');
+      btn.addEventListener('click', () => {
+        if (menu.classList.contains('open')) closeMenus();
+        else openMenu(menu);
+      });
+      btn.addEventListener('pointerenter', (e) => {
+        if (e.pointerType === 'mouse' && document.querySelector('.menu.open') && !menu.classList.contains('open')) openMenu(menu);
+      });
+      btn.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') { e.preventDefault(); openMenu(menu, true); }
+      });
+      menu.querySelector('.menu-pop').addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault();
+        const items = [...menu.querySelectorAll('.menu-pop button:not(:disabled)')];
+        const i = items.indexOf(document.activeElement);
+        items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+      });
+    }
+    document.addEventListener('click', (e) => {
+      const item = e.target.closest('[data-action]');
+      if (item && !item.closest('dialog')) {
+        closeMenus();
+        if (!item.disabled) actions[item.dataset.action]?.(item.dataset);
+        return;
+      }
+      if (!e.target.closest('.menu')) closeMenus();
+    });
+  }
+
+  const isTyping = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+
+  function bindShortcuts() {
+    document.addEventListener('keydown', (e) => {
+      if (document.querySelector('dialog[open]')) {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('sw')) {
+          e.preventDefault();
+          onSwatchClick(refOf(e.target));
+        } else if ((e.key === 'Delete' || e.key === 'Backspace') && e.target.classList?.contains('sw')) {
+          clearSwatch(refOf(e.target));
+        }
+        return;
+      }
+      const own = shortcutHandlers[document.body.dataset.workspace];
+      if (own) {
+        if (e.key === 'F1') { e.preventDefault(); showDocs(); return; }
+        if (e.key === 'Escape' && document.querySelector('.menu.open')) { closeMenus(); return; }
+        own(e, isTyping(e.target));
+        return;
+      }
+      const mod = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      if (mod && e.altKey && key === 'n') { e.preventDefault(); newProject(); return; }
+      if (mod && !e.altKey && !e.shiftKey) {
+        const tiles = document.body.dataset.workspace === 'tiles';
+        const run = (paletteFn, tilesAction) => {
+          e.preventDefault();
+          if (tiles && actions[tilesAction]) actions[tilesAction]();
+          else paletteFn();
+        };
+        if (key === 'o') { run(openProject, 'tiles-open'); return; }
+        if (key === 's') { run(saveProject, 'tiles-save'); return; }
+        if (key === 'i') { run(importFromPng, 'tiles-import'); return; }
+      }
+      if (e.key === 'F1') { e.preventDefault(); showDocs(); return; }
+      if (e.key === 'Escape') {
+        closeMenus();
+        if (state.selected != null) { state.selected = null; renderSwatches(); }
+        return;
+      }
+      if (isTyping(e.target)) return;
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('sw')) {
+        e.preventDefault();
+        onSwatchClick(refOf(e.target));
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (e.target.classList?.contains('sw') && clearSwatch(refOf(e.target))) return;
+        if (state.selected != null) clearSwatch({ role: 'palette_slot', i: state.selected });
+      }
+    });
+  }
+
+  // ------------------------------------------------------------------ //
+  // Control bindings                                                   //
+  // ------------------------------------------------------------------ //
+
+  function bindNumber(input, { min, max, decimals = 0 }, apply) {
+    const read = () => {
+      const v = parseFloat(input.value);
+      if (!Number.isFinite(v)) return null;
+      const c = clamp(v, min, max);
+      return decimals ? Number(c.toFixed(decimals)) : Math.round(c);
+    };
+    input.addEventListener('input', () => {
+      const v = read();
+      if (v != null) apply(v);
+    });
+    input.addEventListener('change', () => {
+      const v = read();
+      if (v != null) {
+        input.value = decimals ? v.toFixed(decimals) : v;
+        apply(v);
+      } else {
+        input.blur();
+        renderControls();
+      }
+    });
+  }
+
+  function bindSeg(seg, onChange) {
+    seg.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-value]');
+      if (b) onChange(b.dataset.value);
+    });
+    seg.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const buttons = [...seg.querySelectorAll('button')];
+      const i = buttons.findIndex((b) => b.getAttribute('aria-checked') === 'true');
+      const next = buttons[(i + (e.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length];
+      next.focus();
+      onChange(next.dataset.value);
+    });
+  }
+
+  function applyTheme(mode) {
+    const root = document.documentElement;
+    if (mode === 'light' || mode === 'dark') root.dataset.theme = mode;
+    else delete root.dataset.theme;
+    dom.themeToggle.title = `Theme: ${mode === 'light' || mode === 'dark' ? mode : 'system'}`;
+  }
+
+  function bindControls() {
+    bindSeg(dom.modeSeg, setMode);
+    bindSeg(dom.dirSeg, (dir) => switchDirection(dir));
+
+    $('#saveRampBtn').addEventListener('click', saveRampPreset);
+    $('#prevRampBtn').addEventListener('click', () => stepRamp(-1));
+    $('#nextRampBtn').addEventListener('click', () => stepRamp(1));
+    $('#newRampBtn').addEventListener('click', newRamp);
+    $('#autoFillBtn').addEventListener('click', autoFill);
+    $('#loadImageBtn').addEventListener('click', loadPreviewImage);
+
+    dom.orientationBtn.addEventListener('click', () => {
+      state.orientation = state.orientation === 'vertical' ? 'horizontal' : 'vertical';
+      renderControls();
+      drawGradient();
+      scheduleAutosave();
+    });
+
+    bindNumber(dom.gammaInput, { min: 0.2, max: 5, decimals: 2 }, (v) => { if (v !== state.gamma) { state.gamma = v; generateFade(); } });
+    bindNumber(dom.covMinInput, { min: 0, max: 16 }, (v) => { if (v !== state.covMin) { state.covMin = v; generateFade(); } });
+    bindNumber(dom.covMaxInput, { min: 0, max: 16 }, (v) => { if (v !== state.covMax) { state.covMax = v; generateFade(); } });
+
+    dom.fadeSlider.addEventListener('input', () => setSlider(Number(dom.fadeSlider.value)));
+
+    for (const [input, sender] of [
+      [dom.greyInBlack, 'inBlack'], [dom.greyInWhite, 'inWhite'], [dom.greyOutDark, 'outDark'], [dom.greyOutBright, 'outBright'],
+    ]) {
+      input.addEventListener('change', () => onGreyRange(sender));
+    }
+
+    dom.toggleIndices.addEventListener('click', () => {
+      state.showIndices = !state.showIndices;
+      store.set(KEYS.indices, state.showIndices);
+      renderControls();
+      renderSwatches();
+    });
+
+    dom.themeToggle.addEventListener('click', () => {
+      const order = ['system', 'light', 'dark'];
+      const cur = store.get(KEYS.theme, 'system');
+      const next = order[(order.indexOf(cur) + 1) % order.length];
+      store.set(KEYS.theme, next);
+      applyTheme(next);
+      toast(`Theme: ${next}`, 'info', 1500);
+    });
+
+    // Image preview: drag to scroll + drop a PNG file
+    let scroll = null;
+    const canvas = dom.imageCanvas;
+    canvas.addEventListener('pointerdown', (e) => {
+      const img = state.img;
+      if (!img || (img.w <= 128 && img.h <= 128)) return;
+      scroll = { id: e.pointerId, x0: e.clientX, y0: e.clientY, sx: img.scrollX, sy: img.scrollY };
+      canvas.setPointerCapture(e.pointerId);
+      dom.imageFrame.classList.add('scrolling');
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!scroll || e.pointerId !== scroll.id || !state.img) return;
+      const ratio = canvas.width / canvas.clientWidth;
+      state.img.scrollX = scroll.sx - (e.clientX - scroll.x0) * ratio;
+      state.img.scrollY = scroll.sy - (e.clientY - scroll.y0) * ratio;
+      drawImagePreview();
+    });
+    const endScroll = () => { scroll = null; dom.imageFrame.classList.remove('scrolling'); };
+    canvas.addEventListener('pointerup', endScroll);
+    canvas.addEventListener('pointercancel', endScroll);
+
+    dom.imageFrame.addEventListener('dragover', (e) => {
+      if ([...(e.dataTransfer?.types || [])].includes('Files')) {
+        e.preventDefault();
+        dom.imageFrame.classList.add('dragover');
+      }
+    });
+    dom.imageFrame.addEventListener('dragleave', () => dom.imageFrame.classList.remove('dragover'));
+    dom.imageFrame.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dom.imageFrame.classList.remove('dragover');
+      const file = e.dataTransfer?.files?.[0];
+      if (file) loadPreviewFromFile(file);
+    });
+    // Don't navigate away when a file is dropped elsewhere on the page
+    window.addEventListener('dragover', (e) => e.preventDefault());
+    window.addEventListener('drop', (e) => e.preventDefault());
+  }
+
+  /** Fade slider (0..31, 16 = normal); shared by the image preview and the Tile Maker fade preview. */
+  function setSlider(v) {
+    state.slider = clamp(Math.round(v), 0, 31);
+    dom.fadeSlider.value = state.slider;
+    const desired = state.slider <= 15 ? 'dark' : 'bright';
+    if (desired !== state.direction) switchDirection(desired, { fromSlider: true });
+    else drawImagePreview();
+    renderSliderReadout();
+    emit('p8:slider');
+  }
+
+  // ------------------------------------------------------------------ //
+  // Workspaces (Palette & Fades | Tile Maker)                          //
+  // ------------------------------------------------------------------ //
+
+  // Every <main data-ws="..."> is a workspace; elements with data-show="ws1 ws2" (menus, menu
+  // entries, app bar buttons) are only visible in the listed workspaces.
+  const workspaces = () => [...document.querySelectorAll('main[data-ws]')].map((m) => m.dataset.ws);
+  const shortcutHandlers = {};
+
+  function setWorkspace(ws, { persist = true } = {}) {
+    if (!workspaces().includes(ws)) ws = 'home';
+    document.body.dataset.workspace = ws;
+    for (const main of document.querySelectorAll('main[data-ws]')) main.hidden = main.dataset.ws !== ws;
+    for (const node of document.querySelectorAll('[data-show]')) node.hidden = !node.dataset.show.split(/\s+/).includes(ws);
+    for (const tab of document.querySelectorAll('#wsTabs [data-value]')) {
+      tab.setAttribute('aria-checked', String(tab.dataset.value === ws));
+    }
+    for (const name of document.querySelectorAll('#wsTitle span')) name.classList.toggle('on', name.dataset.ws === ws);
+    if (persist) {
+      store.set(KEYS.workspace, ws);
+      if (location.hash !== `#${ws}`) history.replaceState(null, '', `#${ws}`);
+    }
+    emit('p8:workspace');
+  }
+
+  // ------------------------------------------------------------------ //
+  // Init                                                               //
+  // ------------------------------------------------------------------ //
+
+  function init() {
+    applyTheme(store.get(KEYS.theme, 'system'));
+    state.showIndices = store.get(KEYS.indices, true) !== false;
+
+    buildSystemPalette();
+    buildPaletteSlots();
+    buildRampEditor();
+    bindMenus();
+    bindShortcuts();
+    bindControls();
+    renderRecent();
+
+    // the title frame holds every tab's name (stacked), so it is always as wide as the longest one
+    $('#wsTitle').replaceChildren(...[...document.querySelectorAll('#wsTabs [data-value]')].map((tab) => {
+      const name = document.createElement('span');
+      name.dataset.ws = tab.dataset.value;
+      name.textContent = tab.getAttribute('aria-label');
+      return name;
+    }));
+    bindSeg($('#wsTabs'), (ws) => setWorkspace(ws));
+    window.addEventListener('hashchange', () => setWorkspace(location.hash.slice(1)));
+    setWorkspace(location.hash.slice(1) || store.get(KEYS.workspace, 'home'));
+
+    restoreSession();
+    renderAll();
+    generateFade();
+  }
+
+  /** Replaces the custom palette (16 pico indices or null) as if the user had edited it. */
+  function setCustomPalette(colors) {
+    if (state.mode === 'ramp') setMode('normal');
+    state.custom = Array.from({ length: 16 }, (_, i) => (isValidPico(colors[i]) ? colors[i] : null));
+    state.selected = null;
+    onPaletteChanged();
+    scheduleAutosave();
+  }
+
+  /** ramps (stops per slot) + "Fade to" slot that an imported fade table walks through */
+  function stopsFromTable(f) {
+    const stops = emptyStops();
+    if (!f) return { stops, target: null };
+    for (let c = 0; c < 16; c++) {
+      const seq = [];
+      for (const row of f.tables) { const slot = row[c] & 15; if (seq[seq.length - 1] !== slot) seq.push(slot); }
+      seq.slice(1, 1 + STOPS_PER_ROW).forEach((slot, k) => { stops[c][k] = state.custom[slot] ?? null; });
+    }
+    // "Fade to": the slot most rows end on
+    const end = f.tables[f.tables.length - 1].map((v) => v & 15);
+    const target = [...new Set(end)].sort((a, b) => end.filter((x) => x === b).length - end.filter((x) => x === a).length)[0];
+    return { stops, target };
+  }
+
+  /**
+   * An image that brings its own screen palette (and fade tables {dark, bright, from}, 32 x 16
+   * packed each): sets the custom palette, replaces the ramps of both directions (from the
+   * tables, or empty: ramps of another palette mean nothing here), and uses the tables on the
+   * slider until the palette or a direction's ramps are edited.
+   */
+  function adoptImagePalette(pal, f = null) {
+    setCustomPalette(pal);
+    const dark = stopsFromTable(f?.dark);
+    const bright = stopsFromTable(f?.bright);
+    state.dirStops = { dark: dark.stops, bright: bright.stops };
+    state.dirTargets = { dark: dark.target, bright: bright.target };
+    const mine = state.direction === 'dark' ? dark : bright;
+    state.stops = cloneStops(mine.stops);
+    state.target = mine.target != null ? state.custom[mine.target] : null;
+    state.imported = f ? {
+      dark: f.dark, bright: f.bright, from: f.from,
+      sig: { dark: fadeSig(dark.stops), bright: fadeSig(bright.stops) },
+    } : null;
+    renderAll();
+    generateFade();
+  }
+
+  /** Loads an ImageData into the image preview (throws on unsupported sizes). */
+  function loadPreviewImageData(imageData, indices = null) {
+    setPreviewImage(imageData, { indices });
+    state.grey = null;
+    renderControls();
+  }
+
+  /**
+   * Both fade directions of the current palette ({tables, coverage} or null), for Pixel Studio's
+   * fade shade ink. palette: the 16 screen colors the tables' slots refer to.
+   */
+  function fadeSets() {
+    const out = { dark: null, bright: null, palette: fullPalette(state.custom) };
+    out[state.direction] = state.fade;
+    const other = state.direction === 'dark' ? 'bright' : 'dark';
+    if (state.dirStops[other] && state.dirTargets[other] != null) {
+      try {
+        out[other] = generateWithRamps(buildSlotRamps(state.custom, state.dirStops[other], state.dirTargets[other]),
+          { steps: FADE_STEPS, gamma: state.gamma, covMin: state.covMin, covMax: state.covMax });
+      } catch { /* that direction is incomplete */ }
+    }
+    return out;
+  }
+
+  // Shared API for the other workspaces (js/tiles.js, js/suite.js, js/studio.js, ...)
+  window.P8App = {
+    VERSION,
+    state,
+    activePalette,
+    setSlider,
+    setWorkspace,
+    setCustomPalette,
+    loadPreviewImageData,
+    adoptImagePalette,
+    fadeSets,
+    registerActions: (more) => Object.assign(actions, more),
+    registerShortcuts: (ws, handler) => { shortcutHandlers[ws] = handler; },
+    runAction: (name, data = {}) => actions[name]?.(data),
+    isTyping,
+    openMappingDialog,
+    paintSwatch,
+    modal,
+    showMessage,
+    confirmDialog,
+    codeDialog,
+    toast,
+    download,
+    pickFile,
+    decodeImage,
+    formField,
+    sanitizeFilename,
+    store,
+    el,
+    $,
+  };
+
+  init();
+})();
