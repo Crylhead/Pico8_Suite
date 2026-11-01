@@ -5,10 +5,12 @@
   const err = (name, msg) => Object.assign(new Error(msg), { name });
 
   function makeFs(tree = {}) {
-    const fs = { faults: [], log: [] };
+    const fs = { faults: [], log: [], hold: null };
     // fault(op, path) -> Error to throw, or null. ops: read, write, close, remove, mkdir
     fs.fail = (fn) => { fs.faults.push(fn); return fs; };
     fs.clearFaults = () => { fs.faults = []; };
+    // hold(op, path) -> optional promise: an async pause before an operation (concurrency tests)
+    const pause = async (op, path) => { if (fs.hold) await fs.hold(op, path); };
     const check = (op, path) => {
       fs.log.push(`${op} ${path}`);
       for (const f of fs.faults) { const e = f(op, path); if (e) throw (e === true ? err('NotAllowedError', `${op} ${path} denied`) : e); }
@@ -32,6 +34,7 @@
           let e = entries.get(n);
           if (!e) {
             if (!create) throw err('NotFoundError', `${path}${n} not found`);
+            await pause('write', `${path}${n}`);
             check('write', `${path}${n}`);
             e = file(n, `${path}${n}`, '');
             entries.set(n, e);
@@ -41,7 +44,9 @@
         },
         async removeEntry(n) {
           if (!entries.has(n)) throw err('NotFoundError', `${path}${n} not found`);
+          await pause('remove', `${path}${n}`);
           check('remove', `${path}${n}`);
+          entries.get(n).removed = true;
           entries.delete(n);
         },
         async *entries() { for (const [n, e] of [...entries]) yield [n, e]; },
@@ -56,17 +61,20 @@
       const self = {
         kind: 'file', name, data, mtime: 0,
         async getFile() {
+          await pause('read', path);
           check('read', path);
+          if (self.removed) throw err('NotFoundError', `${path} not found`); // a handle outliving removeEntry, as in browsers
           const d = self.data;
           return { name, lastModified: self.mtime, size: d.length, text: async () => d };
         },
         async createWritable() {
+          await pause('write', path);
           check('write', path);
           let buf = '';
           let done = false;
           return {
             async write(d) { if (done) throw err('TypeError', 'closed'); check('write', path); buf += typeof d === 'string' ? d : String(d.data ?? d); },
-            async close() { check('close', path); done = true; self.data = buf; self.mtime++; },
+            async close() { await pause('close', path); check('close', path); done = true; self.data = buf; self.mtime++; },
             async abort() { done = true; },
           };
         },
