@@ -386,4 +386,112 @@ const P8Code = (() => {
   return { KEYWORDS, API, API_NAMES, CALLBACKS, lex, bracketPairs, codeTabs, outline, includes, joinPath, includedCode, identifiers, opensBlock, DEDENT, callAt, splitCart, joinCart, NEW_CART };
 })();
 
+// Saving the Code Editor's buffer into a file that PICO-8 or another tab may have changed (#4, #6).
+Object.assign(P8Code, (() => {
+  const { splitCart, joinCart } = P8Code;
+  const trimEnd = (s) => s.replace(/\n+$/, '');
+
+  /**
+   * How to write `lua` over a file whose text is now `disk`. `baseLua` is the file's Lua when it
+   * was opened / last saved, `parts` the sections the editor knows.
+   * -> { kind: 'write' | 'merge' | 'conflict', text, parts (of the file on disk), diskLua }
+   *    write: only Lua differs; merge: other sections changed on disk and are kept;
+   *    conflict: the Lua on disk changed too, so writing needs the user's decision.
+   */
+  function planSave({ parts, baseLua, disk, lua }) {
+    const d = splitCart(disk);
+    const text = joinCart(d, lua);
+    const res = { parts: d, text, diskLua: d.lua };
+    if (text === disk) return { kind: 'write', ...res };
+    if (baseLua == null || trimEnd(d.lua) !== trimEnd(baseLua) || (d.head == null) !== (parts.head == null)) return { kind: 'conflict', ...res };
+    const same = d.head === parts.head && d.tail === parts.tail && d.crlf === parts.crlf;
+    return { kind: same ? 'write' : 'merge', ...res };
+  }
+
+  /**
+   * Serialized saves of one editor. Each save captures { doc, lua, ... } when it starts and only
+   * that revision is committed, and only while `doc` is still the open document.
+   * io: snapshot() -> { doc, lua, parts, baseLua, handle, name }
+   *     isCurrent(doc), commit(doc, { lua, text?, parts?, handle?, name?, merged? }) (text: what was
+   *     written, the new baseline; parts: its sections),
+   *     read(handle) -> text, write(handle, text),
+   *     conflict({ name, diskLua, canReload }) -> 'overwrite' | 'reload' | other (cancel),
+   *     reload(doc, diskText), pickSave?(name) -> handle (throws AbortError when cancelled),
+   *     download(text, name), warn(message), done?(how, { name, merged }) (always, for messages)
+   * save({ as }) -> 'saved' | 'downloaded' | 'cancelled'
+   */
+  function createSaver(io) {
+    let tail = Promise.resolve();
+    let pending = 0;
+
+    async function run(as) {
+      const s = io.snapshot();
+      const commit = (how, extra = {}) => {
+        if (io.isCurrent(s.doc)) io.commit(s.doc, { lua: s.lua, ...extra });
+        io.done?.(how, { name: extra.name || s.name, merged: Boolean(extra.merged) });
+        return how;
+      };
+      let parts = s.parts;
+      // the file on disk now, checked right before writing; null result -> 'cancelled'
+      const guarded = async (h) => {
+        const disk = await io.read(h);
+        const plan = planSave({ parts: s.parts, baseLua: s.baseLua, disk, lua: s.lua });
+        parts = plan.parts;
+        if (plan.kind === 'conflict') {
+          const canReload = io.isCurrent(s.doc);
+          const choice = await io.conflict({ name: s.name, diskLua: plan.diskLua, canReload });
+          if (choice === 'reload' && canReload && io.isCurrent(s.doc)) io.reload(s.doc, disk);
+          if (choice !== 'overwrite') return null;
+        }
+        await io.write(h, plan.text);
+        return plan;
+      };
+      if (!as && s.handle) {
+        try {
+          const plan = await guarded(s.handle);
+          if (!plan) return 'cancelled';
+          return commit('saved', { text: plan.text, parts: splitCart(plan.text), handle: s.handle, name: s.name, merged: plan.kind === 'merge' });
+        } catch (err) {
+          io.warn(`Could not write ${s.name}: ${err.message}`);
+        }
+      } else if (s.handle) {
+        // Save As: keep the newest sprites/map/sound of the file this code came from
+        try { parts = splitCart(await io.read(s.handle)); } catch { /* unreadable: use the known sections */ }
+      }
+      if (io.pickSave) {
+        try {
+          const h = await io.pickSave(s.name);
+          let plan;
+          if (s.handle && (await h.isSameEntry?.(s.handle))) {
+            plan = await guarded(h);
+            if (!plan) return 'cancelled';
+          } else {
+            plan = { kind: 'write', parts, text: joinCart(parts, s.lua) };
+            await io.write(h, plan.text);
+          }
+          return commit('saved', { text: plan.text, parts: splitCart(plan.text), handle: h, name: h.name, merged: plan.kind === 'merge' });
+        } catch (err) {
+          if (err.name === 'AbortError') return 'cancelled';
+        }
+      }
+      io.download(joinCart(parts, s.lua), s.name);
+      return commit('downloaded');
+    }
+
+    return {
+      save({ as = false } = {}) {
+        pending++;
+        const p = tail.then(() => run(as));
+        tail = p.catch(() => {});
+        return p.finally(() => { pending--; });
+      },
+      /** resolves once every save started so far has finished */
+      idle: () => tail,
+      pending: () => pending > 0,
+    };
+  }
+
+  return { planSave, createSaver };
+})());
+
 if (typeof module !== 'undefined') module.exports = P8Code;
