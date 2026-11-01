@@ -229,7 +229,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def origin_ok(self):
         origins = self.headers.get_all('Origin') or []
-        return not origins or (len(origins) == 1 and bool(ALLOWED_ORIGIN.match(origins[0])))
+        return not origins or (
+            len(origins) == 1
+            and '\r' not in origins[0]
+            and '\n' not in origins[0]
+            and bool(ALLOWED_ORIGIN.fullmatch(origins[0]))
+        )
 
     def token_ok(self):
         given = self.headers.get(TOKEN_HEADER)
@@ -238,7 +243,7 @@ class Handler(BaseHTTPRequestHandler):
     def cors_headers(self):
         origin = self.headers.get('Origin')
         if origin and self.origin_ok():
-            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Access-Control-Allow-Origin', origin.replace('\r', '').replace('\n', ''))
             self.send_header('Vary', 'Origin')
             # Chrome's private network access preflight
             self.send_header('Access-Control-Allow-Private-Network', 'true')

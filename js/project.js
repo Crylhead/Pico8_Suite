@@ -252,11 +252,19 @@
       if (r.changes.length || pj.dirtyTexts.has(f.name)) rewrites.push({ name: f.name, text: r.text, changes: r.changes });
     }
     errors.push(...P.checkAnchors(rewrites.length ? anchorFiles().map((f) => rewrites.find((r) => r.name === f.name) || f) : anchorFiles(), pj.parts, layout).errors);
-    if (errors.length) { showMessage('Write carts', `Anchors that cannot be resolved, nothing was written:\n${errors.join('\n')}`); return; }
-    // carts the project wrote before (or adopted) that the new layout no longer uses -> demo/unused/
-    const keep = new Set(layout.map((c) => c.name.toLowerCase()));
-    const retire = [...new Set([...(pj.project?.carts || []).map((c) => c.name), ...(pj.project?.adoptedFrom || [])])].filter((n) => !keep.has(n.toLowerCase()) && pj.texts.has(n));
-    const ok = await confirmDialog('Write carts', `Writes ${layout.length} data carts (${layout.map((c) => c.name).join(', ')}), rewrites ${rewrites.reduce((s, r) => s + r.changes.length, 0)} reload() lines in ${rewrites.length} fx carts${retire.length ? ` and moves ${retire.length} carts nobody uses any more to ${pj.demo === pj.root ? '' : 'demo/'}unused/` : ''}.`, 'Write');
+    if (errors.length) { showMessage('Write carts', `Anchors that cannot be resolved, nothing was written:\n${[...new Set(errors)].join('\n')}`); return; }
+    // carts the project wrote before (or adopted) that the new layout no longer uses go to demo/unused/,
+    // but only when nothing in the final sources still references them (docs/PROJECT_MODEL.md)
+    const inLayout = new Set(layout.map((c) => c.name.toLowerCase()));
+    const candidates = [...new Set([...(pj.project?.carts || []).map((c) => c.name), ...(pj.project?.adoptedFrom || [])])].filter((n) => !inLayout.has(n.toLowerCase()) && pj.texts.has(n));
+    const finalTexts = new Map([...pj.texts, ...Object.entries(texts), ...rewrites.map((r) => [r.name, r.text])]);
+    const files = [...finalTexts].map(([name, text]) => ({ name, text }));
+    for await (const [name, h] of pj.demo.entries()) if (h.kind === 'file' && /\.lua$/i.test(name)) files.push({ name, text: await (await h.getFile()).text() });
+    const { retire, kept, unresolved } = P.retirement(candidates, files);
+    const unusedDir = `${pj.demo === pj.root ? '' : 'demo/'}unused/`;
+    const keptNote = kept.length ? `\n\nStays in place because it is still referenced:\n${kept.map((k) => `${k.cart} (${k.by})`).join('\n')}` : '';
+    const unresolvedNote = unresolved.length ? `\n\nReferences that cannot be resolved, so no cart is moved:\n${unresolved.map((u) => `${u.file}:${u.line} ${u.call} (${u.why})`).join('\n')}` : '';
+    const ok = await confirmDialog('Write carts', `Writes ${layout.length} data carts (${layout.map((c) => c.name).join(', ')}), rewrites ${rewrites.reduce((s, r) => s + r.changes.length, 0)} reload() lines in ${rewrites.length} fx carts${retire.length ? ` and moves ${retire.length} carts nobody references any more (${retire.join(', ')}) to ${unusedDir}` : ''}.${keptNote}${unresolvedNote}`, 'Write');
     if (!ok) return;
     if (retire.length) {
       const un = await pj.demo.getDirectoryHandle('unused', { create: true });
@@ -362,12 +370,13 @@
     const plan = pj.adoptPlan;
     dom.adopt.hidden = !(pj.root && !pj.project);
     if (dom.adopt.hidden) return;
-    dom.adopt.replaceChildren(
+    dom.adopt.replaceChildren(...[
       el('h3', { textContent: 'Adopt this demo' }),
       el('p', { textContent: plan && plan.assets.length ? `The suite found ${plan.assets.length} pieces of data in ${plan.sourceCarts.length} carts (${plan.sourceCarts.join(', ')}), read by ${plan.edits.length} reload() lines. Adopting stores them as assets, marks those lines with --@data anchors and packs new carts. The demo runs the same.` : 'No reload() of a data cart found in demo/.' }),
       plan?.skipped.length ? el('p', { className: 'muted', textContent: `Left as they are: ${plan.skipped.map((s) => `${s.file}:${s.line} (${s.why})`).join('; ')}` }) : null,
       plan?.keptCarts.length ? el('p', { className: 'muted', textContent: `Still read by lines left as they are, so they stay in demo/: ${plan.keptCarts.join(', ')}` }) : null,
-      plan?.assets.length ? el('button', { className: 'btn btn-primary', type: 'button', textContent: 'Adopt', onclick: adoptNow }) : null);
+    plan?.assets.length ? el('button', { className: 'btn btn-primary', type: 'button', textContent: 'Adopt', onclick: adoptNow }) : null,
+  ].filter(Boolean));
   }
 
   function anchorsByRef() {
@@ -375,7 +384,7 @@
     const add = (ref, v) => { if (!m.has(ref)) m.set(ref, []); m.get(ref).push(v); };
     for (const f of anchorFiles()) {
       for (const a of P.findAnchors(f.text)) {
-        if (a.set) { for (const p of pj.parts) if (p.set === a.set) add(p.ref, { file: f.name, line: a.line + 1, lz: false, set: true }); } else add(a.ref, { file: f.name, line: a.line + 1, lz: a.lz });
+        if (a.set) { for (const p of pj.parts) if (p.set === a.set) add(p.ref, { file: f.name, line: a.line + 1, lz: false, set: true }); } else add(a.ref, { file: f.name, line: a.line + 1, lz: a.lz, ranged: a.ranged });
       }
     }
     return m;
@@ -399,7 +408,7 @@
           el('button', { className: 'btn btn-sm', type: 'button', textContent: 'Rename', dataset: { rename: a.name } })));
       }
       const an = anchors.get(p.ref) || [];
-      const lzOk = !p.set && an.length > 0 && an.every((x) => x.lz);
+      const lzOk = !p.set && an.length > 0 && an.every((x) => x.lz && !x.ranged);
       const segs = a.meta?.segments?.[p.id] || [];
       out.push(el('div', { className: `cb-part${isPlaced.has(p.ref) ? '' : ' unplaced'}`, draggable: true, dataset: { ref: p.ref } },
         el('i', { className: 'cb-dot', style: `background:${TYPE_COLOR[a.type] || TYPE_COLOR.table}` }),
@@ -413,7 +422,7 @@
             el('button', { className: 'btn btn-sm', type: 'button', textContent: '→ Library', title: g.kind === 'img' ? 'Image in its palette (and fades) to the library: open it in Pixel Studio, Palette & Fades or Tile Maker' : 'The palette (row 0) to the library', dataset: { segout: p.ref, seg: String(k) } }),
             el('button', { className: 'btn btn-sm', type: 'button', textContent: '← Library', title: g.kind === 'img' ? 'Replace the image with a library image of the same size' : 'Replace the palette (row 0) with a library palette', dataset: { segin: p.ref, seg: String(k) } })) : null))) : null,
         el('span', { className: 'cb-part-tools' },
-          el('label', { className: 'check', title: p.set ? 'Cart sets stay raw (one reload() reads every cart of the set)' : lzOk ? 'Store LZ-packed (the anchored lines call unlz)' : 'LZ needs anchored lines of the form  reload(tmp,…) unlz(tmp,dest)' },
+          el('label', { className: 'check', title: p.set ? 'Cart sets stay raw (one reload() reads every cart of the set)' : lzOk ? 'Store LZ-packed (the anchored lines call unlz)' : an.some((x) => x.ranged) ? 'LZ needs whole-part anchors: unlz() cannot unpack a +offset range of the packed stream' : 'LZ needs anchored lines of the form  reload(tmp,…) unlz(tmp,dest)' },
             el('input', { type: 'checkbox', checked: p.lz, disabled: p.set || (!lzOk && !p.lz), dataset: { lz: p.ref } }), el('span', { textContent: 'LZ' })),
           p.set ? null : el('button', { className: 'btn btn-sm', type: 'button', textContent: 'Line', title: 'Copy a reload() line with the anchor for this part', dataset: { line: p.ref } }))));
     }
@@ -613,6 +622,12 @@
       const ref = e.target.dataset.lz;
       if (!ref) return;
       const p = partOf(ref);
+      const ranged = (anchorsByRef().get(ref) || []).filter((x) => x.ranged);
+      if (e.target.checked && ranged.length) {
+        e.target.checked = false;
+        showMessage('LZ', `${ref} is read as a +offset range by ${ranged.map((x) => `${x.file}:${x.line}`).join(', ')}. unlz() can only unpack the whole packed stream, so this part stays raw.`);
+        return;
+      }
       p.asset.parts[p.id].lz = e.target.checked;
       pj.dirtyAssets.add(p.asset.name);
       syncLayout();
@@ -643,4 +658,3 @@
   bind();
   render();
 })();
-

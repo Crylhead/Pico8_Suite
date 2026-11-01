@@ -53,7 +53,9 @@ reload(0x8000,0x2000,0x2000,"source.p8") --@data background.img
 reload(tmp,0x0123,0x0456,"source.p8") unlz(tmp,0x8000) --@data wormhole.bin
 ```
 
-A bare `--@data asset.part` follows the whole stored part, including its length. For raw parts, `--@data asset.part+offset` denotes a subrange: the existing call's length is retained, clamped to the remaining part bytes. Explicit `+0` also means a subrange. The decoder expects a complete LZ stream; ranged compressed reads are unsafe and current validation does not reject all of them ([#7](https://github.com/Crylhead/Pico8_Suite/issues/7)).
+A bare `--@data asset.part` follows the whole stored part, including its length. For raw parts, `--@data asset.part+offset` denotes a subrange: the existing call keeps its own length. Explicit `+0` also means a subrange. The offset must lie inside the part, and the length must be positive and end within the part. An out-of-range or overflowing range is reported and nothing is written; it is not clamped. Offsets always count raw part bytes.
+
+The decoder expects a complete LZ stream. For an LZ-packed part, a ranged anchor is accepted only if it is `+0` with exactly the stored (packed) length; any other range is rejected before writing. Use a bare anchor instead, which follows the packed length. The LZ checkbox stays off while any anchor reads the part as a range.
 
 Write Carts rewrites the source address, stored length and cart name, leaving the destination expression unchanged. The builder owns those three arguments, so an anchored line must use a literal source, length and (for a single part) a literal cart name. A computed one is reported and nothing is written, rather than being replaced by a fixed value. Anchors are comments and add no Lua tokens. Current validation checks missing refs, computed anchored arguments, unused-part warnings, raw/LZ call consistency and cart-set offsets; it is not a complete static verifier of arbitrary Lua.
 
@@ -81,7 +83,19 @@ The builder rewrites the literal list and reload source/length. Auto-pack places
 - Pinned offsets are **not implemented**. Auto-pack replaces the manual arrangement.
 - Write Carts checks placement/capacity, builds and parses generated cart strings for byte/LZ comparison, computes anchor rewrites, requests confirmation, then writes carts/FX/assets/manifest and retires old carts.
 
-The current comparison is **in memory before disk writes**, not a disk readback. Multi-file writes are not transactional, and current retirement/conflict handling has open defects. See issues #1–#4 in the [health review](HEALTH_REVIEW_2026-11-01.md).
+### Retiring old carts
+
+Retirement candidates are carts the project wrote before, or adopted, that the new layout no longer uses. A candidate moves to `unused/` only if the **final** sources no longer reference it. The final sources are every demo cart after its anchor rewrite, the new data carts and top-level `.lua` files. A candidate that stays is scanned as a source too, so carts it references also stay.
+
+- References counted are the cart argument of `reload()` and `cstore()` (4th) and `load()` (1st), plus `#include` lines. The scan ignores comments, and calls may span lines. `run()` takes a parameter string, not a cart, so it is not counted. A name without an extension also matches `<name>.p8`.
+- Names are resolved as in adoption: literals, a variable assigned once to a literal, `"m"..i..".p8"` patterns and `list[i]` with a literal list.
+- A reference that cannot be resolved keeps **every** candidate in place. This covers a computed name, a variable assigned more than once, and an `#include` that is neither a demo cart nor a top-level `.lua` file.
+- The Write confirmation lists the carts that will move, the carts that stay with the line that references them, and any unresolved references.
+- Carts that stay are no longer owned by the project afterwards. Their names are reserved, and later writes never overwrite or retire them.
+
+Partial adoption does not grant permission to retire a cart: a source cart is retired only when this check passes at write time.
+
+The current comparison is **in memory before disk writes**, not a disk readback. Multi-file writes are not transactional, and conflict handling has open defects. See issues #3–#4 in the [health review](HEALTH_REVIEW_2026-11-01.md).
 
 There is **no `tools/build.py` release builder in this repository**. Anchor validation runs in Cart Builder; if the surrounding demo framework supplies a release checker, configure and run it there separately.
 
@@ -90,4 +104,3 @@ There is **no `tools/build.py` release builder in this repository**. Anchor vali
 Map Editor and Code Editor/Run already exist; they are no longer future phases. Run uses the optional Python bridge and your installed PICO-8. Byte checks in JavaScript do not replace running the generated demo in PICO-8.
 
 Live tile editing, shared document/revision semantics and a permanent Send to action remain design proposals. See the [historical review index](https://github.com/Crylhead/Demotools/blob/4a2855b99efb2e7a265961c63f1ac809adea3ed2/reviews/README.md); do not treat those proposals as delivered features.
-

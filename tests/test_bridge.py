@@ -109,6 +109,18 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual(self.procs, [])
         self.assertEqual(os.listdir(self.root), [])
 
+    def test_origin_rejects_header_line_breaks(self):
+        class Headers:
+            def __init__(self, origin):
+                self.origin = origin
+
+            def get_all(self, name):
+                return [self.origin] if name == 'Origin' else []
+
+        for origin in ('http://localhost\n', 'http://localhost\r\n'):
+            handler = type('HandlerStub', (), {'headers': Headers(origin)})()
+            self.assertFalse(bridge.Handler.origin_ok(handler))
+
     def test_rejects_malformed_requests(self):
         def raw(headers, body=b''):
             conn = http.client.HTTPConnection('127.0.0.1', self.port, timeout=10)
