@@ -85,3 +85,51 @@ t('Terrain #9 history drops the oldest snapshots over the memory budget, never t
   Hs.trim(many, []);
   assert.strictEqual(many.length, Hs.MAX_ENTRIES);
 });
+
+// #8: the PICO-8 output recipe of scene files
+const Sc = T.scene;
+const reopen = (scene) => JSON.parse(JSON.stringify(scene)); // a scene file read back in a fresh session
+
+t('Terrain #8 older scenes load the default output recipe, never the current one; undo brings it back', () => {
+  const st = { ...state(), pico: { ...Sc.PICO_DEFAULTS, colors: 'libimg', palColors: [0, 1, 2, 3], palName: 'B', shade: 'fades', dither: 'diffuse', depth: 0.2 } };
+  const before = st.pico;
+  for (const old of [{ format: 'terrain-lab-scene', params: {}, stamps: [] }, { format: 'terrain-lab-scene', version: 3, params: {}, stamps: [], pico: before }]) {
+    assert.deepStrictEqual(Sc.decodePico(reopen(old)), { ...Sc.PICO_DEFAULTS });
+  }
+  const s = Hs.snapshot(st, true, true); // what loadScene pushes
+  st.pico = Sc.decodePico({ version: 3 });
+  assert.strictEqual(Hs.restore(st, s).pico, true);
+  assert.deepStrictEqual(st.pico, before);
+});
+
+t('Terrain #8 a live palette with fades saves as an identified snapshot and reopens to the same pixels', () => {
+  const fades = { dark: { tables: [[...Array(16).keys()], Array.from({ length: 16 }, (_, i) => Math.max(0, i - 1)), Array(16).fill(0)] }, bright: null };
+  const live = { palette: { pal: [0, 129, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], fades, name: 'dusk' } };
+  const sources = (map) => ({ get: (id) => map[id] || null, label: (id) => ({ palette: 'Palette & Fades', studio: 'Pixel Studio' })[id] });
+  const pico = { ...Sc.PICO_DEFAULTS, colors: 'src:palette', shade: 'fades', depth: 0.6, lift: 0.3, dither: 'none' };
+  const m = 8, albedo = new Float32Array(m * m * 3), lit = new Float32Array(m * m * 3);
+  for (let i = 0; i < albedo.length; i++) { albedo[i] = (i * 29) % 256; lit[i] = albedo[i] * (0.3 + ((i / 3) % m) / m); }
+  const rgb = (c) => [(c * 37) & 255, (c * 91) & 255, (c * 53) & 255];
+  const render = (p, src) => { const r = Sc.resolveFixed(p, src); return T.fadeShade(albedo, lit, m, r.pal.map(rgb), r.fades, { depth: p.depth, lift: p.lift, dither: p.dither !== 'none' }); };
+  const saved = render(pico, sources(live));
+  const file = reopen({ version: Sc.VERSION, pico: Sc.encodePico(pico, Sc.resolveFixed(pico, sources(live))) });
+  assert.strictEqual(file.pico.palette.external, true);
+  assert.strictEqual(file.pico.palette.link, 'src:palette');
+  // fresh session: Palette & Fades now has another palette open, or nothing at all
+  const other = { palette: { pal: [...Array(16).keys()].reverse(), fades: { dark: { tables: [Array(16).fill(5)] }, bright: null }, name: 'other' } };
+  const loaded = Sc.decodePico(file);
+  assert.strictEqual(loaded.colors, 'frozen');
+  assert.strictEqual(loaded.link, 'src:palette');
+  assert.deepStrictEqual(loaded.palColors, live.palette.pal, 'palette slots keep their order');
+  for (const now of [other, {}]) {
+    assert.deepStrictEqual(render(loaded, sources(now)), saved);
+    assert.match(Sc.resolveFixed(loaded, sources(now)).note, /Palette & Fades \(live\)/);
+  }
+  assert.notDeepStrictEqual(render(pico, sources(other)), saved, 'the live mode itself would have changed');
+  // a self-contained library palette stays a library palette; auto modes keep only their settings
+  const lib = { ...Sc.PICO_DEFAULTS, colors: 'library', palColors: [1, 2, 3, 4], palName: 'four', dither: 'diffuse', strength: 0.7 };
+  const libBack = Sc.decodePico(reopen({ version: 4, pico: Sc.encodePico(lib, Sc.resolveFixed(lib, sources({}))) }));
+  assert.deepStrictEqual(libBack, { ...lib });
+  const auto = Sc.decodePico(reopen({ version: 4, pico: Sc.encodePico({ ...Sc.PICO_DEFAULTS, colors: 'auto8', shade: 'fades' }, null) }));
+  assert.deepStrictEqual(auto, { ...Sc.PICO_DEFAULTS, colors: 'auto8', shade: 'fades' });
+});
