@@ -64,13 +64,16 @@ const P8Audit = (() => {
   }
 
   /**
-   * expand_includes: returns {text, resolved[]}; appends to warnings. Only real #include lines
-   * expand (not ones in comments or strings); "cart.p8:N" pulls in code tab N of that cart.
+   * expand_includes: returns {text, resolved[], items[]}; appends to warnings. Only real #include
+   * lines expand (not ones in comments or strings); "cart.p8:N" pulls in code tab N of that cart.
+   * items: one per #include of this level, {inc, target, status: 'ok' | 'missing' | 'cycle',
+   * text: what replaced the directive, warnings: the ones raised while expanding it (nested too)}.
    */
   function expandIncludes(fs, path, lua, visited, warnings, depth = 0) {
-    if (depth > 50) { warnings.push(`include depth exceeded at ${path}`); return { text: lua, resolved: [] }; }
+    if (depth > 50) { warnings.push(`include depth exceeded at ${path}`); return { text: lua, resolved: [], items: [] }; }
     const dir = dirname(path);
     const resolved = [];
+    const items = [];
     let out = '';
     let at = 0;
     for (const inc of lexer().includes(lua)) {
@@ -79,31 +82,104 @@ const P8Audit = (() => {
       // the directive's line break is replaced by the block below
       if (lua[at] === '\r') at++;
       if (lua[at] === '\n') at++;
-      const { raw, tab } = inc;
-      const target = resolveInclude(fs, dir, inc.path);
-      const tabs = target && tab != null && target.toLowerCase().endsWith('.p8') ? lexer().splitCart(fs.read(target)).lua.split(/^-->8[ \t]*$/m).length : 0;
-      if (!target || (tab != null && tab >= tabs)) {
-        warnings.push(`unresolved include: ${raw}${target && tab != null ? ` (no code tab ${tab})` : ''}`);
-        out += `-- [[unresolved include: ${raw}]]\n`;
-        continue;
-      }
-      // a tab of a cart is its own unit: m.p8:1 may include m.p8:2
-      const id = tab == null ? target.toLowerCase() : `${target.toLowerCase()}:${tab}`;
-      if (visited.has(id)) {
-        warnings.push(`include cycle detected: ${raw}`);
-        out += `-- [[include cycle: ${raw}]]\n`;
-        continue;
-      }
-      // visited is the active include stack (cycle detection), not a global dedup:
-      // a file included twice, or via two branches, expands at each occurrence like PICO-8 does.
-      visited.add(id);
-      resolved.push(tab == null ? target : `${target}:${tab}`);
-      const child = expandIncludes(fs, target, lexer().includedCode(fs.read(target), target, tab), visited, warnings, depth + 1);
-      visited.delete(id);
-      resolved.push(...child.resolved);
-      out += `-- [[begin include: ${raw}]]\n${child.text}${child.text.endsWith('\n') ? '' : '\n'}-- [[end include: ${raw}]]\n`;
+      const w0 = warnings.length;
+      const item = expandOne(fs, dir, inc, visited, warnings, depth);
+      item.warnings = warnings.slice(w0);
+      items.push(item);
+      resolved.push(...item.resolved);
+      out += item.text;
     }
-    return { text: out + lua.slice(at), resolved };
+    return { text: out + lua.slice(at), resolved, items };
+  }
+
+  /** one #include directive of expandIncludes: its replacement text, status and resolved files */
+  function expandOne(fs, dir, inc, visited, warnings, depth) {
+    const { raw, tab } = inc;
+    const target = resolveInclude(fs, dir, inc.path);
+    const tabs = target && tab != null && target.toLowerCase().endsWith('.p8') ? lexer().splitCart(fs.read(target)).lua.split(/^-->8[ \t]*$/m).length : 0;
+    if (!target || (tab != null && tab >= tabs)) {
+      warnings.push(`unresolved include: ${raw}${target && tab != null ? ` (no code tab ${tab})` : ''}`);
+      return { inc, target, status: 'missing', text: `-- [[unresolved include: ${raw}]]\n`, resolved: [] };
+    }
+    // a tab of a cart is its own unit: m.p8:1 may include m.p8:2
+    const id = tab == null ? target.toLowerCase() : `${target.toLowerCase()}:${tab}`;
+    if (visited.has(id)) {
+      warnings.push(`include cycle detected: ${raw}`);
+      return { inc, target, status: 'cycle', text: `-- [[include cycle: ${raw}]]\n`, resolved: [] };
+    }
+    // visited is the active include stack (cycle detection), not a global dedup:
+    // a file included twice, or via two branches, expands at each occurrence like PICO-8 does.
+    visited.add(id);
+    const child = expandIncludes(fs, target, lexer().includedCode(fs.read(target), target, tab), visited, warnings, depth + 1);
+    visited.delete(id);
+    const text = `-- [[begin include: ${raw}]]\n${child.text}${child.text.endsWith('\n') ? '' : '\n'}-- [[end include: ${raw}]]\n`;
+    return { inc, target, status: 'ok', text, resolved: [tab == null ? target : `${target}:${tab}`, ...child.resolved] };
+  }
+
+  /**
+   * Every file the #include tree of a file can reach, read once each through an async
+   * read(path) -> text | null (the Code Editor reads its folder this way), as a Map for makeFs.
+   * names: every path that exists; text: the including file itself (a whole cart or .lua), which
+   * stands in for its copy on disk so its own tabs are read from the current code.
+   */
+  async function readIncludeFiles(names, path, text, read) {
+    const exists = makeFs(new Map(names.map((n) => [n, null])));
+    const files = new Map();
+    const self = exists.key(path) ?? path;
+    files.set(self, text);
+    const codeOf = (p, t) => (p.toLowerCase().endsWith('.p8') ? lexer().splitCart(t).lua : t);
+    const queue = [[self, text]];
+    while (queue.length) {
+      const [p, t] = queue.pop();
+      for (const inc of lexer().includes(codeOf(p, t))) {
+        const target = resolveInclude(exists, dirname(p), inc.path);
+        if (!target || files.has(target)) continue;
+        let got = null;
+        try { got = await read(target); } catch { got = null; }
+        files.set(target, got);
+        if (got != null) queue.push([target, got]);
+      }
+    }
+    for (const [k, v] of files) if (v == null) files.delete(k);
+    return files;
+  }
+
+  /**
+   * The Code Editor's include meter, with Audit's expansion (same resolution, active-stack cycle
+   * check, depth limit and .p8:N tabs), so both report the same expanded total.
+   * files: Map(path -> text) of the folder (see readIncludeFiles); path: the edited file; lua: its code.
+   * -> {self, expanded, included, warnings, items: [{line, raw, path, tab, target, found, cycle,
+   *    depth, missing, tokens, warnings}]}. found: the target exists (also when the include is a
+   * cycle); cycle / depth: expansion stopped there; missing: unresolved includes nested inside.
+   */
+  function includeReport(files, path, lua) {
+    const fs = makeFs(files);
+    const warnings = [];
+    const exp = expandIncludes(fs, path, lua, new Set([path.toLowerCase()]), warnings);
+    const self = countTokens(lua);
+    const expanded = countTokens(exp.text);
+    const items = exp.items.map(({ inc, target, status, text, warnings: w }) => ({
+      line: inc.line, raw: inc.raw, path: inc.path, tab: inc.tab, target,
+      found: status !== 'missing',
+      cycle: status === 'cycle' || w.some((m) => /^include cycle/.test(m)),
+      depth: w.some((m) => /^include depth/.test(m)),
+      missing: status === 'missing' ? 0 : w.filter((m) => /^unresolved include/.test(m)).length,
+      tokens: countTokens(text),
+      warnings: w,
+    }));
+    return { self, expanded, included: expanded - self, warnings, items };
+  }
+
+  /**
+   * Code Editor meter in one call: reads the reachable files (readIncludeFiles), then
+   * includeReport; each item also gets rel, the file it opens (or would, when missing).
+   * names: the folder's files ([] when no folder is open: every include is then not found).
+   */
+  async function includeMeter({ names, path, cart, lua, read }) {
+    const files = names.length ? await readIncludeFiles(names, path, cart, read) : new Map();
+    const rep = includeReport(files, path, lua);
+    for (const i of rep.items) i.rel = i.target ?? join(dirname(path), i.path);
+    return rep;
   }
 
   // Comments + tokens ---------------------------------------------------- //
@@ -303,6 +379,7 @@ const P8Audit = (() => {
   return {
     TOKEN_LIMIT, CHAR_LIMIT,
     extractLua, parseIncludes, stripComments, countTokens, resolveInclude, expandIncludes, makeFs, normPath,
+    readIncludeFiles, includeReport, includeMeter,
     scanProject, summarize, fileRefCount, toCsv, toJson,
   };
 })();
