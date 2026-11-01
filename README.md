@@ -44,7 +44,7 @@ The app can be hosted on a static server for the browser tools. A remote host do
   - Pixel Studio → File → Send to → Tile Maker, then Export → Tile Sprite Sheet → Library → open the sheet in Pixel Studio.
   - Palette & Fades palette → Pixel Studio palette panel → *From Palette & Fades* (or save it to the library).
   - Any library image → Data Tools → string literal for your cart.
-- **Back up** with Library → Export Library Backup (one JSON file of saved assets). This does not include every tool's working session, settings or project-folder files. Export before changing host/port/browser or clearing site data. When IndexedDB is unavailable the library is memory-only; failed transactions are a known issue ([#5](https://github.com/Crylhead/Pico8_Suite/issues/5)).
+- **Back up** with Library → Export Library Backup (one JSON file of saved assets). This does not include every tool's working session, settings or project-folder files. Export before changing host/port/browser or clearing site data. When IndexedDB is unavailable at startup the session is memory-only (a warning appears and the Library says so). If a browser-storage save fails (for example storage is full), the suite reports it and leaves the work unsaved so you can free space and retry, or export/download it.
 
 ## Files
 

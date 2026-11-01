@@ -412,7 +412,7 @@
     const { w, h, px } = bytesTo4bpp(b, dc.view.width);
     // without a fade row shown, the fx's fade table goes along (Palette & Fades / Tile Maker use it)
     const fades = dc.fade ? null : fadesFor(curSec());
-    await S.assets.put(S.imageAsset({ name: `${c.name.replace(/\.p8$/i, '')} ${hex4(dc.view.start)}`, w, h, pixels: px, pal: shownColors(), transparent: -1, source: 'data-carts', meta: fades ? { fades } : null }));
+    if (!(await S.assets.put(S.imageAsset({ name: `${c.name.replace(/\.p8$/i, '')} ${hex4(dc.view.start)}`, w, h, pixels: px, pal: shownColors(), transparent: -1, source: 'data-carts', meta: fades ? { fades } : null })).catch((e) => S.reportStorageError('Range to Library', e)))) return;
     toast('Saved the range as an image in the library.');
   }
 
@@ -451,7 +451,7 @@
     for (const cel of cels) for (let i = 0; i < pixels.length; i++) if (cel[i] !== V.EMPTY) pixels[i] = cel[i];
     const fades = fadesFor(li.image);
     const a = S.imageAsset({ name: `${c.name.replace(/\.p8$/i, '')} layers`, w, h, pixels, pal, transparent: 0, source: 'data-carts', doc, meta: fades ? { fades } : null });
-    await S.assets.put(a);
+    if (!(await S.assets.put(a).catch((e) => S.reportStorageError('Layers to Pixel Studio', e)))) return;
     await S.openIn('studio-open', a);
   }
 

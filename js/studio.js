@@ -2181,7 +2181,7 @@
   }
 
   async function savePaletteToLibrary() {
-    await S.assets.put(S.paletteAsset({ name: `${ps.name} palette`, colors: ps.doc.pal, source: 'studio' }));
+    if (!(await S.assets.put(S.paletteAsset({ name: `${ps.name} palette`, colors: ps.doc.pal, source: 'studio' })).catch((e) => S.reportStorageError('Save Palette', e)))) return;
     toast('Saved the palette to the library');
   }
 
@@ -2438,11 +2438,11 @@
   }
 
   function saveSession() {
-    S.kv.set(KEYS.session, { doc: ps.doc, name: ps.name, assetId: ps.assetId, dirty: ps.dirty, primary: ps.primary, secondary: ps.secondary });
+    S.kv.set(KEYS.session, { doc: ps.doc, name: ps.name, assetId: ps.assetId, dirty: ps.dirty, primary: ps.primary, secondary: ps.secondary }).catch(S.autosaveFailed('Pixel Studio session'));
   }
 
   async function restoreSession() {
-    const s = await S.kv.get(KEYS.session);
+    const s = await S.kv.get(KEYS.session).catch(S.autosaveFailed('Pixel Studio session'));
     if (!s?.doc?.frames?.length) return false;
     loadDoc(s.doc, { name: s.name, assetId: s.assetId, dirty: s.dirty });
     if (Number.isInteger(s.primary)) ps.primary = s.primary & 15;
@@ -2536,7 +2536,8 @@
       a.id = old.id;
       a.created = old.created;
     }
-    const stored = await S.assets.put(a);
+    const stored = await S.assets.put(a).catch((e) => S.reportStorageError('Save to Library', e));
+    if (!stored) return;
     ps.assetId = stored.id;
     ps.dirty = false;
     renderTitle();
@@ -2759,7 +2760,7 @@
     const d = ps.doc;
     const pixels = new Uint8Array(128 * 128);
     K.blit(p.slots, p.w, p.h, pixels, 128, 128, p.dx, p.dy);
-    await S.assets.put(S.imageAsset({ name: `${ps.name} sheet`, w: 128, h: 128, pixels, pal: d.pal, transparent: d.transparent, source: 'studio' }));
+    if (!(await S.assets.put(S.imageAsset({ name: `${ps.name} sheet`, w: 128, h: 128, pixels, pal: d.pal, transparent: d.transparent, source: 'studio' })).catch((e) => S.reportStorageError('Frames → Sprite Sheet', e)))) return;
     toast(p.anim ? `Sheet saved to the library: frames at sprites ${p.anim.frames.join(', ')}` : 'Sheet saved to the library');
   }
 

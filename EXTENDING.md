@@ -50,7 +50,21 @@ Every element with `data-show="ws1 ws2"` is hidden outside the listed workspaces
 })();
 ```
 
-Publish an indexed image with `await S.assets.put(S.imageAsset({ name, w, h, pixels, pal, transparent: 0, source: 'mytool' }))`, or a palette with `S.paletteAsset({ name, colors })`, inside an async action. Await `S.assets.ready` before reading startup Library data. Current storage errors can be swallowed; [#5](https://github.com/Crylhead/Pico8_Suite/issues/5) tracks reliable durable-save outcomes. Consumers must guard unsaved target work themselves; the registry does not do this automatically.
+Publish an indexed image with `await S.assets.put(S.imageAsset({ name, w, h, pixels, pal, transparent: 0, source: 'mytool' }))`, or a palette with `S.paletteAsset({ name, colors })`, inside an async action. Await `S.assets.ready` before reading startup Library data. Consumers must guard unsaved target work themselves; the registry does not do this automatically.
+
+### Storage outcomes
+
+`S.assets.put`, `remove`, `rename` and `S.kv.set` resolve only after the IndexedDB transaction has committed. Any failure (quota exceeded, `DataCloneError`, an aborted transaction, a closed connection or a synchronous throw) **rejects** with an `S.StorageError` (`op`, `reason`: `'quota' | 'clone' | 'abort' | 'closed' | 'error'`, `cause`). A rejected write leaves the Library cache and the previously stored record unchanged and emits no `p8:assets` event. `S.kv.get` also rejects when it cannot read, instead of looking empty. Only mark work as saved after the promise resolves; on rejection keep it dirty and report the failure:
+
+```js
+const stored = await S.assets.put(asset).catch((e) => S.reportStorageError('Save to Library', e));
+if (!stored) return; // still dirty: the user can free space and retry, or export instead
+dirty = false;
+```
+
+Background session saves use `S.kv.set(key, value).catch(S.autosaveFailed('My Tool session'))`, which shows one toast until a session save succeeds again.
+
+When IndexedDB cannot be opened at startup the suite runs an explicit **memory-only session**: writes succeed in memory, `S.assets.persistent()` is `false` and `S.assets.mode()` is `'memory'`; the suite shows a warning and the Library labels it. A write that fails while IndexedDB is open never falls back to memory.
 
 ## Live palettes between tools
 
@@ -68,7 +82,7 @@ Map assets use `kind: 'map'`, `w`, `h`, `cells` (Uint8Array of tile IDs), `sheet
 
 Helpers: `S.assetImageData(a)` (RGBA), `S.assetCanvas(a)`, `S.thumbnail(a, size)`, `S.assetFromImageData(imageData, name, pal)` (nearest-color quantize), `S.imageAssetToPng(a)`.
 
-For tool state that is too large for `localStorage`, use `S.kv.get(key)` / `S.kv.set(key, value)` (IndexedDB).
+For tool state that is too large for `localStorage`, use `S.kv.get(key)` / `S.kv.set(key, value)` (IndexedDB; failures reject as described under [Storage outcomes](#storage-outcomes)).
 
 ## Extra Tools and historical desktop tools
 
