@@ -680,8 +680,10 @@
     if (!needFinal()) return;
     if (shown !== finalResult) showResult(finalResult);
     const o = pico8();
-    await S.assets.put(colorAsset(o));
-    await S.assets.put(S.imageAsset({ name: `${baseName()} height`, w: 128, h: 128, pixels: o.levels.slice(), pal: heightPal(), transparent: -1, source: 'terrain', meta: { terrain: { seed: st.params.seed, heightRange: [o.lo, o.hi], levels: 16 } } }));
+    try {
+      await S.assets.put(colorAsset(o));
+      await S.assets.put(S.imageAsset({ name: `${baseName()} height`, w: 128, h: 128, pixels: o.levels.slice(), pal: heightPal(), transparent: -1, source: 'terrain', meta: { terrain: { seed: st.params.seed, heightRange: [o.lo, o.hi], levels: 16 } } }));
+    } catch (e) { S.reportStorageError('Terrain to Library', e); return; }
     toast('Color map and height map saved to the library (128×128).');
   }
   /** the PICO-8 color map as a library image (with the fade tables it was shaded with) */
@@ -800,7 +802,7 @@
         preset: st.preset, weather: st.weather, erosionDraft: st.erosionDraft, view: st.view, tile: st.tile, tool: st.tool, brush: st.brush,
         text: st.text, image: { ...st.image, srcData: null }, imageSrc: st.image.srcData ? { w: st.image.srcData.width, h: st.image.srcData.height, data: st.image.srcData.data } : null,
         pico: st.pico, previewRes: st.previewRes, ids,
-      }).catch(() => {});
+      }).catch(S.autosaveFailed('Terrain Lab session'));
     }, 700);
   }
   function restoreSaved(d) {

@@ -531,11 +531,12 @@
     if (g.kind === 'img') {
       const { w, h, pixels } = P.segmentImage(p.asset, p.id, g);
       const fades = segFades(p.asset, p.id, g);
-      const a = await S.assets.put(S.imageAsset({ name: `${p.asset.name} ${g.name}`, w, h, pixels, pal: g.pal || undefined, transparent: -1, source: 'cart-builder', meta: { link, ...(fades ? { fades } : {}) } }));
+      const a = await S.assets.put(S.imageAsset({ name: `${p.asset.name} ${g.name}`, w, h, pixels, pal: g.pal || undefined, transparent: -1, source: 'cart-builder', meta: { link, ...(fades ? { fades } : {}) } })).catch((e) => S.reportStorageError('Segment to Library', e));
+      if (!a) return;
       toast(`${a.name} is in the library (${w}×${h}${fades ? ', with its fades' : ''}). Edit it there, then “← Library” writes it back.`, 'info', 4000);
     } else {
       const row = Array.from(p.asset.parts[p.id].bytes.subarray(g.off, g.off + 16));
-      await S.assets.put(S.paletteAsset({ name: `${p.asset.name} ${g.name}`, colors: row }));
+      if (!(await S.assets.put(S.paletteAsset({ name: `${p.asset.name} ${g.name}`, colors: row })).catch((e) => S.reportStorageError('Segment to Library', e)))) return;
       toast('The palette (row 0) is in the library.');
     }
   }

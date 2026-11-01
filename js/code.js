@@ -1042,11 +1042,11 @@
       name: ed.name, parts: { head: ed.parts.head, tail: ed.parts.tail, crlf: ed.parts.crlf, sections: ed.parts.sections },
       lua: ed.text, savedLua: ed.savedLua, handle: ed.handle, sel: [dom.ta.selectionStart, dom.ta.selectionEnd], top: dom.ta.scrollTop,
       folder: ed.folder, rel: ed.rel, parent: ed.parent,
-    }), 500);
+    }).catch(S.autosaveFailed('Code Editor session')), 500);
   }
 
   async function restoreSession() {
-    const s = await S.kv.get(SESSION_KEY);
+    const s = await S.kv.get(SESSION_KEY).catch(S.autosaveFailed('Code Editor session'));
     if (!s || typeof s.lua !== 'string') { load(`${K.NEW_CART}function _init()\n\nend\n\nfunction _update()\n\nend\n\nfunction _draw()\n cls()\n\nend\n`, 'untitled.p8'); return; }
     ed.parts = { lua: '', ...s.parts };
     ed.name = s.name || 'untitled.p8';

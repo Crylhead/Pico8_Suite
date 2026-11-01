@@ -745,7 +745,8 @@
 
   async function saveToLibrary({ asNew = false } = {}) {
     const old = !asNew && mapAsset();
-    const a = await S.assets.put({ ...currentAsset(), ...(old ? { id: old.id, created: old.created } : {}), name: asNew && old ? `${me.name} copy` : me.name });
+    const a = await S.assets.put({ ...currentAsset(), ...(old ? { id: old.id, created: old.created } : {}), name: asNew && old ? `${me.name} copy` : me.name }).catch((e) => S.reportStorageError('Save Map to Library', e));
+    if (!a) return;
     me.assetId = a.id;
     me.name = a.name;
     me.dirty = false;
@@ -861,11 +862,11 @@
   let saveTimer = 0;
   function scheduleSave() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => S.kv.set(SESSION_KEY, { ...currentAsset(), assetId: me.assetId, dirty: me.dirty }), 600);
+    saveTimer = setTimeout(() => S.kv.set(SESSION_KEY, { ...currentAsset(), assetId: me.assetId, dirty: me.dirty }).catch(S.autosaveFailed('Map Editor session')), 600);
   }
 
   async function restoreSession() {
-    const s = await S.kv.get(SESSION_KEY);
+    const s = await S.kv.get(SESSION_KEY).catch(S.autosaveFailed('Map Editor session'));
     if (!s || !(s.cells instanceof Uint8Array) || s.cells.length !== s.w * s.h) return;
     me.sheet = s.sheet instanceof Uint8Array ? s.sheet : me.sheet;
     me.pal = S.normPal(s.pal);
