@@ -15,6 +15,7 @@ Run from the repository root:
 ```sh
 node tests/regress.js
 python -m py_compile tools/pico8_bridge.py
+node tests/check-static.js
 ```
 
 Check every JavaScript file in PowerShell:
@@ -34,7 +35,9 @@ for file in js/*.js; do
 done
 ```
 
-The committed regression runner currently contains six cases for subrange anchors and include expansion. There is no GitHub Actions workflow yet ([#14](https://github.com/Crylhead/Pico8_Suite/issues/14)). The historical PICO-8/Chrome benchmark suites mentioned in older notes are not included.
+`tests/regress.js` runs its original six cases for subrange anchors and include expansion, then every `tests/*.test.js` file. Add focused regressions for a fix in a `tests/<area>.test.js` file using `t(name, fn)` from `tests/harness.js`; async test functions are supported. `tests/check-static.js` verifies that `index.html` element IDs are unique and its local script/style references exist.
+
+GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs all of the commands above on pull requests and pushes to `main`, using Node.js 24 and Python 3.12 on Ubuntu. It needs no npm install, browser or PICO-8 executable, and writes no project files. The historical PICO-8/Chrome benchmark and runtime-parity suites mentioned in older notes are not included; runtime checks in PICO-8 remain separate, optional evidence reported in PRs.
 
 For a UI change, test its main journey and cancellation/error path in a browser, watching the console. For a byte-layout or decoder change, validate representative exports in PICO-8 when available. If it is unavailable, report that limit; JS round trips alone do not establish runtime parity.
 

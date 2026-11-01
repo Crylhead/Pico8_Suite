@@ -1,9 +1,11 @@
 // Small regression entry point for review findings (P8S-010). Run: node tests/regress.js
+// Focused regressions for later fixes live in tests/*.test.js and are loaded below.
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { t, run } = require('./harness.js');
 const P = require('../js/project-core.js');
 const A = require('../js/audit-core.js');
-let n = 0;
-const t = (name, fn) => { fn(); n++; console.log(`ok - ${name}`); };
 
 // P8S-002: a partial read at sub-offset zero keeps its own length
 t('P8S-002 rewrite keeps partial length at +0x0', () => {
@@ -55,4 +57,6 @@ t('P8S-008 self and indirect cycles still stop', () => {
   A.expandIncludes(fs2, 's.lua', fs2.read('s.lua'), new Set(['s.lua']), w2);
   assert.ok(w2.some((m) => /cycle/.test(m)));
 });
-console.log(`${n} passed`);
+
+for (const f of fs.readdirSync(__dirname).filter((f) => f.endsWith('.test.js')).sort()) require(path.join(__dirname, f));
+run();

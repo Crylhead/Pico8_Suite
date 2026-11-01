@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Versions
+        run: node --version && python --version
+      - name: Regression tests
+        run: node tests/regress.js
+      - name: JavaScript syntax
+        run: |
+          for file in js/*.js; do
+            node --check "$file" || exit 1
+          done
+      - name: Python bridge syntax
+        run: python -m py_compile tools/pico8_bridge.py
+      - name: Static HTML references and IDs
+        run: node tests/check-static.js
