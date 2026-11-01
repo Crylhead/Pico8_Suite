@@ -252,13 +252,15 @@
   async function nibbleToLibrary(which) {
     if (!nib.gray) return;
     const put = (suffix, pixels, h = nib.h) => S.assets.put(S.imageAsset({ name: `${nib.name}_${suffix}`, w: nib.w, h, pixels, source: 'nibble', transparent: -1 }));
-    if (which === 'stacked') {
-      if (nib.h * 2 > S.MAX_IMAGE_SIDE) { showMessage('Nibble Split', 'The stacked image would be too tall for the library.'); return; }
-      await put('nibbles', stacked(), nib.h * 2);
-    } else {
-      await put('hi', nib.hi.slice());
-      await put('lo', nib.lo.slice());
-    }
+    try {
+      if (which === 'stacked') {
+        if (nib.h * 2 > S.MAX_IMAGE_SIDE) { showMessage('Nibble Split', 'The stacked image would be too tall for the library.'); return; }
+        await put('nibbles', stacked(), nib.h * 2);
+      } else {
+        await put('hi', nib.hi.slice());
+        await put('lo', nib.lo.slice());
+      }
+    } catch (e) { S.reportStorageError('Nibble Split', e); return; }
     toast('Saved to the library');
   }
 

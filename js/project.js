@@ -330,7 +330,11 @@
     const files = [...finalTexts].map(([name, text]) => ({ name, text }));
     for await (const [name, h] of pj.demo.entries()) if (h.kind === 'file' && /\.lua$/i.test(name)) files.push({ name, text: await (await h.getFile()).text() });
     const { retire, kept, unresolved } = P.retirement(candidates, files);
+<<<<<<< HEAD
     const unusedDir = inDemo('unused/');
+=======
+    const unusedDir = `${pj.demo === pj.root ? '' : 'demo/'}unused/`;
+>>>>>>> origin/fix/14-ci
     const keptNote = kept.length ? `\n\nStays in place because it is still referenced:\n${kept.map((k) => `${k.cart} (${k.by})`).join('\n')}` : '';
     const unresolvedNote = unresolved.length ? `\n\nReferences that cannot be resolved, so no cart is moved:\n${unresolved.map((u) => `${u.file}:${u.line} ${u.call} (${u.why})`).join('\n')}` : '';
     const ok = await confirmDialog('Write carts', `Writes ${layout.length} data carts (${layout.map((c) => c.name).join(', ')}), rewrites ${rewrites.reduce((s, r) => s + r.changes.length, 0)} reload() lines in ${rewrites.length} fx carts${retire.length ? ` and moves ${retire.length} carts nobody references any more (${retire.join(', ')}) to ${unusedDir}` : ''}.${keptNote}${unresolvedNote}`, 'Write');
@@ -449,8 +453,13 @@
       el('p', { textContent: plan && plan.assets.length ? `The suite found ${plan.assets.length} pieces of data in ${plan.sourceCarts.length} carts (${plan.sourceCarts.join(', ')}), read by ${plan.edits.length} reload() lines. Adopting stores them as assets, marks those lines with --@data anchors and packs new carts. The demo runs the same.` : 'No reload() of a data cart found in demo/.' }),
       plan?.skipped.length ? el('p', { className: 'muted', textContent: `Left as they are: ${plan.skipped.map((s) => `${s.file}:${s.line} (${s.why})`).join('; ')}` }) : null,
       plan?.keptCarts.length ? el('p', { className: 'muted', textContent: `Still read by lines left as they are, so they stay in demo/: ${plan.keptCarts.join(', ')}` }) : null,
+<<<<<<< HEAD
       plan?.assets.length ? el('button', { className: 'btn btn-primary', type: 'button', textContent: 'Adopt', onclick: adoptNow }) : null,
     ].filter(Boolean));
+=======
+    plan?.assets.length ? el('button', { className: 'btn btn-primary', type: 'button', textContent: 'Adopt', onclick: adoptNow }) : null,
+  ].filter(Boolean));
+>>>>>>> origin/fix/14-ci
   }
 
   function anchorsByRef() {
@@ -616,11 +625,12 @@
     if (g.kind === 'img') {
       const { w, h, pixels } = P.segmentImage(p.asset, p.id, g);
       const fades = segFades(p.asset, p.id, g);
-      const a = await S.assets.put(S.imageAsset({ name: `${p.asset.name} ${g.name}`, w, h, pixels, pal: g.pal || undefined, transparent: -1, source: 'cart-builder', meta: { link, ...(fades ? { fades } : {}) } }));
+      const a = await S.assets.put(S.imageAsset({ name: `${p.asset.name} ${g.name}`, w, h, pixels, pal: g.pal || undefined, transparent: -1, source: 'cart-builder', meta: { link, ...(fades ? { fades } : {}) } })).catch((e) => S.reportStorageError('Segment to Library', e));
+      if (!a) return;
       toast(`${a.name} is in the library (${w}×${h}${fades ? ', with its fades' : ''}). Edit it there, then “← Library” writes it back.`, 'info', 4000);
     } else {
       const row = Array.from(p.asset.parts[p.id].bytes.subarray(g.off, g.off + 16));
-      await S.assets.put(S.paletteAsset({ name: `${p.asset.name} ${g.name}`, colors: row }));
+      if (!(await S.assets.put(S.paletteAsset({ name: `${p.asset.name} ${g.name}`, colors: row })).catch((e) => S.reportStorageError('Segment to Library', e)))) return;
       toast('The palette (row 0) is in the library.');
     }
   }
@@ -731,4 +741,3 @@
   bind();
   render();
 })();
-
