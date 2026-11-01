@@ -94,7 +94,7 @@
     brush: { r: 0.06, power: 0.55, rim: 0.55, preserve: false },
     text: { text: 'PICO-8', font: 'pixel', weight: 700, italic: false, size: 0.5, depth: 0.5, bevel: 0.25, angle: 0, mode: 'add', weathered: false },
     image: { bmp: null, name: '', size: 0.4, depth: 0.5, bevel: 0.15, angle: 0, mode: 'add', use: 'auto', srcData: null, weathered: false },
-    pico: { colors: 'auto16', dither: 'ordered', strength: 0.5, palColors: null, palFades: null, palName: '', shade: 'lit', depth: 0.8, lift: 0.4 },
+    pico: { ...T.scene.PICO_DEFAULTS }, // see P8Terrain.scene: also the `pico` recipe of scene files
     previewRes: 256,
   };
   let undoStack = [], redoStack = [];
@@ -209,24 +209,17 @@
    * The palette the PICO-8 view uses: {pal (PICO-8 colors, slot order), fades, from, note}.
    *   auto*: the best N of the 32 colors for this terrain; std: the standard 16;
    *   src:<id>: what Palette & Fades / Pixel Studio have open right now (live, see Suite.registerPaletteSource);
-   *   library / libimg: a library palette, or the palette (and fades) of a library image.
+   *   library / libimg: a library palette, or the palette (and fades) of a library image;
+   *   frozen: a saved snapshot (scene files keep live palettes this way), never read from other tools.
    * Fade tables come with the palette when it has them, else from Palette & Fades (by slot number).
    */
+  const paletteSources = { get: (id) => S.paletteSource(id), label: (id) => S.paletteSources().find((x) => x.id === id)?.label || id };
+  const fixedPalette = () => T.scene.resolveFixed(st.pico, paletteSources);
   function picoPalette(r, rgb) {
     const pm = st.pico.colors;
-    let pal = null, fades = null, from = '', note = '';
-    if (pm === 'std') { pal = [...Array(16).keys()]; from = 'Standard 16'; }
-    else if (pm.startsWith('src:')) {
-      const s = S.paletteSource(pm.slice(4)), label = S.paletteSources().find((x) => x.id === pm.slice(4))?.label || pm.slice(4);
-      if (s) { pal = s.pal.slice(); fades = s.fades; from = `${label}: ${s.name}`; } else { pal = [...Array(16).keys()]; note = `${label} has nothing open: using the standard 16.`; from = 'Standard 16'; }
-    } else if ((pm === 'library' || pm === 'libimg') && st.pico.palColors) { pal = st.pico.palColors.slice(); fades = pm === 'libimg' ? st.pico.palFades : null; from = st.pico.palName || 'Library'; }
-    if (pal) {
-      if (!fades?.dark && !fades?.bright) {
-        const pf = S.paletteSource('palette');
-        if (pf?.fades) { fades = pf.fades; if (pm !== 'src:palette') note ||= 'Fade tables from Palette & Fades, used by slot number.'; }
-      }
-      return { pal, fades, from, note, auto: false };
-    }
+    const fixed = fixedPalette();
+    if (fixed) return { ...fixed, auto: false };
+    let pal;
     const count = Number(pm.replace('auto', '')) || 16;
     // choosing colors is the slow part: only for final renders, previews reuse the last choice
     if (r.preview && lastPicoPal && lastPicoPal.count === count) pal = lastPicoPal.pal;
@@ -410,14 +403,15 @@
   // edits (stamps, passes, import) are undoable; actions that also set the sliders (presets, scene
   // files, reset) store the parameters too, so undo brings those back as well. Snapshots keep the
   // imports, import source and stamp bitmaps they use (see P8Terrain.history).
-  const snapshot = (withParams = false) => T.history.snapshot(st, withParams);
-  function pushUndo(withParams = false) { undoStack.push(snapshot(withParams)); redoStack = []; T.history.trim(undoStack, redoStack); renderUndo(); }
+  const snapshot = (withParams = false, withPico = false) => T.history.snapshot(st, withParams, withPico);
+  function pushUndo(withParams = false, withPico = false) { undoStack.push(snapshot(withParams, withPico)); redoStack = []; T.history.trim(undoStack, redoStack); renderUndo(); }
   function restore(s) {
     const c = T.history.restore(st, s);
     if (c.bitmaps || c.imports) assetsChanged(c.bitmaps && c.imports ? 'both' : c.bitmaps ? 'bitmaps' : 'imports');
+    if (c.pico) { lastPicoPal = null; syncPicoUi(); }
   }
-  function undo() { if (!undoStack.length) return; const s = undoStack.pop(); redoStack.push(snapshot(!!s.params)); restore(s); afterHistory(); setAction(`Undo (${undoStack.length} more)`); }
-  function redo() { if (!redoStack.length) return; const s = redoStack.pop(); undoStack.push(snapshot(!!s.params)); restore(s); afterHistory(); setAction(`Redo (${redoStack.length} more)`); }
+  function undo() { if (!undoStack.length) return; const s = undoStack.pop(); redoStack.push(snapshot(!!s.params, !!s.pico)); restore(s); afterHistory(); setAction(`Undo (${undoStack.length} more)`); }
+  function redo() { if (!redoStack.length) return; const s = redoStack.pop(); undoStack.push(snapshot(!!s.params, !!s.pico)); restore(s); afterHistory(); setAction(`Redo (${redoStack.length} more)`); }
   function afterHistory() { clearTimeout(ui.retileTimer); syncControls(); renderOps(); renderPasses(); renderUndo(); syncImportUi(); changed(); }
 
   // ------------------------------------------------------------------ fonts
@@ -747,7 +741,9 @@
       imp = { id: st.params.importId, size: im.size, data: b64(new Uint8Array(u16.buffer)), name: st.importSrc?.name || '' };
     }
     const range = finalResult && finalRev === rev ? { min: finalResult.low, max: finalResult.high } : null;
-    return JSON.stringify({ format: 'terrain-lab-scene', version: 3, params: st.params, stamps: st.stamps, passes: st.passes, bitmaps, import: imp, picoHeightRange: range }, null, 1);
+    // v4: + pico, the PICO-8 output recipe (live palettes and borrowed fades saved as a snapshot)
+    const pico = T.scene.encodePico(st.pico, fixedPalette());
+    return JSON.stringify({ format: 'terrain-lab-scene', version: T.scene.VERSION, params: st.params, stamps: st.stamps, passes: st.passes, bitmaps, import: imp, picoHeightRange: range, pico }, null, 1);
   }
   function loadScene(s) {
     if (s.format !== 'terrain-lab-scene' || !s.params || !Array.isArray(s.stamps)) throw new Error('Not a Terrain Lab scene.');
@@ -771,8 +767,10 @@
     const old = { erosion: Number(s.params.erosion) || 0, droplets: Number(s.params.droplets) || 0, wind: 0, windDirection: 35, windSteps: 0, thermal: Number(s.params.thermal) || 0 };
     const incoming = Array.isArray(s.passes) ? s.passes : old.erosion || old.thermal ? [old] : [];
     const passes = incoming.slice(0, 6).map((a) => { const q = { id: nextId() }; for (const k of EROSION_KEYS) q[k] = Number.isFinite(Number(a[k])) ? Number(a[k]) : 0; return q; });
-    pushUndo(true);
-    Object.assign(st, { params: p, stamps, passes, bitmaps, imports, strokeStarts: [], preset: 'custom', importSrc: null });
+    pushUndo(true, true);
+    // the scene's own output recipe, or the defaults for older scenes: never the current settings
+    Object.assign(st, { params: p, stamps, passes, bitmaps, imports, strokeStarts: [], preset: 'custom', importSrc: null, pico: T.scene.decodePico(s) });
+    lastPicoPal = null; syncPicoUi();
     for (const k of EROSION_KEYS) if (s.params[k] !== undefined) st.erosionDraft[k] = Number(s.params[k]);
     assetsChanged();
     syncControls(); renderOps(); renderPasses(); syncImportUi(); changed({ finalDelay: 0 });
@@ -983,13 +981,20 @@
         const a = await S.pickAsset({ title: 'Image whose palette (and fades) the PICO-8 map uses' });
         if (!a) return false;
         Object.assign(st.pico, { palColors: S.normPal(a.pal), palFades: a.meta?.fades ? { dark: a.meta.fades.dark || null, bright: a.meta.fades.bright || null } : null, palName: a.name });
+      } else if (v === 'frozen') {
+        // keep what the map uses now: later changes in other tools no longer reach it
+        const fx = fixedPalette(), o = !fx && shown ? pico8() : null;
+        if (!fx && !o) { toast('Nothing to freeze yet: wait for the preview.'); return false; }
+        Object.assign(st.pico, { palColors: (fx ? fx.pal : o.pal).slice(), palFades: T.scene.cleanFades(fx ? fx.fades : null), palName: fx ? fx.from : o.from, link: st.pico.colors.startsWith('src:') ? st.pico.colors : null });
       }
       return true;
     };
     ui.picoColors = select('Colors', [['auto16', 'Best 16 of 32'], ['auto12', 'Best 12 of 32'], ['auto8', 'Best 8 of 32'], ['auto4', 'Best 4 of 32'], ['std', 'Standard 16'],
-      ...S.paletteSources().map((s) => [`src:${s.id}`, `${s.label} (live)`]), ['library', 'Library palette…'], ['libimg', 'Library image palette…']], st.pico.colors, async (v) => {
+      ...S.paletteSources().map((s) => [`src:${s.id}`, `${s.label} (live)`]), ['library', 'Library palette…'], ['libimg', 'Library image palette…'],
+      ['frozen', 'Saved snapshot (frozen)']], st.pico.colors, async (v) => {
       if (!(await pickLibPalette(v))) { ui.picoColors.set(st.pico.colors); return; }
-      st.pico.colors = v; lastPicoPal = null; refreshPico(); persistSoon();
+      st.pico.colors = v; if (v !== 'frozen') st.pico.link = null;
+      lastPicoPal = null; refreshPico(); persistSoon();
       if (shown) setAction(`PICO-8 colors: ${pico8().from}`);
     });
     ui.picoShade = select('Shading', [['lit', 'Lit colors (nearest)'], ['fades', 'Fade tables (color × light)']], st.pico.shade, (v) => { st.pico.shade = v; renderPicoOptions(); refreshPico(); persistSoon(); });
@@ -1157,6 +1162,13 @@
     const fadeInfo = o.fades ? ` · fades: ${[o.fades.dark && 'dark', o.fades.bright && 'bright'].filter(Boolean).join(' + ')}` : '';
     ui.picoNote.textContent = `${o.from}${fadeInfo}${o.note ? ` · ${o.note}` : ''}`;
   }
+  /** every PICO-8 output control from st.pico (session restore, scene load, undo) */
+  function syncPicoUi() {
+    if (!ui.picoColors) return;
+    ui.picoColors.set(st.pico.colors); ui.picoShade.set(st.pico.shade); ui.picoDepth.set(st.pico.depth); ui.picoLift.set(st.pico.lift);
+    ui.dither.set(st.pico.dither); ui.ditherAmt.set(st.pico.strength);
+    renderPicoOptions(); refreshPico();
+  }
   function renderPicoOptions() {
     if (!ui.picoShade) return;
     const fades = st.pico.shade === 'fades';
@@ -1207,8 +1219,8 @@
         id: 'terrain-palette', label: 'Terrain Lab PICO-8 colors', kinds: ['palette', 'image'],
         open: (a) => {
           helpers.show();
-          if (a.kind === 'palette') Object.assign(st.pico, { colors: 'library', palColors: a.colors.map((c, i) => (c == null ? i : c)), palFades: null, palName: a.name });
-          else Object.assign(st.pico, { colors: 'libimg', palColors: S.normPal(a.pal), palFades: a.meta?.fades ? { dark: a.meta.fades.dark || null, bright: a.meta.fades.bright || null } : null, palName: a.name });
+          if (a.kind === 'palette') Object.assign(st.pico, { colors: 'library', palColors: a.colors.map((c, i) => (c == null ? i : c)), palFades: null, palName: a.name, link: null });
+          else Object.assign(st.pico, { colors: 'libimg', palColors: S.normPal(a.pal), palFades: a.meta?.fades ? { dark: a.meta.fades.dark || null, bright: a.meta.fades.bright || null } : null, palName: a.name, link: null });
           ui.picoColors.set(st.pico.colors); st.view = 'pico'; ui.view.set('pico'); if (shown) refreshPico(); persistSoon();
           setAction(`PICO-8 colors from ${a.name}`);
         },
@@ -1216,7 +1228,7 @@
       // the first render waits for the saved scene (IndexedDB), and only runs once the tab is open
       let loaded = false, started = false;
       const start = () => { if (started || !loaded) return; started = true; changed(); };
-      S.kv.get(KV).then((d) => { if (!restoreSaved(d)) { setSimpleWeathering(); renderPasses(); } else { syncControls(); renderToolOptions(); renderOps(); renderPasses(); syncImportUi(); applyMode(); ui.view.set(st.view); ui.tile.set(st.tile); ui.picoColors.set(st.pico.colors); ui.picoShade.set(st.pico.shade); ui.picoDepth.set(st.pico.depth); ui.picoLift.set(st.pico.lift); renderPicoOptions(); ui.dither.set(st.pico.dither); ui.ditherAmt.set(st.pico.strength); ui.bitmapControls(); } }).catch(() => {}).finally(() => { loaded = true; if (helpers.isActive()) start(); });
+      S.kv.get(KV).then((d) => { if (!restoreSaved(d)) { setSimpleWeathering(); renderPasses(); } else { syncControls(); renderToolOptions(); renderOps(); renderPasses(); syncImportUi(); applyMode(); ui.view.set(st.view); ui.tile.set(st.tile); syncPicoUi(); ui.bitmapControls(); } }).catch(() => {}).finally(() => { loaded = true; if (helpers.isActive()) start(); });
       return {
         panel,
         // palettes from other tools are read live: refresh them whenever the tab is shown again
