@@ -49,9 +49,41 @@ const P8Project = (() => {
   // Anchors                                                            //
   // ------------------------------------------------------------------ //
 
-  // --@data asset.part[+offset]   one part
+  // --@data asset.part[+offset]   one part (offset: decimal or 0x hex, 0..0xffff)
   // --@data asset[]               a cart set: reload(dest,src,len,list[i]) over the carts in `list`
-  const ANCHOR = /--@data\s+(?:([A-Za-z_]\w*)\[\]|([A-Za-z_]\w*\.[A-Za-z_]\w*)(?:\s*\+\s*(0x[\da-f]+|\d+))?)/i;
+  // The payload ends the line: only whitespace, or whitespace and a `--` comment, may follow.
+  const MARKER = /--@data(?![A-Za-z0-9_])/i;
+
+  /**
+   * The --@data anchor of one line -> null (no marker) | {set, ref, sub, ranged, error}.
+   * The whole payload is checked: anything else after a marker is an `error` (with set / ref
+   * when the name could still be read), never a shorter anchor.
+   */
+  function parseAnchor(line) {
+    const m = MARKER.exec(line);
+    if (!m) return null;
+    const rest = line.slice(m.index + m[0].length);
+    const a = { set: null, ref: null, sub: 0, ranged: false, error: null };
+    const bad = (error) => ({ ...a, error });
+    const name = /^\s+([A-Za-z_]\w*)(?:(\[\])|\.([A-Za-z_]\w*))?/.exec(rest);
+    if (!name || (!name[2] && !name[3])) return bad(`--@data needs asset.part or asset[] after it, not “${rest.trim() || 'nothing'}”`);
+    if (name[2]) a.set = name[1]; else a.ref = `${name[1]}.${name[3]}`;
+    let tail = rest.slice(name[0].length);
+    const plus = /^\s*\+\s*/.exec(tail);
+    if (plus) {
+      const off = /^\S*/.exec(tail.slice(plus[0].length))[0];
+      tail = tail.slice(plus[0].length + off.length);
+      a.ranged = true;
+      if (a.set) return bad(`the cart set anchor ${a.set}[] takes no +offset`);
+      if (!off) return bad(`--@data ${a.ref}+ has no offset after the +`);
+      if (!/^(?:0x[\da-f]+|\d+)$/i.test(off)) return bad(`the offset “+${off}” of --@data ${a.ref} is not a decimal or 0x hex number`);
+      a.sub = C.parseNum(off);
+      if (a.sub > 0xffff) return bad(`the offset +${off} of --@data ${a.ref} does not fit in 16 bits`);
+    }
+    if (!/^(?:\s*$|\s+--)/.test(tail)) return bad(`unexpected “${tail.trim()}” after --@data ${a.set ? `${a.set}[]` : a.ref}; only whitespace or a “ -- comment” may follow an anchor`);
+    if (MARKER.test(tail)) return bad('more than one --@data anchor on the line');
+    return a;
+  }
 
   /** reload() call on a line -> {start, end, args} (start/end index the line) */
   function reloadCall(line) {
@@ -61,14 +93,13 @@ const P8Project = (() => {
     return a ? { start: m.index, end: a.end + 1, args: a.args } : null;
   }
 
-  /** anchors in one cart's text -> [{line (0-based), ref | set, sub, call, lz}] */
+  /** anchors in one cart's text -> [{line (0-based), ref | set, sub, ranged, error, call, lz}]; error = malformed anchor */
   function findAnchors(text) {
     const out = [];
     text.split('\n').forEach((line, i) => {
-      const am = ANCHOR.exec(line);
-      if (!am) return;
-      const call = reloadCall(line);
-      out.push({ line: i, set: am[1] || null, ref: am[2] || null, sub: am[3] ? C.parseNum(am[3]) : 0, ranged: !!am[3], call, lz: /\bunlz\s*\(/.test(line), text: line.trim() });
+      const a = parseAnchor(line);
+      if (!a) return;
+      out.push({ line: i, ...a, call: reloadCall(line), lz: /\bunlz\s*\(/.test(line), text: line.trim() });
     });
     return out;
   }
@@ -98,6 +129,7 @@ const P8Project = (() => {
     const lists = [];
     for (const a of findAnchors(text)) {
       const id = a.set ? `${a.set}[]` : a.ref;
+      if (a.error) { errors.push({ line: a.line + 1, ref: id || '--@data', msg: a.error }); continue; }
       const problem = anchorCallProblem(a);
       if (problem) { errors.push({ line: a.line + 1, ref: id, msg: problem }); continue; }
       let call;
@@ -301,18 +333,27 @@ const P8Project = (() => {
    * Music carts, tracks, computed names and reads whose source/length is not literal integer
    * arithmetic inside the data area stay as they are (reported in `skipped`). Carts such a call
    * still reads (or, for an unresolvable name, every source cart) are `keptCarts`, never `adoptedCarts`.
+   * A line that already has an anchor is left alone; a malformed one is also reported in `skipped`.
    * -> {project, assets, edits: [{file, line, before, after}], skipped, sourceCarts, adoptedCarts, keptCarts}
    */
   function adopt(carts, { prefix = 'd' } = {}) {
     const ranges = new Map(); // cart -> [{src, len, uses: [{file, line, text}]}]
     const sets = [];          // [{fx, list, carts, src, len, line, text}]
     const skipped = [];       // [{file, line, why, carts?}]: left unchanged; `carts` stay in place
+    // the carts a cart-name expression may read; null = cannot tell which
+    const mayRead = (expr, text) => {
+      const target = C.reloadTarget(expr, text);
+      return target ? [...carts.values()].filter((c) => target.match(c.name)).map((c) => c.name) : null;
+    };
     for (const fx of carts.values()) {
       if (!fx.text) continue;
       const lines = fx.text.split('\n');
       lines.forEach((line, i) => {
-        if (ANCHOR.test(line)) return;
+        const anchor = parseAnchor(line);
+        if (anchor && !anchor.error) return;
         const call = reloadCall(line);
+        // a malformed anchor is never anchored a second time; what its call reads stays in place
+        if (anchor) { skipped.push({ file: fx.name, line: i + 1, why: `${anchor.error} (left as it is)`, carts: call && call.args.length >= 4 ? mayRead(call.args[3], fx.text) : [] }); return; }
         if (!call || call.args.length < 4) return;
         const range = constRange(call.args[1], call.args[2]);
         const cartName = literalCart(call.args[3]);
@@ -320,9 +361,8 @@ const P8Project = (() => {
           const ll = listLiteral(fx.text, call.args[3]);
           const okList = ll && ll.carts.length && ll.carts.every((c) => carts.has(c.toLowerCase()) && !isMusic(c) && !isTracks(c));
           if (okList && !range.why) { sets.push({ fx: fx.name, list: ll.name, carts: ll.carts, src: range.src, len: range.len, line: i, text: line }); return; }
-          // the carts this call may read stay where they are; null = cannot tell which
-          const target = C.reloadTarget(call.args[3], fx.text);
-          const may = target ? [...carts.values()].filter((c) => target.match(c.name)).map((c) => c.name) : null;
+          // the carts this call may read stay where they are
+          const may = mayRead(call.args[3], fx.text);
           const why = !ll ? `cart name ${call.args[3]} is computed` : !okList ? 'cart list with music, tracks or missing carts' : range.why;
           skipped.push({ file: fx.name, line: i + 1, why: `${why} (left as it is)`, carts: may });
           return;
@@ -543,6 +583,11 @@ const P8Project = (() => {
       for (const a of findAnchors(f.text)) {
         anchors.push({ file: f.name, ...a, line: a.line + 1 });
         const at = `${f.name}:${a.line + 1}`;
+        if (a.error) {
+          errors.push(`${at} ${a.error}`);
+          for (const p of parts) if (p.ref === a.ref || (a.set && p.set === a.set)) used.add(p.ref);
+          continue;
+        }
         const problem = anchorCallProblem(a);
         if (problem) errors.push(`${at} ${problem}`);
         if (a.set) {

@@ -58,7 +58,18 @@ A bare `--@data asset.part` follows the whole stored part, including its length.
 
 The decoder expects a complete LZ stream. For an LZ-packed part, a ranged anchor is accepted only if it is `+0` with exactly the stored (packed) length; any other range is rejected before writing. Use a bare anchor instead, which follows the packed length. The LZ checkbox stays off while any anchor reads the part as a range.
 
-Write Carts rewrites the source address, stored length and cart name, leaving the destination expression unchanged. The builder owns those three arguments, so an anchored line must use a literal source, length and (for a single part) a literal cart name. A computed one is reported and nothing is written, rather than being replaced by a fixed value. Anchors are comments and add no Lua tokens. Current validation checks missing refs, computed anchored arguments, unused-part warnings, raw/LZ call consistency and cart-set offsets; it is not a complete static verifier of arbitrary Lua. The anchor parser currently accepts some invalid suffix prefixes (for example `+frame` or `+-1` can become a bare ref); [#34](https://github.com/Crylhead/Pico8_Suite/issues/34) tracks strict whole-payload validation.
+Write Carts rewrites the source address, stored length and cart name, leaving the destination expression unchanged. The builder owns those three arguments, so an anchored line must use a literal source, length and (for a single part) a literal cart name. A computed one is reported and nothing is written, rather than being replaced by a fixed value. Anchors are comments and add no Lua tokens. Current validation checks the anchor syntax, missing refs, computed anchored arguments, unused-part warnings, raw/LZ call consistency and cart-set offsets; it is not a complete static verifier of arbitrary Lua.
+
+**Anchor syntax.** A line is anchored when it contains the marker `--@data` anywhere (not followed by a letter, digit or `_`). The whole payload after the marker is parsed:
+
+```
+--@data <asset>.<part>                  whole part
+--@data <asset>.<part> + <offset>       subrange; spaces around + are optional
+--@data <asset>[]                       cart set (no offset)
+<offset> = decimal digits or 0x hex digits, 0..0xffff
+```
+
+After the payload only whitespace may follow, or whitespace and then `--` with free text (`--@data bg.img -- title picture`). Anything else makes the anchor malformed: for example `+-1`, `+frame`, `+0x10*2`, `+0x`, `+0xg`, `+` without an offset, an offset over 0xffff, `x.bin--note` (no space), `x.bin junk`, an offset on a cart set, a payload that is not `asset.part`/`asset[]` (or nothing), and a second `--@data` on the line. A malformed anchor is never read as a shorter one: Write Carts and the check list it with its file and line, the line is left unchanged and nothing is written. Adopt does not add a second anchor to such a line; it lists it under **Left as they are** and keeps the cart that line reads in place.
 
 ### Cart sets
 
