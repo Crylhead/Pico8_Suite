@@ -105,3 +105,26 @@ The [Tile Maker reconstruction plan](https://github.com/Crylhead/Demotools/blob/
 
 For a later review, create a new dated report with its own full source SHA. Record each resolution's fix commit and validation separately; preserve this snapshot's provenance.
 
+
+## Fix provenance
+
+Added after the review; the findings above still describe the reviewed commit only. Every fix below is an **open pull request** at the time of writing. Each PR records its own validation and limitations, and gets its merge commit when merged. An issue counts as resolved only when its PRs are merged and its acceptance criteria are met.
+
+| Issue | Pull request(s) | Base / order |
+|---|---|---|
+| #14 CI | #15 | `main` |
+| #1 conservative evaluation | #16 | #15 |
+| #7 raw/LZ anchor ranges | #18 | #16 |
+| #2 reference-safe retirement | #21 | #18 |
+| #3 recoverable writes | #25 | #21 |
+| #4 external edits | #26 (Cart Builder), #28 (Code Editor) | #25; #15 |
+| #5 durable storage | #27 | #15 |
+| #6 save revisions | #28 (grouped with the Code Editor part of #4) | #15 |
+| #9 Terrain undo resources | #19 | #15 |
+| #8 Terrain scene recipe | #22 | #19 |
+| #10 Studio history memory | #20 | #15 |
+| #11 Lua lexical analysis | #17 | #15 |
+| #12 Data Carts reads | #24 | #17 |
+| #13 bridge authentication | #23 | #15 |
+
+These branches were also merged together into one scratch tree. All merged without conflicts, and `node tests/regress.js` (43 cases), the syntax checks, `check-static`, the bridge unit tests and the Cart Builder browser journeys (with an in-memory folder fake) all passed. None of these fixes has been validated in PICO-8, on Windows, or with a real Chrome folder or save picker.
