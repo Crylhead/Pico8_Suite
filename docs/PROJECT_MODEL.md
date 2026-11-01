@@ -21,7 +21,7 @@ Opening a folder reads its files. **Adopt writes immediately:** it adds anchors 
 
 Adoption recognizes literal cart names and supported literal cart lists. Music/track carts and unsupported computed references are left outside conversion and reported where detected.
 
-Source and length must be literal integer arithmetic (numbers, parentheses, `+ - * / \ % & | ^^ << >> >>>`) that stays an integer in PICO-8's 16-bit range, and the read must lie inside the 0x4300-byte data area. Any name, call, fraction or overflow, such as `frame*0x200`, leaves the line unchanged with the reason listed under **Left as they are**. A cart that such a line still reads stays in `demo/` and is not recorded as adopted. If a computed cart name cannot be traced to specific carts, no source cart is recorded as adopted. The preview evaluator used for palette/segment guesses is separate and still treats unknown names as 0. Remaining-reference checks, baseline conflicts and journaled writes have been implemented. Their outstanding edge cases are [#31](https://github.com/Crylhead/Pico8_Suite/issues/31), [#32](https://github.com/Crylhead/Pico8_Suite/issues/32) and [#33](https://github.com/Crylhead/Pico8_Suite/issues/33).
+Source and length must be literal integer arithmetic (numbers, parentheses, `+ - * / \ % & | ^^ << >> >>>`) that stays an integer in PICO-8's 16-bit range, and the read must lie inside the 0x4300-byte data area. Any name, call, fraction or overflow, such as `frame*0x200`, leaves the line unchanged with the reason listed under **Left as they are**. A cart that such a line still reads stays in `demo/` and is not recorded as adopted. If a computed cart name cannot be traced to specific carts, no source cart is recorded as adopted. The preview evaluator used for palette/segment guesses is separate and still treats unknown names as 0. Remaining-reference checks, baseline conflicts and journaled writes have been implemented. Their limits are described under *Retiring old carts* and *Recoverable writes* below.
 
 ## Assets and bytes
 
@@ -58,7 +58,18 @@ A bare `--@data asset.part` follows the whole stored part, including its length.
 
 The decoder expects a complete LZ stream. For an LZ-packed part, a ranged anchor is accepted only if it is `+0` with exactly the stored (packed) length; any other range is rejected before writing. Use a bare anchor instead, which follows the packed length. The LZ checkbox stays off while any anchor reads the part as a range.
 
-Write Carts rewrites the source address, stored length and cart name, leaving the destination expression unchanged. The builder owns those three arguments, so an anchored line must use a literal source, length and (for a single part) a literal cart name. A computed one is reported and nothing is written, rather than being replaced by a fixed value. Anchors are comments and add no Lua tokens. Current validation checks missing refs, computed anchored arguments, unused-part warnings, raw/LZ call consistency and cart-set offsets; it is not a complete static verifier of arbitrary Lua. The anchor parser currently accepts some invalid suffix prefixes (for example `+frame` or `+-1` can become a bare ref); [#34](https://github.com/Crylhead/Pico8_Suite/issues/34) tracks strict whole-payload validation.
+Write Carts rewrites the source address, stored length and cart name, leaving the destination expression unchanged. The builder owns those three arguments, so an anchored line must use a literal source, length and (for a single part) a literal cart name. A computed one is reported and nothing is written, rather than being replaced by a fixed value. Anchors are comments and add no Lua tokens. Current validation checks the anchor syntax, missing refs, computed anchored arguments, unused-part warnings, raw/LZ call consistency and cart-set offsets; it is not a complete static verifier of arbitrary Lua.
+
+**Anchor syntax.** A line is anchored when it contains the marker `--@data` anywhere (not followed by a letter, digit or `_`). The whole payload after the marker is parsed:
+
+```
+--@data <asset>.<part>                  whole part
+--@data <asset>.<part> + <offset>       subrange; spaces around + are optional
+--@data <asset>[]                       cart set (no offset)
+<offset> = decimal digits or 0x hex digits, 0..0xffff
+```
+
+After the payload only whitespace may follow, or whitespace and then `--` with free text (`--@data bg.img -- title picture`). Anything else makes the anchor malformed: for example `+-1`, `+frame`, `+0x10*2`, `+0x`, `+0xg`, `+` without an offset, an offset over 0xffff, `x.bin--note` (no space), `x.bin junk`, an offset on a cart set, a payload that is not `asset.part`/`asset[]` (or nothing), and a second `--@data` on the line. A malformed anchor is never read as a shorter one: Write Carts and the check list it with its file and line, the line is left unchanged and nothing is written. Adopt does not add a second anchor to such a line; it lists it under **Left as they are** and keeps the cart that line reads in place.
 
 ### Cart sets
 
@@ -88,13 +99,15 @@ The builder rewrites the literal list and reload source/length. Auto-pack places
 
 Retirement candidates are carts the project wrote before, or adopted, that the new layout no longer uses. A candidate moves to `unused/` only if the **final** sources no longer reference it. The final sources are every demo cart after its anchor rewrite, the new data carts and top-level `.lua` files. A candidate that stays is scanned as a source too, so carts it references also stay.
 
-- References counted are the cart argument of `reload()` and `cstore()` (4th) and `load()` (1st), plus `#include` lines. The scan ignores comments, and calls may span lines. `run()` takes a parameter string, not a cart, so it is not counted. A name without an extension also matches `<name>.p8`.
+- References counted are the cart argument of `reload()` and `cstore()` (4th) and `load()` (1st), plus `#include` lines. The Lua is read with the shared lexer (the Code Editor's, also used by Project Audit), so comments, string contents and `#include` text inside strings or comments of any long-bracket level are not references, and calls may span lines. `run()` takes a parameter string, not a cart, so it is not counted. A name without an extension also matches `<name>.p8`.
+- Lua's call forms with a single string argument count like the parenthesized call: `load"old.p8"`, `load'old.p8'`, `load [[old.p8]]` and `load[==[old.p8]==]` keep `old.p8` as `load("old.p8")` does (and `load"old"` keeps `old.p8`). A long-bracket literal inside parentheses, `load([[old.p8]])`, is read as a literal too. `reload"x"`, `cstore{…}` and the like pass one argument, so they name no other cart.
+- Member calls (`obj.load"x"`, `obj:load("x")`) and definitions (`function load(…)`, `local load=…`, `load=…`) are not the PICO-8 function and are not counted.
 - Names are resolved as in adoption: literals, a variable assigned once to a literal, `"m"..i..".p8"` patterns and `list[i]` with a literal list.
-- A reference that cannot be resolved keeps **every** candidate in place. This covers a computed name, a variable assigned more than once, and an `#include` that is neither a demo cart nor a top-level `.lua` file.
+- A reference that cannot be resolved keeps **every** candidate in place and is listed. This covers a computed name, a variable assigned more than once, a string with escapes, `load{…}` (a table instead of a name), any other use of `load`, `reload` or `cstore` that is not a call (`local f=load`, `pcall(load,"x.p8")`: the cart it is later called with cannot be traced), and an `#include` that is neither a demo cart nor a top-level `.lua` file.
 - The Write confirmation lists the carts that will move, the carts that stay with the line that references them, and any unresolved references.
 - Carts that stay are no longer owned by the project afterwards. Their names are reserved, and later writes never overwrite or retire them.
 
-Partial adoption does not grant permission to retire a cart: a source cart is retired only when this check passes at write time. Current limitation: the scan misses valid string-call forms such as `load"old.p8"`; [#33](https://github.com/Crylhead/Pico8_Suite/issues/33) tracks that unsafe retirement case.
+Partial adoption does not grant permission to retire a cart: a source cart is retired only when this check passes at write time. The scan is lexical, not a Lua evaluator: a local or field that shadows `load` is still treated as the PICO-8 function (which keeps carts, never retires them), and names built at run time beyond the patterns above are unresolved.
 
 ### Recoverable writes
 

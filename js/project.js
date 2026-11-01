@@ -458,6 +458,7 @@
     const add = (ref, v) => { if (!m.has(ref)) m.set(ref, []); m.get(ref).push(v); };
     for (const f of anchorFiles()) {
       for (const a of P.findAnchors(f.text)) {
+        if (!a.set && !a.ref) continue; // malformed beyond its name: reported by the check
         if (a.set) { for (const p of pj.parts) if (p.set === a.set) add(p.ref, { file: f.name, line: a.line + 1, lz: false, set: true }); } else add(a.ref, { file: f.name, line: a.line + 1, lz: a.lz, ranged: a.ranged });
       }
     }
