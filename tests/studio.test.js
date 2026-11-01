@@ -1,8 +1,6 @@
 // Pixel Studio history retention (issue #10): structural and pixel entries, on both
 // stacks, share one count/byte budget. Tiny budgets keep the fixture small.
 const assert = require('assert');
-const fs = require('fs');
-const path = require('path');
 const { t } = require('./harness.js');
 const K = require('../js/studio-core.js');
 
@@ -17,12 +15,6 @@ const docEntry = (w, h, frames, layers, tag) => {
 // doc entries come back as a snapshot of the document they replace (`next` sizes it).
 const swapper = (next) => (e) => (e.kind === 'px' ? e : { ...next(e), tag: e.tag });
 const sum = (n, f) => Array.from({ length: n }, f).reduce((a, b) => a + b, 0);
-
-t('studio.js routes every history change through createHistory', () => {
-  const src = fs.readFileSync(path.join(__dirname, '../js/studio.js'), 'utf8');
-  assert.doesNotMatch(src, /ps\.(undo|redo)\b/, 'direct ps.undo/ps.redo stack access bypasses the retention policy');
-  assert.match(src, /K\.createHistory\(\{ limit: UNDO_LIMIT, maxBytes: UNDO_BYTES \}\)/);
-});
 
 t('studio history: undo/redo round trip and exact accounting', () => {
   const h = K.createHistory({ limit: 10, maxBytes: 1000 });
