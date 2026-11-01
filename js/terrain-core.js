@@ -717,6 +717,69 @@ function P8TerrainEngine() {
   };
 }
 
+/**
+ * Undo / redo snapshots for the Terrain Lab UI (DOM-free, not part of the worker engine).
+ * A snapshot keeps references to every resource it needs: the imports map, the import source
+ * (grey pixels + seam settings) and the bitmaps its stamps use. These objects are treated as
+ * immutable by terrain.js (retile / seam changes / scene loads build new ones), so sharing them
+ * costs no copies, and pruning or replacing the live stores never breaks an older snapshot.
+ * Retained memory is bounded by trim(): oldest entries go first once the budget is exceeded.
+ */
+const P8TerrainHistory = (() => {
+  const MAX_ENTRIES = 100;
+  const BUDGET_BYTES = 256 * 1024 * 1024;
+
+  /** the bitmaps the stamps reference, as {id: bitmap} (shared references) */
+  function bitmapRefs(stamps, bitmaps) {
+    const out = {};
+    for (const s of stamps) if (s.bmp && bitmaps[s.bmp]) out[s.bmp] = bitmaps[s.bmp];
+    return out;
+  }
+  function snapshot(st, withParams = false) {
+    return {
+      stamps: st.stamps.slice(), passes: st.passes.map((p) => ({ ...p })), strokeStarts: st.strokeStarts.slice(), importId: st.params.importId, importMix: st.params.importMix,
+      params: withParams ? { ...st.params } : null, preset: st.preset, weather: { ...st.weather },
+      imports: st.imports, importSrc: st.importSrc, bitmaps: bitmapRefs(st.stamps, st.bitmaps),
+    };
+  }
+  /** puts a snapshot back into st; returns which worker asset sets changed */
+  function restore(st, s) {
+    st.stamps = s.stamps; st.passes = s.passes; st.strokeStarts = s.strokeStarts;
+    if (s.params) { st.params = { ...s.params }; st.preset = s.preset; st.weather = { ...s.weather }; }
+    st.params.importId = s.importId; st.params.importMix = s.importMix;
+    const changed = { bitmaps: false, imports: st.imports !== s.imports };
+    st.imports = s.imports; st.importSrc = s.importSrc;
+    for (const [id, b] of Object.entries(s.bitmaps || {})) if (st.bitmaps[id] !== b) { st.bitmaps[id] = b; changed.bitmaps = true; }
+    return changed;
+  }
+  /** bytes of the distinct large arrays (imports, import sources, bitmaps) the snapshots hold */
+  function retainedBytes(snaps) {
+    const seen = new Set();
+    let bytes = 0;
+    const add = (a) => { if (a && a.buffer && !seen.has(a.buffer)) { seen.add(a.buffer); bytes += a.buffer.byteLength; } };
+    for (const s of snaps) {
+      for (const im of Object.values(s.imports || {})) add(im && im.data);
+      add(s.importSrc && s.importSrc.grey);
+      for (const b of Object.values(s.bitmaps || {})) add(b && b.data);
+    }
+    return bytes;
+  }
+  /** drops the oldest undo entries (then the farthest redo entries) over the entry count or memory budget */
+  function trim(undo, redo, { max = MAX_ENTRIES, budget = BUDGET_BYTES } = {}) {
+    while (undo.length > max) undo.shift();
+    while (redo.length > max) redo.shift();
+    while ((undo.length || redo.length) && retainedBytes([...undo, ...redo]) > budget) (undo.length ? undo : redo).shift();
+  }
+  /** bitmap ids that must stay in the live store: current stamps plus extra ids (tool bitmaps) */
+  function liveBitmapIds(stamps, extra = []) {
+    const used = new Set();
+    for (const s of stamps) if (s.bmp) used.add(s.bmp);
+    for (const id of extra) if (id) used.add(id);
+    return used;
+  }
+  return { MAX_ENTRIES, BUDGET_BYTES, snapshot, restore, retainedBytes, trim, liveBitmapIds, bitmapRefs };
+})();
+
 const P8Terrain = (() => {
   const E = P8TerrainEngine();
   let url = null;
@@ -728,7 +791,7 @@ const P8Terrain = (() => {
     }
     return url;
   }
-  return { ...E, workerUrl };
+  return { ...E, workerUrl, history: P8TerrainHistory };
 })();
 
 if (typeof module !== 'undefined') module.exports = P8Terrain;

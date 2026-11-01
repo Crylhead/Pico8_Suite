@@ -408,20 +408,17 @@
 
   // ------------------------------------------------------------------ undo
   // edits (stamps, passes, import) are undoable; actions that also set the sliders (presets, scene
-  // files, reset) store the parameters too, so undo brings those back as well
-  const snapshot = (withParams = false) => ({
-    stamps: st.stamps.slice(), passes: st.passes.map((p) => ({ ...p })), strokeStarts: st.strokeStarts.slice(), importId: st.params.importId, importMix: st.params.importMix,
-    params: withParams ? { ...st.params } : null, preset: st.preset, weather: { ...st.weather },
-  });
-  function pushUndo(withParams = false) { undoStack.push(snapshot(withParams)); if (undoStack.length > 100) undoStack.shift(); redoStack = []; renderUndo(); }
+  // files, reset) store the parameters too, so undo brings those back as well. Snapshots keep the
+  // imports, import source and stamp bitmaps they use (see P8Terrain.history).
+  const snapshot = (withParams = false) => T.history.snapshot(st, withParams);
+  function pushUndo(withParams = false) { undoStack.push(snapshot(withParams)); redoStack = []; T.history.trim(undoStack, redoStack); renderUndo(); }
   function restore(s) {
-    st.stamps = s.stamps; st.passes = s.passes; st.strokeStarts = s.strokeStarts;
-    if (s.params) { st.params = { ...s.params }; st.preset = s.preset; st.weather = { ...s.weather }; }
-    st.params.importId = s.importId; st.params.importMix = s.importMix;
+    const c = T.history.restore(st, s);
+    if (c.bitmaps || c.imports) assetsChanged(c.bitmaps && c.imports ? 'both' : c.bitmaps ? 'bitmaps' : 'imports');
   }
   function undo() { if (!undoStack.length) return; const s = undoStack.pop(); redoStack.push(snapshot(!!s.params)); restore(s); afterHistory(); setAction(`Undo (${undoStack.length} more)`); }
   function redo() { if (!redoStack.length) return; const s = redoStack.pop(); undoStack.push(snapshot(!!s.params)); restore(s); afterHistory(); setAction(`Redo (${redoStack.length} more)`); }
-  function afterHistory() { syncControls(); renderOps(); renderPasses(); renderUndo(); syncImportUi(); changed(); }
+  function afterHistory() { clearTimeout(ui.retileTimer); syncControls(); renderOps(); renderPasses(); renderUndo(); syncImportUi(); changed(); }
 
   // ------------------------------------------------------------------ fonts
   // Every installed font: the Local Font Access API lists them all (Chrome / Edge, asks once);
@@ -597,12 +594,15 @@
     toast(`${name} is now the base terrain (seamless).`);
     setAction(`Heightmap ${name} imported`);
   }
-  function retile() {
-    const s = st.importSrc;
-    if (!s) return;
+  /** seamless tile of the import source; patch = new seam settings, committed together with the tile */
+  function retile(patch = null) {
+    if (!st.importSrc) return;
+    const s = patch ? { ...st.importSrc, ...patch } : st.importSrc;
     const size = Math.max(s.w, s.h) >= 1024 ? 1024 : 512;
     const id = `h${Date.now().toString(36)}${nextId()}`;
+    // new objects, never edited in place: undo snapshots keep the ones they were taken with
     st.imports = { [id]: { size, data: T.makeTileable(s.grey, s.w, s.h, size, s.method, s.blend) } };
+    st.importSrc = s;
     st.params.importId = id;
     assetsChanged('imports');
     syncImportUi();
@@ -733,13 +733,8 @@
   // ------------------------------------------------------------------ scene files
   const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
   const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-  function usedBitmaps() {
-    const used = new Set();
-    for (const list of [st.stamps, ...undoStack.map((u) => u.stamps), ...redoStack.map((u) => u.stamps)]) for (const s of list) if (s.bmp) used.add(s.bmp);
-    if (textId) used.add(textId);
-    if (st.image.bmp) used.add(st.image.bmp);
-    return used;
-  }
+  // undo / redo snapshots hold their own bitmap references, so the live store only needs the current ones
+  const usedBitmaps = () => T.history.liveBitmapIds(st.stamps, [textId, st.image.bmp]);
   function sceneJson() {
     const used = new Set(st.stamps.filter((s) => s.bmp).map((s) => s.bmp));
     const bitmaps = {};
@@ -1175,8 +1170,8 @@
     const { slider, select, btn, row } = H;
     const nodes = [el('p', { className: 'muted tl-note', textContent: `${s?.name || 'Imported heightmap'} · made seamless` })];
     if (s) {
-      nodes.push(row(select('Seams', [['blend', 'Cross-fade (keeps features)'], ['edges', 'Edge correction (keeps layout)'], ['mirror', 'Mirror 2×2']], s.method, (v) => { s.method = v; retile(); })));
-      nodes.push(slider({ label: 'Blend width', min: 0.05, max: 0.5, step: 0.05, value: s.blend, onInput: (v) => { s.blend = v; clearTimeout(ui.retileTimer); ui.retileTimer = setTimeout(retile, 200); } }));
+      nodes.push(row(select('Seams', [['blend', 'Cross-fade (keeps features)'], ['edges', 'Edge correction (keeps layout)'], ['mirror', 'Mirror 2×2']], s.method, (v) => { clearTimeout(ui.retileTimer); retile({ method: v }); })));
+      nodes.push(slider({ label: 'Blend width', min: 0.05, max: 0.5, step: 0.05, value: s.blend, onInput: (v) => { clearTimeout(ui.retileTimer); ui.retileTimer = setTimeout(() => retile({ blend: v }), 200); } }));
     }
     nodes.push(slider({ label: 'Noise ↔ map', min: 0, max: 1, step: 0.05, value: st.params.importMix, title: '0 = generated noise only, 1 = the imported map only', onInput: (v) => { st.params.importMix = v; sliding(); } }));
     nodes.push(row(btn('Remove', removeImport)));
