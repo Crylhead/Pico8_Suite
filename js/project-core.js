@@ -12,6 +12,7 @@
 const P8Project = (() => {
   const C = typeof P8Cart !== 'undefined' ? P8Cart : require('./cart-core.js');
   const V = typeof P8DataView !== 'undefined' ? P8DataView : require('./datacarts-core.js');
+  const K = typeof P8Code !== 'undefined' ? P8Code : require('./code-core.js'); // the shared Lua lexer
   const FORMAT = 1;
   const CART = C.ROM_SIZE; // 0x4300 bytes per data cart
   const hex = (n) => `0x${(n >>> 0).toString(16).padStart(4, '0')}`;
@@ -616,36 +617,6 @@ const P8Project = (() => {
   // Retiring carts: only what the final sources no longer reference     //
   // ------------------------------------------------------------------ //
 
-  /** Lua with comments blanked (newlines and strings kept, so offsets and line numbers stay) */
-  function blankComments(src) {
-    let out = '';
-    let i = 0;
-    const longEnd = (j) => { const m = /^\[(=*)\[/.exec(src.slice(j, j + 64)); return m ? { open: m[0].length, close: `]${m[1]}]` } : null; };
-    const blank = (s) => s.replace(/[^\n]/g, ' ');
-    while (i < src.length) {
-      const ch = src[i];
-      if (ch === '-' && src[i + 1] === '-') {
-        const lb = longEnd(i + 2);
-        let end = lb ? src.indexOf(lb.close, i + 2 + lb.open) : src.indexOf('\n', i);
-        end = end < 0 ? src.length : end + (lb ? lb.close.length : 0);
-        out += blank(src.slice(i, end));
-        i = end;
-      } else if (ch === '"' || ch === "'") {
-        let j = i + 1;
-        while (j < src.length && src[j] !== ch && src[j] !== '\n') j += src[j] === '\\' ? 2 : 1;
-        out += src.slice(i, j + 1);
-        i = j + 1;
-      } else if (ch === '[' && longEnd(i)) {
-        const lb = longEnd(i);
-        let end = src.indexOf(lb.close, i + lb.open);
-        end = end < 0 ? src.length : end + lb.close.length;
-        out += src.slice(i, end);
-        i = end;
-      } else { out += ch; i++; }
-    }
-    return out;
-  }
-
   /** the Lua of a cart text (or the whole text of a .lua file) -> {code, firstLine (0-based)} */
   function luaOf(text) {
     const lines = text.split('\n');
@@ -659,13 +630,55 @@ const P8Project = (() => {
   const baseName = (p) => p.replace(/\\/g, '/').split('/').pop().toLowerCase();
   // the cart argument of the calls that name other carts (run() takes a parameter, not a cart)
   const CART_ARG = { reload: 3, cstore: 3, load: 0 };
+  const SKIP = new Set(['ws', 'comment', 'tabsep', 'include']);
+
+  /** a string token as a "name" literal for reloadTarget, or null if it cannot be one */
+  function stringLiteral(src) {
+    const m = /^(?:"([^"'\\\n]*)"|'([^"'\\\n]*)'|\[(=*)\[\n?([^"'\]\n]*)\]\3\])$/.exec(src);
+    return m ? `"${m[1] ?? m[2] ?? m[4]}"` : null;
+  }
+
+  /**
+   * The calls of reload / cstore / load in Lua (comments and #include lines already blanked) that
+   * may name a cart -> [{at (offset of the name), text, expr | why}]. expr = the cart argument
+   * ('' = none: the running cart); why = it cannot be told which cart is named. Calls are
+   * name(args), name"str", name'str', name[==[str]==] and name{table}; obj.load / obj:load and
+   * function definitions are not the API. Any other use of the name (local f=load) is a why.
+   */
+  function cartCalls(code) {
+    const toks = K.lex(code).filter((tk) => !SKIP.has(tk.t));
+    const src = (tk) => (tk ? code.slice(tk.s, tk.e) : '');
+    const out = [];
+    toks.forEach((tk, k) => {
+      const name = src(tk);
+      if (!(name in CART_ARG) || !['api', 'ident'].includes(tk.t)) return;
+      const prev = src(toks[k - 1]);
+      const next = toks[k + 1];
+      if (prev === '.' || prev === ':' || prev === 'function' || prev === 'local' || src(next) === '=') return;
+      const ref = (end, more) => out.push({ at: tk.s, text: code.slice(tk.s, end).replace(/\s+/g, ' '), ...more });
+      if (src(next) === '(') {
+        const call = V.callArgs(code, next.s);
+        if (!call) { ref(next.e, { why: 'the call is not closed' }); return; }
+        const expr = call.args[CART_ARG[name]] || '';
+        ref(call.end + 1, { expr: stringLiteral(expr) ?? expr });
+      } else if (next?.t === 'string') {
+        // name"x" passes one argument: only load's cart comes first
+        if (CART_ARG[name] > 0) return;
+        const lit = stringLiteral(src(next));
+        ref(next.e, lit ? { expr: lit } : { why: `the cart name ${src(next)} cannot be resolved` });
+      } else if (src(next) === '{') {
+        if (CART_ARG[name] === 0) ref(next.e, { why: 'load is called with a table, the cart name cannot be resolved' });
+      } else ref(tk.e, { why: `${name} is used without a call here, the cart it may name cannot be traced` });
+    });
+    return out;
+  }
 
   /**
    * Which candidate carts can go: the ones no remaining source references.
    * candidates: cart names that are about to be unused by the project (old data carts, adopted carts)
    * files:      [{name, text}] the final texts of the folder (fx carts after their rewrite, .lua files, ...)
    * Sources are every file that is not a candidate plus every candidate that has to stay. A reference
-   * that cannot be resolved (computed name, unreadable #include) keeps all candidates.
+   * that cannot be resolved (computed name, uncallable use of load, unreadable #include) keeps all candidates.
    * -> {retire: [names], kept: [{cart, by}], unresolved: [{file, line, call, why}]}
    */
   function retirement(candidates, files) {
@@ -685,25 +698,20 @@ const P8Project = (() => {
       if (scanned.has(f.name)) continue;
       scanned.add(f.name);
       const { code: raw, firstLine } = luaOf(f.text);
-      const code = blankComments(raw);
+      // comments blanked by the shared lexer (strings kept: offsets, lines and literals stay)
+      const code = K.maskLua(raw, { strings: false });
       const lineAt = (i) => firstLine + code.slice(0, i).split('\n').length;
-      for (const m of code.matchAll(/^[ \t]*#include[ \t]+([^\s]+)/gm)) {
-        const path = m[1].replace(/:\d+$/, '');
-        const lc = baseName(path);
-        const where = `${f.name}:${lineAt(m.index)}`;
-        if (cand.has(lc)) keep(lc, `${where} #include ${m[1]}`);
-        else if (!/[\\/]/.test(path) && byName.has(lc)) queue.push(byName.get(lc));
-        else unresolved.push({ file: f.name, line: lineAt(m.index), call: m[0].trim(), why: `the included ${m[1]} cannot be read here, its references are unknown` });
+      for (const inc of K.includes(code)) {
+        const lc = baseName(inc.path);
+        const line = firstLine + inc.line + 1;
+        if (cand.has(lc)) keep(lc, `${f.name}:${line} #include ${inc.raw}`);
+        else if (!/[\\/]/.test(inc.path) && byName.has(lc)) queue.push(byName.get(lc));
+        else unresolved.push({ file: f.name, line, call: `#include ${inc.raw}`, why: `the included ${inc.raw} cannot be read here, its references are unknown` });
       }
-      for (const m of code.matchAll(/(^|[^.:\w])(reload|cstore|load)\s*\(/g)) {
-        if (/\bfunction\s*$/.test(code.slice(Math.max(0, m.index - 20), m.index + m[1].length))) continue;
-        const at = m.index + m[1].length;
-        const open = code.indexOf('(', at);
-        const call = V.callArgs(code, open);
-        const text = call ? code.slice(at, call.end + 1).replace(/\s+/g, ' ') : code.slice(at, open + 1);
-        const where = { file: f.name, line: lineAt(at), call: text };
-        const expr = call ? (call.args[CART_ARG[m[2]]] || '') : null;
-        if (expr === null) { unresolved.push({ ...where, why: 'the call is not closed' }); continue; }
+      for (const c of cartCalls(code)) {
+        const where = { file: f.name, line: lineAt(c.at), call: c.text };
+        if (c.why) { unresolved.push({ ...where, why: c.why }); continue; }
+        const expr = c.expr;
         if (!expr || expr === 'nil') continue; // the running cart itself
         const ident = /^[A-Za-z_]\w*$/.test(expr);
         const assigned = ident ? (code.match(new RegExp(`\\b${expr}\\s*=(?!=)`, 'g')) || []).length : 0;
@@ -712,7 +720,7 @@ const P8Project = (() => {
           unresolved.push({ ...where, why: ident && assigned > 1 ? `${expr} is assigned more than once` : `the cart name ${expr} cannot be resolved` });
           continue;
         }
-        const by = `${f.name}:${where.line} ${text}`;
+        const by = `${f.name}:${where.line} ${c.text}`;
         if (!target.inferred) {
           const n = baseName(target.label);
           keep(n, by);
