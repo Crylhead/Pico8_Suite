@@ -15,6 +15,8 @@
 
 const P8DataView = (() => {
   const C = typeof P8Cart !== 'undefined' ? P8Cart : require('./cart-core.js');
+  // the Code Editor's lexer: comments / strings at any long-bracket level, real #include lines
+  const K = typeof P8Code !== 'undefined' ? P8Code : require('./code-core.js');
   const ROM = C.ROM_SIZE;
   const VALID = new Set([...Array(16).keys(), ...Array.from({ length: 16 }, (_, i) => 128 + i)]);
   const STD = Array.from({ length: 16 }, (_, i) => i);
@@ -24,7 +26,8 @@ const P8DataView = (() => {
   // Small Lua readers                                                  //
   // ------------------------------------------------------------------ //
 
-  const stripComments = (lua) => lua.split('\n').map((l) => l.replace(/--.*$/, '')).join('\n');
+  /** comments (block ones too) blanked; same offsets and lines; string contents kept */
+  const stripComments = (lua) => K.maskLua(lua, { strings: false });
   const lineAt = (src, i) => src.slice(0, i).split('\n').length;
   const last = (name) => name.split(/[.:]/).pop();
 
@@ -388,57 +391,138 @@ const P8DataView = (() => {
 
   /**
    * A cart reading its own data: when it runs, 0x0000-0x42ff already holds its __gfx__, __map__,
-   * __gff__, __music__ and __sfx__, so sget(), mget(), map(), @0x2000 or memcpy(.., 0x1000, ..)
-   * read them without any reload().
-   * -> { gfx|map|gff|music|sfx: { how: ['sget() line 72', ..], values, width } }
+   * __gff__, __music__ and __sfx__, so sget(), mget(), map(), @0x2000, memcpy(.., 0x1000, ..) or
+   * reload() without a file name read them without loading another cart. Comments and string
+   * contents are skipped (shared lexer). A heuristic: it finds reads, it never proves bytes free.
+   * -> { gfx|map|gff|music|sfx: { how: ['sget() line 72', ..], ranges: [{start, len}], whole, values, width },
+   *      unresolved: ['peek(…) line 9', '#include lib.lua line 2', ..] }
+   *    ranges: bytes read in that region. Literal addresses and lengths (@, %, $, peek/peek2/peek4
+   *      with a count, memcpy, reload) give exact ranges, split over every region they cross;
+   *    whole: the region is approximated as a whole (API calls like sget / map / sfx, or a
+   *      literal base address plus a computed offset / length);
    *    values: read as numbers (sget / mget / fget / peek / memcpy), not only drawn;
-   *    width: row length guessed from the address arithmetic (<<6, *64 -> 64)
+   *    width: row length guessed from the address arithmetic (<<6, *64 -> 64);
+   *    unresolved: reads whose address is computed, and included code (not analysed): they may
+   *      read anything, so "no read detected" elsewhere is not proof that the bytes are unused.
    */
   function ownReads(cart) {
     const out = {};
-    const regionAt = (a) => C.REGIONS.find((r) => a >= r.start && a < r.end);
-    const add = (id, how, line, values, width) => {
-      const reg = C.REGIONS.find((r) => r.id === id);
-      if (!reg || !cart.used.subarray(reg.start, reg.end).some((v) => v)) return;
-      const r = (out[id] ||= { how: [], values: false, width: null });
-      const label = `${how} line ${line}`;
-      if (r.how.length < 8 && !r.how.some((h) => h.startsWith(`${how} `))) r.how.push(label);
+    const unresolved = [];
+    const lua = (cart.lua || '').replace(/\r\n?/g, '\n');
+    const src = K.maskLua(lua, { includes: true });
+    const lines = src.split('\n');
+    const lineOf = (i) => src.slice(0, i).split('\n').length;
+    const fileLine = (i) => lineOf(i) + (cart.luaAt || 0);
+    const note = (list, label) => { if (list.length < 8 && !list.includes(label)) list.push(label); };
+    const add = (id, how, line, values, width, start, end, whole) => {
+      const r = (out[id] ||= { how: [], ranges: [], whole: false, values: false, width: null });
+      if (r.how.length < 8 && !r.how.some((h) => h.startsWith(`${how} `))) r.how.push(`${how} line ${line}`);
+      r.ranges.push({ start, len: end - start });
+      if (whole) r.whole = true;
       if (values) r.values = true;
       if (width && !r.width) r.width = width;
     };
-    const lines = (cart.lua || '').split('\n');
-    lines.forEach((raw, i) => {
-      // code only: no comments, no string contents
-      const l = raw.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, '""').replace(/--.*$/, '');
-      if (!l.trim()) return;
-      const ln = i + 1 + (cart.luaAt || 0);
-      const call = (name) => new RegExp(`(?<![\\w.:])${name}\\s*\\(`).test(l);
-      if (call('sget')) add('gfx', 'sget()', ln, true);
-      if (call('spr')) add('gfx', 'spr()', ln, false);
-      if (call('sspr')) add('gfx', 'sspr()', ln, false);
-      if (call('mget')) add('map', 'mget()', ln, true);
-      if (call('map')) { add('map', 'map()', ln, false); add('gfx', 'map()', ln, false); }
-      if (call('tline')) { add('map', 'tline()', ln, false); add('gfx', 'tline()', ln, false); }
-      if (call('fget')) add('gff', 'fget()', ln, true);
-      if (call('sfx')) add('sfx', 'sfx()', ln, false);
-      if (call('music')) { add('music', 'music()', ln, false); add('sfx', 'music()', ln, false); }
-      // memory reads with a literal address inside the cart area
-      const stride = (() => { const m = /<<\s*([5-8])\b/.exec(l) || /\*\s*(32|64|128|256)\b/.exec(l); return m ? (m[1].length === 1 ? 1 << Number(m[1]) : Number(m[1])) : null; })();
-      const lit = (s) => { const v = /^0x/i.test(s) ? parseInt(s, 16) : Number(s); return Number.isFinite(v) ? v : null; };
-      for (const m of l.matchAll(/(?:@|\$|(?<![\w.:])peek[24]?\s*\()\s*\(?\s*(0x[0-9a-f]+|\d+)/gi)) {
-        const a = lit(m[1]), reg = a != null && regionAt(a);
-        if (reg) add(reg.id, `${m[0].trim().startsWith('@') ? '@' : m[0].trim().startsWith('$') ? '$' : 'peek'}${hex4(a)}`, ln, true, stride);
+    // a read of [a, b): split over every region it crosses
+    const read = (a, b, how, line, values, width, whole = false) => {
+      for (const reg of C.REGIONS) {
+        const s = Math.max(a, reg.start);
+        const e = Math.min(b, reg.end, ROM);
+        if (s < e) add(reg.id, how, line, values, width, whole ? reg.start : s, whole ? Math.min(reg.end, ROM) : e, whole);
       }
-      const mc = /(?<![\w.:])memcpy\s*\(\s*[^,]+,\s*\(?\s*(0x[0-9a-f]+|\d+)/i.exec(l);
-      if (mc) { const a = lit(mc[1]), reg = a != null && regionAt(a); if (reg) add(reg.id, `memcpy from ${hex4(a)}`, ln, true, stride); }
-    });
+    };
+    const regionWhole = (id, how, line, values) => { const reg = C.REGIONS.find((r) => r.id === id); read(reg.start, reg.end, how, line, values, null, true); };
+    const LIT = /0x[\da-f]+(?:\.[\da-f]*)?|0b[01]+(?:\.[01]*)?/gi;
+    /** expr -> {v, exact}: exact = only literals; otherwise v = its leading literal (base) or null */
+    const value = (expr) => {
+      const e = (expr ?? '').trim();
+      if (!e) return { v: null, exact: false };
+      if (!/[A-Za-z_]/.test(e.replace(LIT, '0'))) { const v = evalExpr(e); if (v != null) return { v, exact: true }; }
+      const m = /^\(*\s*(0x[\da-f]+|0b[01]+|\d+)/i.exec(e);
+      return { v: m ? C.parseNum(m[1]) : null, exact: false };
+    };
+    const strideAt = (i) => {
+      const l = lines[lineOf(i) - 1] || '';
+      const m = /<<\s*([5-8])\b/.exec(l) || /\*\s*(32|64|128|256)\b/.exec(l);
+      return m ? (m[1].length === 1 ? 1 << Number(m[1]) : Number(m[1])) : null;
+    };
+    /** a read of `len` bytes (expression; null = `size` bytes) from address expression `addr` */
+    const memRead = (how, i, addrExpr, lenExpr, size, values = true) => {
+      const ln = fileLine(i);
+      const a = value(addrExpr);
+      const n = lenExpr == null ? { v: size, exact: true } : value(lenExpr);
+      if (!n.exact) n.v = null; // a leading literal of a computed length is no bound
+      if (a.v == null) { note(unresolved, `${how.replace('…', '?')} line ${ln}`); return; }
+      if (a.v < 0 || a.v >= ROM) return; // RAM above the cart data (0x4300+): not this cart's bytes
+      const label = how.replace('…', hex4(a.v));
+      if (a.exact && n.exact && n.v != null) {
+        if (n.v > 0) read(a.v, a.v + n.v, label, ln, values, strideAt(i));
+        return;
+      }
+      // computed offset or length from a literal base: the regions from there on, approximated
+      const reg = C.REGIONS.find((r) => a.v >= r.start && a.v < r.end);
+      read(a.v, n.v > 0 ? a.v + n.v : reg.end, `${label} (computed)`, ln, values, strideAt(i), true);
+    };
+    const args = (m) => callArgs(src, m.index + m[0].length - 1)?.args || [];
+
+    for (const inc of K.includes(lua)) note(unresolved, `#include ${inc.raw} line ${inc.line + 1 + (cart.luaAt || 0)} (not analysed)`);
+    const API = { sget: ['gfx', true], spr: ['gfx', false], sspr: ['gfx', false], mget: ['map', true], fget: ['gff', true], sfx: ['sfx', false] };
+    for (const m of src.matchAll(/(?<![\w.:])(sget|spr|sspr|mget|map|tline|fget|sfx|music|peek[24]?|memcpy|reload)\s*\(/g)) {
+      const fn = m[1];
+      const ln = fileLine(m.index);
+      if (API[fn]) regionWhole(API[fn][0], `${fn}()`, ln, API[fn][1]);
+      if (fn === 'mget') read(0x1000, 0x2000, 'mget() (map rows 32-63)', ln, true, null, false);
+      if (fn === 'map' || fn === 'tline') { regionWhole('map', `${fn}()`, ln, false); regionWhole('gfx', `${fn}()`, ln, false); }
+      if (fn === 'music') { regionWhole('music', 'music()', ln, false); regionWhole('sfx', 'music()', ln, false); }
+      if (fn.startsWith('peek')) {
+        const a = args(m);
+        const w = fn === 'peek' ? 1 : Number(fn[4]);
+        memRead(`${fn}(…)`, m.index, a[0], a[1] ? `(${a[1]})*${w}` : null, w);
+      }
+      if (fn === 'memcpy') { const a = args(m); memRead('memcpy from …', m.index, a[1], a[2] ?? '0', 0); }
+      if (fn === 'reload') {
+        // reload() without a file name copies from this cart's own data (defaults: all of it)
+        const a = args(m);
+        if (a.length >= 4 && a[3].trim()) continue;
+        memRead('reload from …', m.index, a[1] || '0', a[2] || String(ROM), 0);
+      }
+    }
+    // peek shorthands: @addr (1 byte), %addr (2), $addr (4); % only where it is not modulo
+    for (const m of src.matchAll(/[@%$]/g)) {
+      const before = src.slice(Math.max(0, m.index - 12), m.index).trimEnd();
+      if (m[0] === '%' && (/[\w)\]}"'.]$/.test(before) && !/\b(return|and|or|not|then|do|else|in|local|until)$/.test(before))) continue;
+      const rest = src.slice(m.index + 1);
+      const num = /^\s*(0x[\da-f]+|0b[01]+|\d+)/i.exec(rest);
+      const paren = /^\s*\(/.exec(rest);
+      const expr = num ? num[1] : paren ? callArgs(src, m.index + 1 + paren[0].length - 1)?.args[0] : null;
+      if (expr == null) { note(unresolved, `${m[0]}? line ${fileLine(m.index)}`); continue; }
+      memRead(`${m[0]}…`, m.index, expr, null, { '@': 1, '%': 2, $: 4 }[m[0]]);
+    }
+    for (const r of Object.values(out)) {
+      // merged, sorted ranges
+      const merged = [];
+      for (const x of r.ranges.sort((p, q) => p.start - q.start)) {
+        const prev = merged[merged.length - 1];
+        if (prev && x.start <= prev.start + prev.len) prev.len = Math.max(prev.len, x.start + x.len - prev.start);
+        else merged.push({ ...x });
+      }
+      r.ranges = merged;
+    }
+    if (unresolved.length) out.unresolved = unresolved;
     return out;
+  }
+
+  /** bytes the own code reads (ownReads ranges) -> Uint8Array(ROM) mask */
+  function ownMask(own) {
+    const m = new Uint8Array(ROM);
+    for (const reg of C.REGIONS) for (const r of own[reg.id]?.ranges || []) m.fill(1, r.start, r.start + r.len);
+    return m;
   }
 
   /**
    * -> [{id, start, len, label, fx, kind: 'img'|'pal'|'hex', store}]
    * One section per mem_store() piece that comes from this cart, plus the reloaded parts
-   * no store cuts out (used straight from memory), plus content nobody reads.
+   * no store cuts out (used straight from memory), ranges its own code reads, plus content with
+   * no read detected (not proof that it is unused).
    */
   function sections(cart, carts) {
     const out = [];
@@ -480,21 +564,27 @@ const P8DataView = (() => {
         }
       }
     }
-    // regions the cart's own code reads (sget, mget, @0x2000, ..)
+    // ranges the cart's own code reads (sget, mget, @0x2000, memcpy, ..): exact ranges, or the
+    // whole region when it is approximated (API calls, computed offsets)
     const own = cart.own || ownReads(cart);
     for (const reg of C.REGIONS) {
       const o = own[reg.id];
-      if (!o || out.some((s) => s.start <= reg.start && s.start + s.len >= reg.end)) continue;
-      out.push({ start: reg.start, len: Math.min(reg.end, ROM) - reg.start, fx: cart.name, own: o, store: null, label: `${reg.name}, read by its own code (${o.how.map((h) => h.replace(/ line \d+$/, '')).join(', ')})` });
+      if (!o) continue;
+      const how = o.how.map((h) => h.replace(/ line \d+$/, '')).join(', ');
+      for (const r of o.ranges) {
+        if (!cart.used.subarray(r.start, r.start + r.len).some((v) => v) || out.some((s) => s.start <= r.start && s.start + s.len >= r.start + r.len)) continue;
+        const whole = o.whole && r.start === reg.start && r.len === Math.min(reg.end, ROM) - reg.start;
+        out.push({ start: r.start, len: r.len, fx: cart.name, own: o, store: null, label: `${reg.name}, read by its own code (${how})${whole ? ' · whole region (approximation)' : ''}` });
+      }
     }
     // content no fx reads: runs of used bytes outside every read range, per region
-    const read = new Uint8Array(ROM);
+    const read = ownMask(own);
     for (const s of out) read.fill(1, s.start, s.start + s.len);
     for (const r of cart.reads) read.fill(1, r.src, r.src + r.len);
     for (const reg of C.REGIONS) {
       const end = Math.min(reg.end, ROM);
-      if (own[reg.id]) continue;
-      if (!cart.reads.length) {
+      if (own[reg.id]?.whole) continue;
+      if (!cart.reads.length && !own[reg.id]) {
         // nobody reloads this cart: show its regions whole
         if (cart.used.subarray(reg.start, end).filter((v) => v).length >= 64) out.push({ start: reg.start, len: end - reg.start, fx: null, store: null, label: reg.name });
         continue;
@@ -509,7 +599,7 @@ const P8DataView = (() => {
         // whole 64-byte rows (one 128 px image line each)
         const s0 = Math.max(reg.start, a & ~63);
         const s1 = Math.min(end, (b + 63) & ~63);
-        if (b - a >= 64) out.push({ start: s0, len: s1 - s0, fx: null, store: null, label: `${reg.name}, not read by any fx` });
+        if (b - a >= 64) out.push({ start: s0, len: s1 - s0, fx: null, store: null, label: `${reg.name}, no read detected` });
         a = b + 1;
       }
     }
@@ -557,8 +647,9 @@ const P8DataView = (() => {
   function secondaryUse(fx) {
     if (!fx?.lua) return [];
     const out = [];
+    const code = stripComments(fx.lua).split('\n');
     fx.lua.split('\n').forEach((raw, i) => {
-      const l = raw.replace(/--.*$/, '');
+      const l = code[i];
       if (/\bpoke[24]?\s*\(\s*0x5f6[0-9a-f]\b/i.test(l) || /\bpal\s*\((?!\s*memread_table8)[^()]*(\([^()]*\)[^()]*)*,\s*2\s*\)/.test(l) || /\bfillp\s*\([^)]*(\+|\|)\s*0x0\.4\b/i.test(l)) {
         out.push({ line: i + 1 + (fx.luaAt || 0), text: raw.trim() });
       }
@@ -713,7 +804,7 @@ const P8DataView = (() => {
     return STD.map((i) => screen[(c.rom[o + i] ?? i) & 15]);
   }
 
-  return { VALID, STD, EMPTY, hex4, ownReads, secondaryUse, callArgs, parseValue, evalExpr, palFromMap, parseLuaPal, analyzeFx, fxPalettes, sections, sectionPalettes, effectiveColors, nameMatchFx, layerInfo, buildLayers, fadeFromTable };
+  return { VALID, STD, EMPTY, hex4, ownReads, ownMask, stripComments, secondaryUse, callArgs, parseValue, evalExpr, palFromMap, parseLuaPal, analyzeFx, fxPalettes, sections, sectionPalettes, effectiveColors, nameMatchFx, layerInfo, buildLayers, fadeFromTable };
 })();
 
 if (typeof module !== 'undefined') module.exports = P8DataView;

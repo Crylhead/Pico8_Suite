@@ -3,7 +3,7 @@
 // shorthands), the API with signatures, code tabs (-->8), an outline of the functions, and
 // reading / writing the __lua__ section of a cart without touching the other sections.
 // The lexer is also the lexical model of Project Audit and Data Carts (comments and strings at
-// any long-bracket level, real #include lines, .p8:N tab includes): lex / includes.
+// any long-bracket level, real #include lines, .p8:N tab includes): lex / includes / maskLua.
 // No DOM; runs in Node for tests.
 
 'use strict';
@@ -286,6 +286,30 @@ const P8Code = (() => {
     return out;
   }
 
+  /**
+   * Lexical mask shared by the Audit and Data Carts readers: the text with every comment (any
+   * long-bracket level), -->8 separator and, optionally, the contents of strings and the
+   * #include lines replaced by spaces. Same length and line breaks, so offsets and line numbers
+   * stay valid; string delimiters stay, so a masked string is still one (empty-looking) string.
+   */
+  function maskLua(text, { strings = true, includes: inc = false } = {}) {
+    const out = [];
+    let at = 0;
+    const blank = (s, e) => { out.push(text.slice(at, s), text.slice(s, e).replace(/[^\n]/g, ' ')); at = e; };
+    for (const tk of lex(text)) {
+      if (tk.t === 'comment' || tk.t === 'tabsep' || (inc && tk.t === 'include')) blank(tk.s, tk.e);
+      else if (strings && tk.t === 'string') {
+        const lv = longOpen(text, tk.s);
+        const open = lv >= 0 ? lv + 2 : 1;
+        const closed = lv >= 0 ? text.endsWith(`]${'='.repeat(lv)}]`, tk.e) && tk.e - tk.s >= 2 * open : tk.e - tk.s >= 2 && text[tk.e - 1] === text[tk.s];
+        const close = closed ? open : 0;
+        if (tk.e - close > tk.s + open) blank(tk.s + open, tk.e - close);
+      }
+    }
+    out.push(text.slice(at));
+    return out.join('');
+  }
+
   /** a/b/../c.lua -> a/c.lua (forward slashes, no leading ./) */
   function joinPath(dir, rel) {
     const parts = (dir ? `${dir}/${rel}` : rel).replace(/\\/g, '/').split('/');
@@ -395,7 +419,7 @@ const P8Code = (() => {
 
   const NEW_CART = 'pico-8 cartridge // http://www.pico-8.com\nversion 42\n__lua__\n';
 
-  return { KEYWORDS, API, API_NAMES, CALLBACKS, lex, bracketPairs, codeTabs, outline, includes, includeTarget, joinPath, includedCode, identifiers, opensBlock, DEDENT, callAt, splitCart, joinCart, NEW_CART };
+  return { KEYWORDS, API, API_NAMES, CALLBACKS, lex, bracketPairs, codeTabs, outline, includes, includeTarget, maskLua, joinPath, includedCode, identifiers, opensBlock, DEDENT, callAt, splitCart, joinCart, NEW_CART };
 })();
 
 if (typeof module !== 'undefined') module.exports = P8Code;
