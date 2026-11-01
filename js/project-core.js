@@ -727,22 +727,30 @@ const P8Project = (() => {
    * Writes several files so that a failure part-way leaves the folder as it was.
    *   writes: [{dir, name, text | null (remove), stage}] in order; the last one (the manifest) commits
    *   retire: [{from, to, name}] moved only after the commit: copied, read back, then removed
+   *   checks: [{dir, name, expect}] files the result depends on; with writes[].expect they must still read
+   *           as expected (null: absent), otherwise nothing is written (WriteError stage 'conflict')
    * Every target is read first (preflight), the original contents go into a journal next to the
    * manifest, each write is read back, and any failure restores the originals. If the restore itself
    * fails, the journal stays for recover() the next time the project opens.
    * -> {retired, retireErrors, journalKept} or throws WriteError {stage, file, restored, journalKept}
    */
-  async function transact(dirs, { writes, retire = [] }, { journalDir = 'demo', now = () => new Date().toISOString() } = {}) {
+  async function transact(dirs, { writes, retire = [], checks = [] }, { journalDir = 'demo', now = () => new Date().toISOString() } = {}) {
     const dir = dirResolver(dirs);
     const label = (w) => `${w.dir}/${w.name}`;
     const jdir = await dir(journalDir);
     const before = [];
+    const conflicts = [];
     try {
       if ((await readOrNull(jdir, JOURNAL)) !== null) throw new Error(`an earlier write left ${JOURNAL}; reopen the project to recover it first`);
-      for (const w of writes) before.push(await readOrNull(await dir(w.dir), w.name));
+      for (const w of writes) {
+        before.push(await readOrNull(await dir(w.dir), w.name));
+        if ('expect' in w && before[before.length - 1] !== w.expect) conflicts.push(label(w));
+      }
+      for (const c of checks) if ((await readOrNull(await dir(c.dir), c.name)) !== c.expect) conflicts.push(label(c));
     } catch (e) {
       throw new WriteError(`Preflight failed, nothing was written: ${e.message}`, { stage: 'preflight', file: label(writes[before.length] || { dir: journalDir, name: JOURNAL }), restored: true, journalKept: false, cause: e });
     }
+    if (conflicts.length) throw new WriteError(`Changed on disk since the project was read: ${conflicts.join(', ')}. Nothing was written.`, { stage: 'conflict', file: conflicts[0], conflicts, restored: true, journalKept: false });
     const journal = { format: 1, started: now(), state: 'writing', writes: writes.map((w, i) => ({ dir: w.dir, name: w.name, before: before[i] })), retire };
     try { await put(jdir, JOURNAL, JSON.stringify(journal)); } catch (e) {
       try { await put(jdir, JOURNAL, null); } catch { /* nothing else was touched */ }

@@ -1,4 +1,4 @@
-// Cart Builder project mutation (issues #1, #2, #3, #7): conservative adoption, anchor rewriting, recoverable writes.
+// Cart Builder project mutation (issues #1, #2, #3, #4, #7): conservative adoption, anchor rewriting, recoverable writes, disk conflicts.
 const assert = require('assert');
 const { t } = require('./harness.js');
 const P = require('../js/project-core.js');
@@ -162,4 +162,27 @@ t('#3 an interrupted write whose restore also fails keeps the journal; recover()
   assert.deepStrictEqual([r.state, r.problems], ['writing', []]);
   assert.deepStrictEqual(fs.snapshot(), start);
   assert.strictEqual(await P.recover(dirsOf(fs)), null);
+});
+
+// #4: a write computed from what was read stops when the disk changed meanwhile
+t('#4 external fx/asset/new-cart changes stop the write untouched; a matching baseline writes', async () => {
+  const baseline = original();
+  const expecting = (fs) => {
+    const p = plan();
+    p.writes = p.writes.map((w) => ({ ...w, expect: baseline[w.dir]?.[w.name] ?? null }));
+    p.checks = [{ dir: 'assets', name: 'other.json', expect: null }, { dir: 'demo', name: 'new.p8', expect: null }];
+    return P.transact(dirsOf(fs), p);
+  };
+  const fs = makeFs(original());
+  fs.put('demo/fx.p8', 'fx edited in pico-8');
+  fs.put('assets/a.json', 'a edited in another tab');
+  fs.put('demo/new.p8', 'reload(0,0,1,"old.p8")');
+  const changed = fs.snapshot();
+  fs.log.length = 0;
+  const e = await expecting(fs).then(() => null, (x) => x);
+  assert.deepStrictEqual([e.stage, e.conflicts], ['conflict', ['demo/fx.p8', 'assets/a.json', 'demo/new.p8']]);
+  assert.deepStrictEqual(fs.snapshot(), changed, 'both versions survive: disk untouched');
+  assert.ok(fs.log.every((l) => l.startsWith('read ')), 'only reads happened');
+  const clean = makeFs(original());
+  assert.deepStrictEqual((await expecting(clean)).retired, ['old.p8']);
 });

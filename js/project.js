@@ -32,6 +32,7 @@
     adoptPlan: null,
     pendingHandle: null, // remembered folder that still needs permission
     journalPending: false, // an interrupted write left suite.journal.json: no writes until it is recovered
+    disk: new Map(),     // "demo/x.p8" | "assets/x.json" | "demo/suite.json" -> raw text as read (null: absent); writes expect it unchanged
   };
 
   const dom = {
@@ -107,13 +108,30 @@
   /** runs a transaction; on failure explains what happened and returns null (the in-memory state stays dirty) */
   async function commit(plan, title) {
     if (pj.journalPending) { showMessage(title, `${inDemo(P.JOURNAL)} from an interrupted write is still there. Reopen the project to restore it first. Nothing was written.`); return null; }
+    // everything the write was computed from must still be on disk as it was read (issue #4)
+    const key = (dir, name) => `${dir}/${name}`;
+    const writes = plan.writes.map((w) => ({ ...w, expect: pj.disk.has(key(w.dir, w.name)) ? pj.disk.get(key(w.dir, w.name)) : null }));
+    const written = new Set(writes.map((w) => key(w.dir, w.name)));
+    const checks = [...pj.disk].filter(([k]) => !written.has(k)).map(([k, expect]) => ({ dir: k.split('/')[0], name: k.slice(k.indexOf('/') + 1), expect }));
+    // files that appeared since: a new cart may reference what is about to retire, a new asset may be overwritten
+    let assetDir = null;
+    try { assetDir = await pj.root.getDirectoryHandle('assets'); } catch { /* none yet */ }
+    for (const [dir, handle, re] of [['demo', pj.demo, /\.p8$/i], ['assets', assetDir, /\.json$/i]]) {
+      if (handle) for await (const [n, h] of handle.entries()) if (h.kind === 'file' && re.test(n) && !pj.disk.has(key(dir, n)) && !written.has(key(dir, n))) checks.push({ dir, name: n, expect: null });
+    }
     try {
-      const r = await P.transact(projectDirs(), plan);
+      const r = await P.transact(projectDirs(), { ...plan, writes, checks });
+      for (const w of writes) pj.disk.set(key(w.dir, w.name), w.text);
+      for (const n of r.retired) pj.disk.delete(key('demo', n));
       if (r.retireErrors.length) showMessage(title, `Everything was written, but some old carts could not be moved to ${inDemo('unused/')} and stay where they are:\n${r.retireErrors.join('\n')}`);
       return r;
     } catch (e) {
       if (!(e instanceof P.WriteError)) throw e;
       pj.journalPending = e.journalKept;
+      if (e.stage === 'conflict') {
+        showMessage(title, `These files changed on disk after Cart Builder read them (in PICO-8, another tab or another program):\n${e.conflicts.join('\n')}\n\nNothing was written: the files on disk keep the external changes and Cart Builder keeps its own changes in memory. To continue from the disk versions, open the folder again (Cart Builder's unsaved changes are then dropped).`);
+        return null;
+      }
       showMessage(title, `${e.message}${pj.project ? '\n\nYour unsaved changes are still here.' : ''}`);
       return null;
     }
@@ -161,7 +179,13 @@
     dom.status.textContent = 'reading…';
     await recoverWrites();
     pj.texts = new Map();
-    for await (const [name, h] of pj.demo.entries()) if (h.kind === 'file' && /\.p8$/i.test(name)) pj.texts.set(name, (await (await h.getFile()).text()).replace(/\r\n/g, '\n'));
+    pj.disk = new Map([['demo/suite.json', null]]);
+    for await (const [name, h] of pj.demo.entries()) {
+      if (h.kind !== 'file' || !(/\.p8$/i.test(name) || name === 'suite.json')) continue;
+      const raw = await (await h.getFile()).text();
+      pj.disk.set(`demo/${name}`, raw);
+      if (name !== 'suite.json') pj.texts.set(name, raw.replace(/\r\n/g, '\n'));
+    }
     pj.project = null;
     pj.assets = [];
     pj.dirtyAssets = new Set();
@@ -169,13 +193,15 @@
     pj.renamed = new Map();
     pj.layout = [];
     if (await exists(pj.demo, 'suite.json')) {
-      try { pj.project = JSON.parse(await readText(pj.demo, 'suite.json')); } catch (e) { showMessage('Cart Builder', `demo/suite.json could not be read: ${e.message}`); }
+      try { pj.project = JSON.parse(pj.disk.get('demo/suite.json').replace(/\r\n/g, '\n')); } catch (e) { showMessage('Cart Builder', `demo/suite.json could not be read: ${e.message}`); }
     }
     try {
       const ad = await pj.root.getDirectoryHandle('assets');
       for await (const [name, h] of ad.entries()) {
         if (h.kind !== 'file' || !name.endsWith('.json')) continue;
-        try { pj.assets.push(P.assetFromJson(await (await h.getFile()).text())); } catch { /* skip broken asset files */ }
+        const raw = await (await h.getFile()).text();
+        pj.disk.set(`assets/${name}`, raw);
+        try { pj.assets.push(P.assetFromJson(raw)); } catch { /* skip broken asset files */ }
       }
     } catch { /* no assets/ yet */ }
     pj.adoptPlan = pj.project ? null : P.adopt(cartsFromTexts(pj.texts));
