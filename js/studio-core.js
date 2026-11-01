@@ -562,8 +562,87 @@ const P8Studio = (() => {
     return { data: out, w: W, h: H };
   }
 
+  // ------------------------------------------------------------------ //
+  // Undo / redo history                                                //
+  // ------------------------------------------------------------------ //
+  //
+  // Entries are { kind:'px', before, after, ... } pixel patches or { kind:'doc', snapshot, ... }
+  // whole-document snapshots; the history only needs their size. One retention policy covers
+  // both stacks: at most `limit` entries and `maxBytes` bytes across undo + redo combined.
+  // When over a limit, the entry farthest from the current state (oldest undo or deepest redo)
+  // is discarded first. The entry just recorded, undone or redone is never discarded, so a
+  // single entry larger than `maxBytes` is kept on its own and everything else is dropped.
+
+  const HISTORY_LIMIT = 200;
+  const HISTORY_BYTES = 160 * 1024 * 1024;
+
+  function historyEntryBytes(e) {
+    if (e.kind === 'px') return e.before.byteLength + e.after.byteLength;
+    let n = 0;
+    for (const f of e.snapshot.frames) for (const c of f.cels) n += c.byteLength;
+    return n;
+  }
+
+  function createHistory({ limit = HISTORY_LIMIT, maxBytes = HISTORY_BYTES, sizeOf = historyEntryBytes } = {}) {
+    const undo = [];
+    const redo = [];
+    let bytes = 0;
+    const sizes = new WeakMap();
+    const size = (e) => {
+      let n = sizes.get(e);
+      if (n === undefined) sizes.set(e, (n = sizeOf(e)));
+      return n;
+    };
+    const add = (stack, e) => {
+      stack.push(e);
+      bytes += size(e);
+    };
+    const take = (stack, i) => {
+      const [e] = stack.splice(i, 1);
+      bytes -= size(e);
+      return e;
+    };
+    // Drops far entries until both limits hold; `keep` (the newest entry) always survives.
+    function trim(keep) {
+      while (undo.length + redo.length > 1 && (undo.length + redo.length > limit || bytes > maxBytes)) {
+        const fromUndo = undo.length && undo[0] !== keep && (undo.length >= redo.length || redo[0] === keep);
+        take(fromUndo ? undo : redo, 0);
+      }
+    }
+    function step(from, to, apply) {
+      const e = from.pop();
+      if (!e) return null;
+      bytes -= size(e);
+      const r = apply(e);
+      add(to, r);
+      trim(r);
+      return r;
+    }
+    return {
+      /** Records a new edit: clears redo, then applies the retention policy. */
+      record(e) {
+        while (redo.length) take(redo, redo.length - 1);
+        add(undo, e);
+        trim(e);
+      },
+      /** apply(entry) restores the entry and returns the inverse entry for the other stack. */
+      undo: (apply) => step(undo, redo, apply),
+      redo: (apply) => step(redo, undo, apply),
+      clear() {
+        undo.length = 0;
+        redo.length = 0;
+        bytes = 0;
+      },
+      get undoCount() { return undo.length; },
+      get redoCount() { return redo.length; },
+      get bytes() { return bytes; },
+      limit, maxBytes,
+    };
+  }
+
   return {
     EMPTY, MAX_SIDE, SHEET,
+    HISTORY_LIMIT, HISTORY_BYTES, historyEntryBytes, createHistory,
     blankCel, newDoc, cloneDoc, flatten, flattenSlots, docFromAsset, resizeDoc, scaleDoc, blit, crop, flipH, flipV, rotateCW,
     line, rect, ellipse, fillRegion,
     scale2x, transformBlock, polygonMask, wandMask, maskBox, combineMask, outline,
@@ -572,3 +651,5 @@ const P8Studio = (() => {
     parseCart, writeCart, isCart, gfxFromCart, writeGfxIntoCart, palCode, buildGfxCart, framesToSheet,
   };
 })();
+
+if (typeof module !== 'undefined') module.exports = P8Studio;
