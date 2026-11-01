@@ -111,7 +111,16 @@ If any write or readback fails, every file touched so far is restored, and the j
 
 On opening, a leftover `writing` journal offers to restore the original contents. A `committed` journal only finishes the retirement. The File System Access API has no atomic rename, so a single file is only as atomic as the browser's swap-file `close()`; the journal is what makes the whole operation recoverable.
 
-Conflict handling for external edits is still open; see issue #4 in the [health review](HEALTH_REVIEW_2026-11-01.md).
+### External edits
+
+When it opens the folder, Cart Builder keeps the raw text of every demo `.p8`, `suite.json` and `assets/*.json` as its disk baseline. Write Carts and Adopt compare the disk against that baseline in the preflight. A conflict is any of the following:
+- a file it writes, or one its result depends on, now reads differently;
+- a file has appeared;
+- a file has gone.
+
+On a conflict nothing is written. The dialog lists the files, the disk keeps the external version and Cart Builder keeps its own changes in memory. Opening the folder again continues from the disk versions. Cancelling the confirmation writes nothing. After a successful write the baseline becomes what was written.
+
+The check runs immediately before the journal and the writes. An edit in the short window between that check and the writes themselves is not detected.
 
 There is **no `tools/build.py` release builder in this repository**. Anchor validation runs in Cart Builder; if the surrounding demo framework supplies a release checker, configure and run it there separately.
 
