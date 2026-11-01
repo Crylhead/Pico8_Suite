@@ -80,7 +80,7 @@ The app can be hosted on a static server for the browser tools. A remote host do
 
 ## Reviews and current work
 
-Start with the [2026-11-01 standalone repository health review](docs/HEALTH_REVIEW_2026-11-01.md), reviewed at [1432860512e85a13dab0d1bd2ff0b4d4de780a05](https://github.com/Crylhead/Pico8_Suite/commit/1432860512e85a13dab0d1bd2ff0b4d4de780a05). It links the prioritized [GitHub issues](https://github.com/Crylhead/Pico8_Suite/issues) with evidence, scope and acceptance checks.
+Start with the [2026-11-01 post-fix review](docs/HEALTH_REVIEW_2026-11-01_ca36c07.md), reviewed at [ca36c07f2e770055f2c0f69a62bde4142a4dea2f](https://github.com/Crylhead/Pico8_Suite/commit/ca36c07f2e770055f2c0f69a62bde4142a4dea2f). The original 14 issues are closed and their fixes are merged; six reproduced follow-ups (#30–#35) remain. Each has evidence, scope and acceptance checks. The [initial standalone review](docs/HEALTH_REVIEW_2026-11-01.md) is preserved as historical evidence.
 
 The earlier reviews remain in Demotools, not this repository. Their [historical index](https://github.com/Crylhead/Demotools/blob/4a2855b99efb2e7a265961c63f1ac809adea3ed2/reviews/README.md) includes the health reassessment, Tile Maker reconstruction plan and permanent **Send to + Library** UX proposal. Those are historical findings/design proposals; no final Send to layout has been selected or implemented here.
 
@@ -94,7 +94,7 @@ Run the committed regression entry point from the repository root:
 node tests/regress.js
 ```
 
-On 2026-11-01 its six cases passed, all 23 JavaScript files passed `node --check`, and the Python bridge passed syntax compilation. The cases cover raw subrange anchor preservation and repeated/diamond/cyclic includes. They do not cover every core module or browser workflow. There is currently no CI workflow; [#14](https://github.com/Crylhead/Pico8_Suite/issues/14) tracks a small automated gate. See [CONTRIBUTING.md](CONTRIBUTING.md) for commands.
+On 2026-11-01 the post-fix review reran **43 JavaScript regressions and five Python bridge tests**, all passing. All 23 JavaScript files passed `node --check`, the bridge passed syntax compilation, and static HTML/link checks passed. [GitHub Actions](.github/workflows/ci.yml) now runs the regression, syntax, static and bridge checks on PRs and pushes to `main`; the reviewed main run succeeded. Focused additional probes still reproduced #30–#35, so these passing checks do not establish complete coverage. See [CONTRIBUTING.md](CONTRIBUTING.md) for commands and the [current review](docs/HEALTH_REVIEW_2026-11-01_ca36c07.md) for validation limits.
 
 ### Historical validation reports
 
@@ -106,4 +106,5 @@ The following reports were inherited from development in Demotools. Their comple
 - `terrain-core.js` gives the same heights as `terrain_lab_v0_4` bit for bit (512 and 1024, with and without erosion, on the v0.4 sample scene). In Chrome, against v0.4 at 512 with a mixed erosion pass: a light change reaches the final render in 0.14 s instead of 0.72 s, a brush stroke 0.10 s after release instead of 0.62 s, a new seed in 0.12 s instead of 0.42 s. The exported `.p8` was read back in PICO-8 (sprite sheet and `hget()` match).
 - `extras-core.js` matches the Python tools (waves, motion paths, formations, `.p8` exports byte for byte); `audit-core.js` matches `project_audit` on 69 real carts (except the deliberate `..` token count).
 - Not yet checked inside PICO-8 itself: pasting `[gfx]` clipboard text into the sprite editor and running the generated viewer carts. The `__gfx__` text layout matches the Tile Maker carts, which were verified in PICO-8.
+
 

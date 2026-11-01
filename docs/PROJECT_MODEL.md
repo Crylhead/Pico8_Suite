@@ -1,6 +1,6 @@
 # Demo project model and Cart Builder
 
-This describes the implementation in the standalone Pico8_Suite repository as reviewed on 2026-11-01 at [1432860512e85a13dab0d1bd2ff0b4d4de780a05](https://github.com/Crylhead/Pico8_Suite/commit/1432860512e85a13dab0d1bd2ff0b4d4de780a05). It replaces the older phase-1 proposal. Open defects are tracked in the [health review](HEALTH_REVIEW_2026-11-01.md); implemented behavior below is not a guarantee that those defects are resolved.
+This describes the implementation in the standalone Pico8_Suite repository as re-reviewed on 2026-11-01 at [ca36c07f2e770055f2c0f69a62bde4142a4dea2f](https://github.com/Crylhead/Pico8_Suite/commit/ca36c07f2e770055f2c0f69a62bde4142a4dea2f). It replaces the older phase-1 proposal. Open defects are tracked in the [health review](HEALTH_REVIEW_2026-11-01_ca36c07.md); implemented behavior below is not a guarantee that those defects are resolved.
 
 ## Folder and persistence
 
@@ -21,7 +21,7 @@ Opening a folder reads its files. **Adopt writes immediately:** it adds anchors 
 
 Adoption recognizes literal cart names and supported literal cart lists. Music/track carts and unsupported computed references are left outside conversion and reported where detected.
 
-Source and length must be literal integer arithmetic (numbers, parentheses, `+ - * / \ % & | ^^ << >> >>>`) that stays an integer in PICO-8's 16-bit range, and the read must lie inside the 0x4300-byte data area. Any name, call, fraction or overflow, such as `frame*0x200`, leaves the line unchanged with the reason listed under **Left as they are**. A cart that such a line still reads stays in `demo/` and is not recorded as adopted. If a computed cart name cannot be traced to specific carts, no source cart is recorded as adopted. The preview evaluator used for palette/segment guesses is separate and still treats unknown names as 0. Remaining-reference checks and recoverable writes still need fixes ([#2](https://github.com/Crylhead/Pico8_Suite/issues/2), [#3](https://github.com/Crylhead/Pico8_Suite/issues/3), [#4](https://github.com/Crylhead/Pico8_Suite/issues/4)).
+Source and length must be literal integer arithmetic (numbers, parentheses, `+ - * / \ % & | ^^ << >> >>>`) that stays an integer in PICO-8's 16-bit range, and the read must lie inside the 0x4300-byte data area. Any name, call, fraction or overflow, such as `frame*0x200`, leaves the line unchanged with the reason listed under **Left as they are**. A cart that such a line still reads stays in `demo/` and is not recorded as adopted. If a computed cart name cannot be traced to specific carts, no source cart is recorded as adopted. The preview evaluator used for palette/segment guesses is separate and still treats unknown names as 0. Remaining-reference checks, baseline conflicts and journaled writes have been implemented. Their outstanding edge cases are [#31](https://github.com/Crylhead/Pico8_Suite/issues/31), [#32](https://github.com/Crylhead/Pico8_Suite/issues/32) and [#33](https://github.com/Crylhead/Pico8_Suite/issues/33).
 
 ## Assets and bytes
 
@@ -58,7 +58,7 @@ A bare `--@data asset.part` follows the whole stored part, including its length.
 
 The decoder expects a complete LZ stream. For an LZ-packed part, a ranged anchor is accepted only if it is `+0` with exactly the stored (packed) length; any other range is rejected before writing. Use a bare anchor instead, which follows the packed length. The LZ checkbox stays off while any anchor reads the part as a range.
 
-Write Carts rewrites the source address, stored length and cart name, leaving the destination expression unchanged. The builder owns those three arguments, so an anchored line must use a literal source, length and (for a single part) a literal cart name. A computed one is reported and nothing is written, rather than being replaced by a fixed value. Anchors are comments and add no Lua tokens. Current validation checks missing refs, computed anchored arguments, unused-part warnings, raw/LZ call consistency and cart-set offsets; it is not a complete static verifier of arbitrary Lua.
+Write Carts rewrites the source address, stored length and cart name, leaving the destination expression unchanged. The builder owns those three arguments, so an anchored line must use a literal source, length and (for a single part) a literal cart name. A computed one is reported and nothing is written, rather than being replaced by a fixed value. Anchors are comments and add no Lua tokens. Current validation checks missing refs, computed anchored arguments, unused-part warnings, raw/LZ call consistency and cart-set offsets; it is not a complete static verifier of arbitrary Lua. The anchor parser currently accepts some invalid suffix prefixes (for example `+frame` or `+-1` can become a bare ref); [#34](https://github.com/Crylhead/Pico8_Suite/issues/34) tracks strict whole-payload validation.
 
 ### Cart sets
 
@@ -94,11 +94,11 @@ Retirement candidates are carts the project wrote before, or adopted, that the n
 - The Write confirmation lists the carts that will move, the carts that stay with the line that references them, and any unresolved references.
 - Carts that stay are no longer owned by the project afterwards. Their names are reserved, and later writes never overwrite or retire them.
 
-Partial adoption does not grant permission to retire a cart: a source cart is retired only when this check passes at write time.
+Partial adoption does not grant permission to retire a cart: a source cart is retired only when this check passes at write time. Current limitation: the scan misses valid string-call forms such as `load"old.p8"`; [#33](https://github.com/Crylhead/Pico8_Suite/issues/33) tracks that unsafe retirement case.
 
 ### Recoverable writes
 
-Write Carts and Adopt change several files. Both go through `P8Project.transact()`:
+Write Carts and Adopt change several files. Both go through `P8Project.transact()` with this intended lifecycle:
 
 1. **Preflight.** Every target file is read and its current contents kept. A read error stops the write before anything changes.
 2. **Journal.** The original contents go to `demo/suite.journal.json` (next to `suite.json`).
@@ -107,9 +107,9 @@ Write Carts and Adopt change several files. Both go through `P8Project.transact(
 5. **Retire.** Only now do old carts move to `unused/`: copied, read back, then removed. A cart that cannot be moved stays where it is and is reported.
 6. **Clean up.** The journal is removed.
 
-If any write or readback fails, every file touched so far is restored, and the journal goes once the restore succeeds. The in-memory project stays dirty, so you can try again. If the restore also fails (or the browser stops mid-write), the journal stays. Cart Builder then refuses further writes until the project is reopened.
+If a write or readback fails, the transaction attempts to restore every file touched so far, and the journal goes once the restore succeeds. The in-memory project stays dirty, so you can try again. If the restore also fails (or the browser stops mid-write), the journal stays. Cart Builder then refuses further writes until the project is reopened.
 
-On opening, a leftover `writing` journal offers to restore the original contents. A `committed` journal only finishes the retirement. The File System Access API has no atomic rename, so a single file is only as atomic as the browser's swap-file `close()`; the journal is what makes the whole operation recoverable.
+On opening, a leftover `writing` journal offers to restore the original contents. A `committed` journal only finishes the retirement. The File System Access API has no atomic rename, so the journal is intended to supply recovery across files. Two reproduced gaps remain: a failed commit-marker verification followed by partial rollback can be misclassified as committed ([#31](https://github.com/Crylhead/Pico8_Suite/issues/31)), and overlapping writers can remove each other's live journal ([#32](https://github.com/Crylhead/Pico8_Suite/issues/32)). Current recovery is therefore not guaranteed at those boundaries.
 
 ### External edits
 
@@ -129,3 +129,4 @@ There is **no `tools/build.py` release builder in this repository**. Anchor vali
 Map Editor and Code Editor/Run already exist; they are no longer future phases. Run uses the optional Python bridge and your installed PICO-8. Byte checks in JavaScript do not replace running the generated demo in PICO-8.
 
 Live tile editing, shared document/revision semantics and a permanent Send to action remain design proposals. See the [historical review index](https://github.com/Crylhead/Demotools/blob/4a2855b99efb2e7a265961c63f1ac809adea3ed2/reviews/README.md); do not treat those proposals as delivered features.
+
