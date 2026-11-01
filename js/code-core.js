@@ -2,6 +2,8 @@
 // Code Editor model: a PICO-8 Lua lexer (PICO-8's extra operators, number formats and
 // shorthands), the API with signatures, code tabs (-->8), an outline of the functions, and
 // reading / writing the __lua__ section of a cart without touching the other sections.
+// The lexer is also the lexical model of Project Audit and Data Carts (comments and strings at
+// any long-bracket level, real #include lines, .p8:N tab includes): lex / includes.
 // No DOM; runs in Node for tests.
 
 'use strict';
@@ -258,19 +260,29 @@ const P8Code = (() => {
     return out;
   }
 
+  /** "lib.p8:1" -> {raw, path: 'lib.p8', tab: 1}; "lib.lua" -> {raw, path: 'lib.lua', tab: null} */
+  function includeTarget(raw) {
+    raw = raw.trim().replace(/^["']+|["']+$/g, '').trim();
+    const t = /^(.*\.p8):(\d+)$/i.exec(raw);
+    return { raw, path: t ? t[1] : raw, tab: t ? Number(t[2]) : null };
+  }
+
   /**
-   * #include lines -> [{line, path, tab}]: path as written (relative to the including cart's
-   * folder), tab = the code tab of a .p8 ("file.p8:1") or null.
+   * Real #include directives (lexer 'include' tokens, so never ones inside a comment or string)
+   * -> [{line, s, e, raw, path, tab}]: path as written (relative to the including cart's folder),
+   * tab = the code tab of a .p8 ("file.p8:1") or null; s/e = offsets of the directive.
    */
-  function includes(text) {
+  function includes(text, tokens = lex(text)) {
     const out = [];
-    text.split('\n').forEach((l, i) => {
-      const m = /^\s*#include\s+(.+?)\s*$/.exec(l);
-      if (!m) return;
-      const raw = m[1].replace(/^["']+|["']+$/g, '').trim();
-      const t = /^(.*\.p8):(\d+)$/i.exec(raw);
-      out.push({ line: i, path: t ? t[1] : raw, tab: t ? Number(t[2]) : null });
-    });
+    let line = 0;
+    let at = 0;
+    for (const tk of tokens) {
+      if (tk.t !== 'include') continue;
+      const m = /^#include\s+(.+?)\s*$/.exec(text.slice(tk.s, tk.e));
+      if (!m) continue;
+      for (; at < tk.s; at++) if (text[at] === '\n') line++;
+      out.push({ line, s: tk.s, e: tk.e, ...includeTarget(m[1]) });
+    }
     return out;
   }
 
@@ -383,7 +395,7 @@ const P8Code = (() => {
 
   const NEW_CART = 'pico-8 cartridge // http://www.pico-8.com\nversion 42\n__lua__\n';
 
-  return { KEYWORDS, API, API_NAMES, CALLBACKS, lex, bracketPairs, codeTabs, outline, includes, joinPath, includedCode, identifiers, opensBlock, DEDENT, callAt, splitCart, joinCart, NEW_CART };
+  return { KEYWORDS, API, API_NAMES, CALLBACKS, lex, bracketPairs, codeTabs, outline, includes, includeTarget, joinPath, includedCode, identifiers, opensBlock, DEDENT, callAt, splitCart, joinCart, NEW_CART };
 })();
 
 if (typeof module !== 'undefined') module.exports = P8Code;
