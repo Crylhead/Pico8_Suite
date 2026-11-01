@@ -18,7 +18,9 @@ For a flat project, replace `demo/` with the selected folder itself; `assets/` a
 
 Opening a folder reads its files. **Adopt writes immediately:** it adds anchors to FX carts, creates asset files and writes `suite.json`, then prepares an automatic layout. It does not wait for Write Carts. Later asset edits and rearrangements are staged in memory until Write Carts.
 
-Adoption recognizes literal cart names and supported literal cart lists. Music/track carts and unsupported computed references are left outside conversion and reported where detected. Conservative evaluation, remaining-reference checks and recoverable writes still need fixes ([#1](https://github.com/Crylhead/Pico8_Suite/issues/1), [#2](https://github.com/Crylhead/Pico8_Suite/issues/2), [#3](https://github.com/Crylhead/Pico8_Suite/issues/3), [#4](https://github.com/Crylhead/Pico8_Suite/issues/4)).
+Adoption recognizes literal cart names and supported literal cart lists. Music/track carts and unsupported computed references are left outside conversion and reported where detected.
+
+Source and length must be literal integer arithmetic (numbers, parentheses, `+ - * / \ % & | ^^ << >> >>>`) that stays an integer in PICO-8's 16-bit range, and the read must lie inside the 0x4300-byte data area. Any name, call, fraction or overflow, such as `frame*0x200`, leaves the line unchanged with the reason listed under **Left as they are**. A cart that such a line still reads stays in `demo/` and is not recorded as adopted. If a computed cart name cannot be traced to specific carts, no source cart is recorded as adopted. The preview evaluator used for palette/segment guesses is separate and still treats unknown names as 0. Remaining-reference checks and recoverable writes still need fixes ([#2](https://github.com/Crylhead/Pico8_Suite/issues/2), [#3](https://github.com/Crylhead/Pico8_Suite/issues/3), [#4](https://github.com/Crylhead/Pico8_Suite/issues/4)).
 
 ## Assets and bytes
 
@@ -53,7 +55,7 @@ reload(tmp,0x0123,0x0456,"source.p8") unlz(tmp,0x8000) --@data wormhole.bin
 
 A bare `--@data asset.part` follows the whole stored part, including its length. For raw parts, `--@data asset.part+offset` denotes a subrange: the existing call's length is retained, clamped to the remaining part bytes. Explicit `+0` also means a subrange. The decoder expects a complete LZ stream; ranged compressed reads are unsafe and current validation does not reject all of them ([#7](https://github.com/Crylhead/Pico8_Suite/issues/7)).
 
-Write Carts rewrites the source address, stored length and cart name, leaving the destination expression unchanged. Anchors are comments and add no Lua tokens. Current validation checks missing refs, unused-part warnings, raw/LZ call consistency and cart-set offsets; it is not a complete static verifier of arbitrary Lua.
+Write Carts rewrites the source address, stored length and cart name, leaving the destination expression unchanged. The builder owns those three arguments, so an anchored line must use a literal source, length and (for a single part) a literal cart name. A computed one is reported and nothing is written, rather than being replaced by a fixed value. Anchors are comments and add no Lua tokens. Current validation checks missing refs, computed anchored arguments, unused-part warnings, raw/LZ call consistency and cart-set offsets; it is not a complete static verifier of arbitrary Lua.
 
 ### Cart sets
 

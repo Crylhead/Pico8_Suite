@@ -98,7 +98,8 @@ const P8Project = (() => {
     const lists = [];
     for (const a of findAnchors(text)) {
       const id = a.set ? `${a.set}[]` : a.ref;
-      if (!a.call || a.call.args.length < 4) { errors.push({ line: a.line + 1, ref: id, msg: 'no reload(dest,src,len,cart) on this line' }); continue; }
+      const problem = anchorCallProblem(a);
+      if (problem) { errors.push({ line: a.line + 1, ref: id, msg: problem }); continue; }
       let call;
       if (a.set) {
         const ps = whereSet(a.set);
@@ -110,7 +111,7 @@ const P8Project = (() => {
         if (!p) { errors.push({ line: a.line + 1, ref: id, msg: `no part “${a.ref}” in the project` }); continue; }
         // an explicit +offset (even +0x0) marks a sub-range read: keep its own length, clamped to the part.
         // a bare ref reads the whole part, so it follows the part when it is resized.
-        const len = a.ranged ? Math.max(0, Math.min(evalOr(a.call.args[2], p.len - a.sub), p.len - a.sub)) : p.len;
+        const len = a.ranged ? Math.max(0, Math.min(constExpr(a.call.args[2]).value, p.len - a.sub)) : p.len;
         call = `reload(${a.call.args[0]},${hex(p.off + a.sub)},${hex(len)},"${p.cart}")`;
       }
       const line = lines[a.line];
@@ -131,12 +132,110 @@ const P8Project = (() => {
   }
   const lineOf = (text, i) => text.slice(0, i).split('\n').length;
 
+  /**
+   * Why an anchored reload() cannot be rewritten without changing what the fx does, or null.
+   * The builder owns the source, length and cart name of an anchored call, so they must be
+   * literal: a computed one (e.g. frame*0x200) would be replaced by a fixed value.
+   */
+  function anchorCallProblem(a) {
+    if (!a.call || a.call.args.length < 4) return 'no reload(dest,src,len,cart) on this line';
+    const s = constExpr(a.call.args[1]);
+    if (s.why) return `the source ${a.call.args[1]} ${s.why}; an anchored reload() needs a literal source`;
+    const l = constExpr(a.call.args[2]);
+    if (l.why) return `the length ${a.call.args[2]} ${l.why}; an anchored reload() needs a literal length`;
+    if (!a.set && literalCart(a.call.args[3]) == null) return `the cart name ${a.call.args[3]} is not a literal "name.p8"`;
+    return null;
+  }
+
   /** renames an asset in the anchor comments of `text` */
   function renameInText(text, from, to) {
     return text.replace(new RegExp(`(--@data\\s+)${from}(\\.|\\[\\])`, 'g'), `$1${to}$2`);
   }
 
-  const evalOr = (expr, d) => { const v = V.evalExpr(expr); return v == null ? d : v; };
+  /**
+   * Conservative constant evaluation for project mutation (adoption and anchor rewrites).
+   * Unlike the preview evaluator (V.evalExpr, unknown names = 0), anything that is not literal
+   * integer arithmetic is unresolved: names, calls, strings, fractions, overflow past PICO-8's
+   * 16-bit integer range and unsupported operators. -> {value} | {why}
+   */
+  function constExpr(expr) {
+    const src = String(expr ?? '').trim();
+    if (!src) return { why: 'is empty' };
+    const toks = [];
+    const re = /\s*(?:(0x[\da-f]*\.?[\da-f]*|0b[01]*\.?[01]*|\d+\.?\d*|\.\d+)|([A-Za-z_]\w*(?:\s*[.:]\s*[A-Za-z_]\w*)*)|(>>>|<<|>>|\^\^|[-+*/\\%&|()])|(\S))/giy;
+    for (let m; re.lastIndex < src.length && (m = re.exec(src));) {
+      if (m[1]) toks.push({ num: /^0[xb]\.?$/i.test(m[1]) ? NaN : C.parseNum(m[1]) });
+      else if (m[2]) toks.push({ name: m[2].replace(/\s+/g, '') });
+      else if (m[3]) toks.push({ op: m[3] });
+      else return { why: `uses “${m[4]}”, which is not literal integer arithmetic` };
+    }
+    let i = 0;
+    const fail = (why) => { throw new Error(why); };
+    const int = (v) => (Number.isInteger(v) && v >= -0x8000 && v <= 0x7fff ? v : fail(`is not an integer in PICO-8's range (${src})`));
+    const BIN = [['|'], ['^^'], ['&'], ['<<', '>>', '>>>'], ['+', '-'], ['*', '/', '\\', '%']];
+    const apply = (op, a, b) => {
+      switch (op) {
+        case '|': return a | b;
+        case '^^': return a ^ b;
+        case '&': return a & b;
+        case '<<': return b >= 0 && b < 16 ? a * 2 ** b : fail(`shifts by ${b}`);
+        case '>>': return b >= 0 && b < 16 ? a / 2 ** b : fail(`shifts by ${b}`);
+        case '>>>': return a >= 0 && b >= 0 && b < 16 ? a / 2 ** b : fail(`shifts by ${b}`);
+        case '+': return a + b;
+        case '-': return a - b;
+        case '*': return a * b;
+        case '/': return b ? a / b : fail('divides by zero');
+        case '\\': return b ? Math.floor(a / b) : fail('divides by zero');
+        case '%': return b > 0 ? a - Math.floor(a / b) * b : fail(`takes % ${b}`);
+        default: return fail(`uses the operator “${op}”`);
+      }
+    };
+    const unary = () => {
+      const tk = toks[i];
+      if (!tk) fail('ends early');
+      if (tk.op === '-') { i++; return int(-unary()); }
+      if (tk.op === '(') {
+        i++;
+        const v = binary(0);
+        if (toks[i]?.op !== ')') fail('has unbalanced parentheses');
+        i++;
+        return v;
+      }
+      if ('num' in tk) { i++; return int(tk.num); }
+      if (tk.name) fail(toks[i + 1]?.op === '(' ? `calls ${tk.name}()` : `depends on “${tk.name}”`);
+      return fail(`uses “${tk.op}” unexpectedly`);
+    };
+    const binary = (level) => {
+      if (level === BIN.length) return unary();
+      let v = binary(level + 1);
+      while (toks[i]?.op && BIN[level].includes(toks[i].op)) { const op = toks[i++].op; v = int(apply(op, v, binary(level + 1))); }
+      return v;
+    };
+    try {
+      const value = binary(0);
+      if (i < toks.length) { const tk = toks[i]; fail(tk.name ? `depends on “${tk.name}”` : `uses “${tk.op ?? tk.num}” unexpectedly`); }
+      return { value };
+    } catch (e) {
+      return { why: e.message };
+    }
+  }
+
+  /**
+   * The reload() source range of a data cart, if it is safe to adopt or rewrite: literal source and
+   * length inside the 0x4300-byte data area. -> {src, len} | {why}
+   */
+  function constRange(srcExpr, lenExpr) {
+    const s = constExpr(srcExpr);
+    if (s.why) return { why: `source ${srcExpr} ${s.why}` };
+    const l = constExpr(lenExpr);
+    if (l.why) return { why: `length ${lenExpr} ${l.why}` };
+    if (s.value < 0 || s.value >= CART) return { why: `source ${hex(s.value)} is outside the data area 0x0000..0x42ff` };
+    if (l.value <= 0) return { why: `length ${l.value} is not positive` };
+    if (s.value + l.value > CART) return { why: `${hex(s.value)} + ${hex(l.value)} reads past the end of the data area (0x4300)` };
+    return { src: s.value, len: l.value };
+  }
+
+  const literalCart = (expr) => /^(["'])([^"']+)\1$/.exec(String(expr ?? '').trim())?.[2] ?? null;
 
   // ------------------------------------------------------------------ //
   // Adopting an existing demo                                          //
@@ -177,13 +276,15 @@ const P8Project = (() => {
    * Every reload() of a data cart becomes an anchor and its bytes a part:
    *   literal cart name  -> one part (ranges inside a bigger one become sub-anchors asset.part+off)
    *   list[i] cart name  -> a cart set (one part per cart in the literal list), anchor asset[]
-   * Music carts, tracks and other computed names stay as they are (reported in `skipped`).
-   * -> {project, assets, edits: [{file, line, before, after}], skipped, adoptedCarts}
+   * Music carts, tracks, computed names and reads whose source/length is not literal integer
+   * arithmetic inside the data area stay as they are (reported in `skipped`). Carts such a call
+   * still reads (or, for an unresolvable name, every source cart) are `keptCarts`, never `adoptedCarts`.
+   * -> {project, assets, edits: [{file, line, before, after}], skipped, sourceCarts, adoptedCarts, keptCarts}
    */
   function adopt(carts, { prefix = 'd' } = {}) {
     const ranges = new Map(); // cart -> [{src, len, uses: [{file, line, text}]}]
     const sets = [];          // [{fx, list, carts, src, len, line, text}]
-    const skipped = [];
+    const skipped = [];       // [{file, line, why, carts?}]: left unchanged; `carts` stay in place
     for (const fx of carts.values()) {
       if (!fx.text) continue;
       const lines = fx.text.split('\n');
@@ -191,21 +292,24 @@ const P8Project = (() => {
         if (ANCHOR.test(line)) return;
         const call = reloadCall(line);
         if (!call || call.args.length < 4) return;
-        const src = V.evalExpr(call.args[1]);
-        const len = V.evalExpr(call.args[2]);
-        const lit = /^["']([^"']+)["']$/.exec(call.args[3].trim());
-        if (!lit) {
+        const range = constRange(call.args[1], call.args[2]);
+        const cartName = literalCart(call.args[3]);
+        if (cartName == null) {
           const ll = listLiteral(fx.text, call.args[3]);
-          if (ll && ll.carts.length && ll.carts.every((c) => carts.has(c.toLowerCase()) && !isMusic(c) && !isTracks(c)) && src != null && len > 0) {
-            sets.push({ fx: fx.name, list: ll.name, carts: ll.carts, src, len: Math.min(len, CART - src), line: i, text: line });
-          } else skipped.push({ file: fx.name, line: i + 1, why: ll ? 'cart list with music, tracks or missing carts (left as it is)' : 'cart name is computed (left as it is)' });
+          const okList = ll && ll.carts.length && ll.carts.every((c) => carts.has(c.toLowerCase()) && !isMusic(c) && !isTracks(c));
+          if (okList && !range.why) { sets.push({ fx: fx.name, list: ll.name, carts: ll.carts, src: range.src, len: range.len, line: i, text: line }); return; }
+          // the carts this call may read stay where they are; null = cannot tell which
+          const target = C.reloadTarget(call.args[3], fx.text);
+          const may = target ? [...carts.values()].filter((c) => target.match(c.name)).map((c) => c.name) : null;
+          const why = !ll ? `cart name ${call.args[3]} is computed` : !okList ? 'cart list with music, tracks or missing carts' : range.why;
+          skipped.push({ file: fx.name, line: i + 1, why: `${why} (left as it is)`, carts: may });
           return;
         }
-        const cn = lit[1].toLowerCase();
+        const cn = cartName.toLowerCase();
         if (isMusic(cn) || isTracks(cn)) return;
-        if (!carts.get(cn)) { skipped.push({ file: fx.name, line: i + 1, why: `${lit[1]} not found` }); return; }
-        if (src == null || len == null || len <= 0) { skipped.push({ file: fx.name, line: i + 1, why: 'source or length is not a number' }); return; }
-        const r = { src, len: Math.min(len, CART - src), uses: [{ file: fx.name, line: i, text: line }] };
+        if (!carts.get(cn)) { skipped.push({ file: fx.name, line: i + 1, why: `${cartName} not found` }); return; }
+        if (range.why) { skipped.push({ file: fx.name, line: i + 1, why: `${range.why} (left as it is)`, carts: [carts.get(cn).name] }); return; }
+        const r = { src: range.src, len: range.len, uses: [{ file: fx.name, line: i, text: line }] };
         if (!ranges.has(cn)) ranges.set(cn, []);
         const list = ranges.get(cn);
         const same = list.find((x) => x.src === r.src && x.len === r.len);
@@ -256,9 +360,14 @@ const P8Project = (() => {
       assets.push({ format: FORMAT, name, type: 'cartset', meta: { from: `${st.fx}: ${st.list}`, list: st.list, carts: st.carts, segments }, parts });
       edits.push({ file: st.fx, line: st.line + 1, before: st.text, after: `${st.text.replace(/\s+$/, '')} --@data ${name}[]` });
     }
-    const adopted = new Set([...ranges.keys(), ...sets.flatMap((s) => s.carts.map((c) => c.toLowerCase()))]);
+    const used = [...ranges.keys(), ...sets.flatMap((s) => s.carts.map((c) => c.toLowerCase()))];
+    // a cart that a skipped call still reads (or might read) is not taken over: it stays in place
+    const unknownTarget = skipped.some((s) => s.carts === null);
+    const kept = new Set(skipped.flatMap((s) => s.carts || []).map((n) => n.toLowerCase()));
+    const adopted = new Set(used.filter((k) => !unknownTarget && !kept.has(k)));
+    const keptCarts = [...new Set([...kept, ...used.filter((k) => !adopted.has(k))])].filter((k) => carts.has(k)).map((k) => carts.get(k).name);
     const project = { format: FORMAT, prefix, carts: [], unmanaged: [...carts.values()].filter((c) => isMusic(c.name) || isTracks(c.name)).map((c) => c.name) };
-    return { project, assets, edits, skipped, adoptedCarts: [...adopted].map((k) => carts.get(k).name) };
+    return { project, assets, edits, skipped, sourceCarts: [...new Set(used)].map((k) => carts.get(k).name), adoptedCarts: [...adopted].map((k) => carts.get(k).name), keptCarts };
   }
 
   /** the bytes of an image segment -> {w, h, pixels (slot per pixel)} */
@@ -412,6 +521,8 @@ const P8Project = (() => {
       for (const a of findAnchors(f.text)) {
         anchors.push({ file: f.name, ...a, line: a.line + 1 });
         const at = `${f.name}:${a.line + 1}`;
+        const problem = anchorCallProblem(a);
+        if (problem) errors.push(`${at} ${problem}`);
         if (a.set) {
           if (!setNames.has(a.set)) { errors.push(`${at} anchors the cart set “${a.set}[]”, which is not in the project`); continue; }
           for (const p of parts) if (p.set === a.set) used.add(p.ref);
@@ -433,7 +544,7 @@ const P8Project = (() => {
 
   return {
     FORMAT, CART, TYPES, hex, safeName, assetToJson, assetFromJson, findAnchors, rewriteAnchors, renameInText, listLiteral,
-    adopt, segmentsOf, segmentImage, setSegment, imageBytes, partsOf, autoPack, placements, buildCarts, verifyCarts, checkAnchors, isMusic, isTracks,
+    constExpr, constRange, adopt, segmentsOf, segmentImage, setSegment, imageBytes, partsOf, autoPack, placements, buildCarts, verifyCarts, checkAnchors, isMusic, isTracks,
   };
 })();
 
