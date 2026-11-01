@@ -88,7 +88,7 @@ const P8Project = (() => {
 
   /**
    * Rewrites src / len / cart of every anchored reload() in `text` (and, for cart sets, the
-   * cart names in the list literal). where(ref) -> {cart, off, len}; whereSet(name) -> {off, len, carts}.
+   * cart names in the list literal). where(ref) -> {cart, off, len, lz}; whereSet(name) -> {off, len, carts}.
    * -> {text, changes: [..], errors: [..]}
    */
   function rewriteAnchors(text, where, whereSet = () => null) {
@@ -109,9 +109,11 @@ const P8Project = (() => {
       } else {
         const p = where(a.ref);
         if (!p) { errors.push({ line: a.line + 1, ref: id, msg: `no part “${a.ref}” in the project` }); continue; }
-        // an explicit +offset (even +0x0) marks a sub-range read: keep its own length, clamped to the part.
+        const bad = anchorRangeProblem(a, p);
+        if (bad) { errors.push({ line: a.line + 1, ref: id, msg: bad }); continue; }
+        // an explicit +offset (even +0x0) marks a sub-range read: it keeps its own length.
         // a bare ref reads the whole part, so it follows the part when it is resized.
-        const len = a.ranged ? Math.max(0, Math.min(constExpr(a.call.args[2]).value, p.len - a.sub)) : p.len;
+        const len = a.ranged ? constExpr(a.call.args[2]).value : p.len;
         call = `reload(${a.call.args[0]},${hex(p.off + a.sub)},${hex(len)},"${p.cart}")`;
       }
       const line = lines[a.line];
@@ -144,6 +146,26 @@ const P8Project = (() => {
     const l = constExpr(a.call.args[2]);
     if (l.why) return `the length ${a.call.args[2]} ${l.why}; an anchored reload() needs a literal length`;
     if (!a.set && literalCart(a.call.args[3]) == null) return `the cart name ${a.call.args[3]} is not a literal "name.p8"`;
+    return null;
+  }
+
+  /**
+   * Why an anchor's byte range does not fit its part, or null. part: {len (stored bytes), lz}.
+   * A bare anchor reads the whole stored part. A ranged one (+offset, even +0) reads its own
+   * length from that offset: for raw parts it must lie inside the part; for LZ parts only the
+   * complete stream can be unpacked, so a range must be +0 with exactly the stored length.
+   */
+  function anchorRangeProblem(a, part) {
+    if (!a.ranged || !part) return null;
+    const len = constExpr(a.call?.args[2]).value;
+    if (len == null) return null; // reported by anchorCallProblem
+    if (part.lz) {
+      if (a.sub === 0 && len === part.len) return null;
+      return `${a.ref} is LZ-packed: unlz() needs the whole stream (${hex(part.len)} bytes from +0), not ${hex(len)} bytes from +${hex(a.sub)}. Use a bare --@data ${a.ref} or store the part raw`;
+    }
+    if (a.sub >= part.len) return `${a.ref}+${hex(a.sub)} starts past the end of the part (${hex(part.len)} bytes)`;
+    if (len <= 0) return `${a.ref}+${hex(a.sub)} reads ${len} bytes; the length must be positive`;
+    if (a.sub + len > part.len) return `${a.ref}+${hex(a.sub)} reads ${hex(len)} bytes, but only ${hex(part.len - a.sub)} remain in the part (${hex(part.len)} bytes)`;
     return null;
   }
 
@@ -449,11 +471,11 @@ const P8Project = (() => {
     return { carts: bins.map((b, i) => ({ name: names[i], items: b.items })), errors };
   }
 
-  /** layout -> {where: ref -> {cart, off, len}, whereSet: name -> {off, len, carts}} */
+  /** layout -> {where: ref -> {cart, off, len, lz}, whereSet: name -> {off, len, carts}} */
   function placements(layout, parts) {
     const byRef = new Map(parts.map((p) => [p.ref, p]));
     const where = new Map();
-    for (const c of layout) for (const it of c.items) where.set(it.ref, { cart: c.name, off: it.off, len: byRef.get(it.ref)?.bytes.length ?? 0 });
+    for (const c of layout) for (const it of c.items) where.set(it.ref, { cart: c.name, off: it.off, len: byRef.get(it.ref)?.bytes.length ?? 0, lz: !!byRef.get(it.ref)?.lz });
     const sets = new Map();
     for (const p of parts.filter((x) => x.set)) {
       if (!sets.has(p.set)) sets.set(p.set, []);
@@ -531,6 +553,8 @@ const P8Project = (() => {
         used.add(a.ref);
         const p = byRef.get(a.ref);
         if (!p) { errors.push(`${at} anchors “${a.ref}”, which is not in the project`); continue; }
+        const bad = anchorRangeProblem(a, { len: p.bytes.length, lz: p.lz });
+        if (bad) errors.push(`${at} ${bad}`);
         if (p.lz && !a.lz) errors.push(`${at} ${a.ref} is LZ-packed, but the line has no unlz()`);
         if (!p.lz && a.lz) errors.push(`${at} ${a.ref} is not LZ-packed, but the line calls unlz()`);
       }
