@@ -703,12 +703,16 @@
 
   async function newCart() {
     App.setWorkspace('code');
-    await saver.idle();
-    if (!(await confirmDiscard('Start a new cart?'))) return;
-    load(`${K.NEW_CART}function _init()\n\nend\n\nfunction _update()\n\nend\n\nfunction _draw()\n cls()\n\nend\n`, 'untitled.p8');
-    ed.savedLua = '';
-    renderTitle();
-    goLine(10);
+    const r = await transitions.open({
+      what: 'Start a new cart?',
+      apply: () => {
+        load(`${K.NEW_CART}function _init()\n\nend\n\nfunction _update()\n\nend\n\nfunction _draw()\n cls()\n\nend\n`, 'untitled.p8');
+        ed.savedLua = '';
+        renderTitle();
+        goLine(10);
+      },
+    });
+    explain('New Cart', r, 'start a new cart');
   }
 
   async function openFile(file = null) {
@@ -723,14 +727,28 @@
         if (!file) return;
       }
     }
-    await saver.idle();
-    if (!(await confirmDiscard(`Open "${file.name}"?`))) return;
-    const text = await file.text();
-    if (/\.p8$/i.test(file.name) && !/^pico-8 cartridge/.test(text)) { showMessage('Open', `${file.name} is not a PICO-8 text cart (.p8.png carts are not supported; save it as .p8 in PICO-8).`); return; }
-    // a file inside the open folder keeps its place there (for #include)
-    const inFolder = handle && ed.folder ? await ed.folder.resolve(handle).catch(() => null) : null;
-    load(text, file.name, handle, { rel: inFolder ? inFolder.join('/') : null });
-    toast(`Opened ${file.name}${handle ? ' (Save writes into it)' : ''}`);
+    const r = await transitions.open({
+      what: `Open "${file.name}"?`,
+      prepare: async () => {
+        const text = await file.text();
+        if (/\.p8$/i.test(file.name) && !/^pico-8 cartridge/.test(text)) { showMessage('Open', `${file.name} is not a PICO-8 text cart (.p8.png carts are not supported; save it as .p8 in PICO-8).`); return null; }
+        // a file inside the open folder keeps its place there (for #include)
+        const inFolder = handle && ed.folder ? await ed.folder.resolve(handle).catch(() => null) : null;
+        return { text, rel: inFolder ? inFolder.join('/') : null };
+      },
+      apply: ({ text, rel }) => {
+        load(text, file.name, handle, { rel });
+        toast(`Opened ${file.name}${handle ? ' (Save writes into it)' : ''}`);
+      },
+    });
+    explain('Open', r, `open "${file.name}"`);
+  }
+
+  /** code handed over by another tool (code-open-text) */
+  async function openText({ text, name }) {
+    App.setWorkspace('code');
+    const r = await transitions.open({ what: `Open "${name}"?`, prepare: () => text, apply: (t) => load(t, name) });
+    explain('Open', r, `open "${name}"`);
   }
 
   async function writeHandle(h, text) {
@@ -783,15 +801,36 @@
   /** -> 'saved' (written to a file handle) | 'downloaded' (fallback copy, not in place) | 'cancelled' */
   const save = (opts) => saver.save(opts);
 
+  // everything that replaces the open code (or runs it) is bound to the open document and its saved
+  // revision, and checked again after every wait: newer edits stay open or are discarded only on request
+  const transitions = K.createTransitions({
+    current: () => ({ doc: ed.doc, lua: ed.text, savedLua: ed.savedLua, handle: ed.handle, name: ed.name }),
+    idle: () => saver.idle(),
+    save: () => save(),
+    confirmDiscard,
+  });
+
+  /** why a transition kept the open code (silent when the user declined or a newer action took over) */
+  function explain(title, r, next) {
+    if (r.why === 'unsaved') showMessage(title, `${r.name} was not saved in place, so it stays open. Save it, then ${next} again.`);
+    else if (r.why === 'changed') showMessage(title, `${r.name} was edited while it was being saved or while the next file was loading, so it stays open with your newest code (not saved yet). Save it, then ${next} again.`);
+    else if (r.why === 'switched') toast(`${title}: another file was opened meanwhile`, 'warn');
+  }
+
   async function reloadFromDisk() {
     if (!ed.handle) { showMessage('Reload', 'The code was not opened from a file this browser can read again. Use Open… instead.'); return; }
-    await saver.idle();
-    if (!(await confirmDiscard(`Reload "${ed.name}" from disk?`))) return;
-    try {
-      if ((await ed.handle.queryPermission?.({ mode: 'read' })) !== 'granted') await ed.handle.requestPermission?.({ mode: 'read' });
-      load(await (await ed.handle.getFile()).text(), ed.name, ed.handle);
-      toast('Reloaded');
-    } catch (err) { showMessage('Reload', err.message); }
+    const r = await transitions.open({
+      what: `Reload "${ed.name}" from disk?`,
+      prepare: async () => {
+        const { handle, name } = ed;
+        try {
+          if ((await handle.queryPermission?.({ mode: 'read' })) !== 'granted') await handle.requestPermission?.({ mode: 'read' });
+          return { text: await (await handle.getFile()).text(), handle, name };
+        } catch (err) { showMessage('Reload', err.message); return null; }
+      },
+      apply: ({ text, handle, name }) => { load(text, name, handle); toast('Reloaded'); },
+    });
+    explain('Reload', r, 'reload it');
   }
 
   // the cart's other sections, in the other tools
@@ -887,14 +926,16 @@
   async function openRel(rel, { parent = null } = {}) {
     const f = ed.files.get(rel.toLowerCase());
     if (!f) { showMessage('Open', `${rel} is not in the folder.`); return; }
-    // moving between the files of a folder saves the one you leave (it has a place on disk)
-    await saver.idle();
-    if (dirty() && ed.handle) {
-      // only leave once the file is really written; a cancelled or download-only save keeps this buffer open
-      if ((await save()) !== 'saved') { showMessage('Open', `${ed.name} was not saved in place, so it stays open. Save it, then open "${f.rel}" again.`); return; }
-    } else if (!(await confirmDiscard(`Open "${f.rel}"?`))) return;
-    const text = await readRel(f.rel);
-    load(text, f.handle.name, f.handle, { rel: f.rel, parent });
+    // moving between the files of a folder saves the one you leave (it has a place on disk). It is left
+    // only once exactly the code on screen is written: a cancelled or download-only save, or code typed
+    // during the save, keeps this buffer open
+    const r = await transitions.open({
+      what: `Open "${f.rel}"?`,
+      autosave: true,
+      prepare: () => readRel(f.rel),
+      apply: (text) => load(text, f.handle.name, f.handle, { rel: f.rel, parent }),
+    });
+    explain('Open', r, `open "${f.rel}"`);
   }
 
   // includes: resolved like Project Audit does (P8Audit.includeMeter), nested ones too, with their
@@ -966,9 +1007,9 @@
     return j;
   }
 
-  /** the cart to run: this one, or for an included .lua file the cart that includes it */
+  /** the cart to run: this one, or for an included .lua file the cart that includes it; text(lua) gets the Lua to send for the open file */
   async function runTarget() {
-    if (/\.p8$/i.test(ed.name) || ed.parts.head != null) return { name: ed.name, text: () => cartText() };
+    if (/\.p8$/i.test(ed.name) || ed.parts.head != null) return { name: ed.name, text: (lua) => K.joinCart(ed.parts, lua) };
     const parent = ed.parent && ed.files.get(ed.parent.rel.toLowerCase());
     if (parent) return { name: parent.handle.name, text: () => readRel(parent.rel) };
     // a .p8 in the folder that includes this file
@@ -984,14 +1025,21 @@
 
   async function runCart() {
     App.setWorkspace('code');
+    const doc = ed.doc;
     const target = await runTarget();
     if (!target) { showMessage('Run', 'This .lua file is not included by a cart in the open folder, so there is nothing to run. Open the cart instead.'); return; }
-    // PICO-8 runs what is on disk: save first (includes are read by PICO-8 itself)
-    await saver.idle();
-    if (ed.handle && dirty() && (await save()) !== 'saved') { showMessage('Run', `${ed.name} was not saved in place, so PICO-8 would run the old version from disk. Save it, then Run again.`); return; }
+    // PICO-8 runs what is on disk: save first (includes are read by PICO-8 itself) and send exactly the
+    // saved code, so newer unsaved edits are never presented as the cart on disk
+    const r = await transitions.ready(doc);
+    if (!r.ok) {
+      if (r.why === 'unsaved') showMessage('Run', `${r.name} was not saved in place, so PICO-8 would run the old version from disk. Save it, then Run again.`);
+      else if (r.why === 'changed') showMessage('Run', `${r.name} was edited while it was being saved, so the file on disk is older than the code on screen. Save it, then Run again.`);
+      else if (r.why === 'switched') showMessage('Run', 'Another file was opened before Run could start. Run again.');
+      return;
+    }
     let res;
     try {
-      res = await call('/run', { name: target.name, text: await target.text() });
+      res = await call('/run', { name: target.name, text: await target.text(r.lua) });
     } catch (err) {
       if (err instanceof TypeError || err.status === 401) { runSetup(); return; }
       showMessage('Run', err.message);
@@ -1259,8 +1307,12 @@
       e.preventDefault();
       const handle = await item.getAsFileSystemHandle?.().catch(() => null);
       const file = item.getAsFile();
-      if (!(await confirmDiscard(`Open "${file.name}"?`))) return;
-      load(await file.text(), file.name, handle?.kind === 'file' ? handle : null);
+      const r = await transitions.open({
+        what: `Open "${file.name}"?`,
+        prepare: () => file.text(),
+        apply: (text) => load(text, file.name, handle?.kind === 'file' ? handle : null),
+      });
+      explain('Open', r, `open "${file.name}"`);
     });
 
     document.addEventListener('p8:workspace', () => {
@@ -1318,7 +1370,7 @@
     'code-run-setup': runSetup,
   });
   // other tools can open a cart's code: App.runAction('code-open-text', {text, name})
-  App.registerActions({ 'code-open-text': async ({ text, name }) => { App.setWorkspace('code'); if (await confirmDiscard(`Open "${name}"?`)) load(text, name); } });
+  App.registerActions({ 'code-open-text': openText });
 
   applyFont();
   bind();
