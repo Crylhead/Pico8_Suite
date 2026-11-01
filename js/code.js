@@ -34,6 +34,8 @@
     parts: K.splitCart(K.NEW_CART),
     handle: null,           // FileSystemFileHandle when the browser lets us write back
     savedLua: '',
+    doc: {},                // identity of the open document (a new object on every load)
+    baseLua: null,          // the file's Lua when opened / last saved: external Lua edits are detected against it
     text: '',
     tokens: [],
     lines: [],              // per line: [[type, text], ...]
@@ -686,6 +688,8 @@
     ed.incTokens = 0;
     dom.ta.value = ed.parts.lua;
     ed.savedLua = ed.parts.lua;
+    ed.doc = {};
+    ed.baseLua = handle ? ed.parts.lua : null;
     dom.ta.setSelectionRange(0, 0);
     dom.ta.scrollTop = 0;
     dom.ta.scrollLeft = 0;
@@ -699,6 +703,7 @@
 
   async function newCart() {
     App.setWorkspace('code');
+    await saver.idle();
     if (!(await confirmDiscard('Start a new cart?'))) return;
     load(`${K.NEW_CART}function _init()\n\nend\n\nfunction _update()\n\nend\n\nfunction _draw()\n cls()\n\nend\n`, 'untitled.p8');
     ed.savedLua = '';
@@ -718,6 +723,7 @@
         if (!file) return;
       }
     }
+    await saver.idle();
     if (!(await confirmDiscard(`Open "${file.name}"?`))) return;
     const text = await file.text();
     if (/\.p8$/i.test(file.name) && !/^pico-8 cartridge/.test(text)) { showMessage('Open', `${file.name} is not a PICO-8 text cart (.p8.png carts are not supported; save it as .p8 in PICO-8).`); return; }
@@ -734,38 +740,52 @@
     await w.close();
   }
 
-  /** -> 'saved' (written to a file handle) | 'downloaded' (fallback copy, not in place) | 'cancelled' */
-  async function save({ as = false } = {}) {
-    const text = K.joinCart(ed.parts, ed.text);
-    const done = (how) => {
-      ed.savedLua = ed.text;
+  async function readHandle(h) {
+    if ((await h.queryPermission?.({ mode: 'readwrite' })) !== 'granted' && (await h.requestPermission?.({ mode: 'readwrite' })) !== 'granted') throw new Error('No permission to read the file.');
+    return (await h.getFile()).text();
+  }
+
+  async function saveConflict({ name, diskLua, canReload }) {
+    const lines = diskLua.split('\n').length;
+    return modal({
+      title: 'Code Changed on Disk',
+      body: `The code in ${name} was changed outside this editor (in PICO-8 or another tab) since it was opened or last saved here; the file now has ${lines} line(s) of Lua.\n\nOverwrite: write your code; the file's sprites, map and sound stay as they are on disk.${canReload ? '\nReload: discard your edits and open the version on disk.' : ''}\nCancel: write nothing, keep your edits here.`,
+      buttons: [{ label: 'Cancel', value: 'cancel' }, ...(canReload ? [{ label: 'Reload from disk', value: 'reload' }] : []), { label: 'Overwrite with mine', value: 'overwrite', primary: true }],
+    });
+  }
+
+  // saves run one at a time; each marks only the code it wrote as saved, and only in its own file
+  const saver = K.createSaver({
+    snapshot: () => ({ doc: ed.doc, lua: ed.text, parts: ed.parts, baseLua: ed.baseLua, handle: ed.handle, name: ed.name }),
+    isCurrent: (doc) => doc === ed.doc,
+    commit: (doc, r) => {
+      ed.savedLua = r.lua;
+      if (r.text != null) {
+        ed.parts = r.parts;
+        ed.baseLua = r.parts.lua;
+        ed.handle = r.handle;
+        ed.name = r.name;
+      }
       renderTitle();
       renderStructure();
       saveSession();
-      toast(how);
-    };
-    if (!as && ed.handle) {
-      try { await writeHandle(ed.handle, text); done(`Saved ${ed.name}`); return 'saved'; } catch (err) { toast(`Could not write ${ed.name}: ${err.message}`, 'warn', 4000); }
-    }
-    if (window.showSaveFilePicker) {
-      try {
-        const h = await window.showSaveFilePicker({ id: 'p8-code', suggestedName: ed.name, types: FILE_TYPES });
-        await writeHandle(h, text);
-        ed.handle = h;
-        ed.name = h.name;
-        done(`Saved ${ed.name}`);
-        return 'saved';
-      } catch (err) {
-        if (err.name === 'AbortError') return 'cancelled';
-      }
-    }
-    download(text, ed.name);
-    done(`Downloaded ${ed.name}: replace the original with it`);
-    return 'downloaded';
-  }
+    },
+    done: (how, r) => toast(how === 'downloaded' ? `Downloaded ${r.name}: replace the original with it` : `Saved ${r.name}${r.merged ? ' (kept the sprite/map/sound changes made on disk)' : ''}`),
+    read: readHandle,
+    write: writeHandle,
+    conflict: saveConflict,
+    reload: (doc, text) => { load(text, ed.name, ed.handle, { rel: ed.rel, parent: ed.parent }); toast('Reloaded the version on disk'); },
+    pickSave: window.showSaveFilePicker ? (name) => window.showSaveFilePicker({ id: 'p8-code', suggestedName: name, types: FILE_TYPES }) : null,
+    download: (text, name) => download(text, name),
+    warn: (msg) => toast(msg, 'warn', 4000),
+  });
+
+  /** -> 'saved' (written to a file handle) | 'downloaded' (fallback copy, not in place) | 'cancelled' */
+  const save = (opts) => saver.save(opts);
 
   async function reloadFromDisk() {
     if (!ed.handle) { showMessage('Reload', 'The code was not opened from a file this browser can read again. Use Open… instead.'); return; }
+    await saver.idle();
     if (!(await confirmDiscard(`Reload "${ed.name}" from disk?`))) return;
     try {
       if ((await ed.handle.queryPermission?.({ mode: 'read' })) !== 'granted') await ed.handle.requestPermission?.({ mode: 'read' });
@@ -868,6 +888,7 @@
     const f = ed.files.get(rel.toLowerCase());
     if (!f) { showMessage('Open', `${rel} is not in the folder.`); return; }
     // moving between the files of a folder saves the one you leave (it has a place on disk)
+    await saver.idle();
     if (dirty() && ed.handle) {
       // only leave once the file is really written; a cancelled or download-only save keeps this buffer open
       if ((await save()) !== 'saved') { showMessage('Open', `${ed.name} was not saved in place, so it stays open. Save it, then open "${f.rel}" again.`); return; }
@@ -943,11 +964,19 @@
 
   const BRIDGE = `http://127.0.0.1:${saved.bridgePort || 8708}`;
   const bridge = { since: 0, timer: 0, running: false };
+  // pairing token printed by the bridge; valid until it restarts, so this tab's session is enough
+  const TOKEN_KEY = 'p8suite.bridgeToken';
+  const bridgeToken = {
+    get() { try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } },
+    set(v) { try { if (v) sessionStorage.setItem(TOKEN_KEY, v); else sessionStorage.removeItem(TOKEN_KEY); } catch { /* storage blocked */ } },
+  };
 
-  async function call(path, body = null) {
-    const r = await fetch(BRIDGE + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  async function call(path, body = null, token = bridgeToken.get()) {
+    const headers = token ? { 'X-Bridge-Token': token } : {};
+    if (body) headers['Content-Type'] = 'application/json';
+    const r = await fetch(BRIDGE + path, body ? { method: 'POST', headers, body: JSON.stringify(body) } : { headers });
     const j = await r.json();
-    if (!j.ok) throw new Error(j.error || `bridge error ${r.status}`);
+    if (!j.ok) throw Object.assign(new Error(j.error || `bridge error ${r.status}`), { status: r.status });
     return j;
   }
 
@@ -972,12 +1001,13 @@
     const target = await runTarget();
     if (!target) { showMessage('Run', 'This .lua file is not included by a cart in the open folder, so there is nothing to run. Open the cart instead.'); return; }
     // PICO-8 runs what is on disk: save first (includes are read by PICO-8 itself)
+    await saver.idle();
     if (ed.handle && dirty() && (await save()) !== 'saved') { showMessage('Run', `${ed.name} was not saved in place, so PICO-8 would run the old version from disk. Save it, then Run again.`); return; }
     let res;
     try {
       res = await call('/run', { name: target.name, text: await target.text() });
     } catch (err) {
-      if (err instanceof TypeError) { runSetup(); return; }
+      if (err instanceof TypeError || err.status === 401) { runSetup(); return; }
       showMessage('Run', err.message);
       return;
     }
@@ -1009,7 +1039,7 @@
     clearTimeout(bridge.timer);
     bridge.timer = setTimeout(async () => {
       try {
-        const j = await (await fetch(`${BRIDGE}/log?since=${bridge.since}`)).json();
+        const j = await call(`/log?since=${bridge.since}`);
         for (const l of j.lines) appendOut(l);
         bridge.since = j.next;
         if (j.running) poll(); else setRunning(false);
@@ -1017,20 +1047,43 @@
     }, 400);
   }
 
+  /** -> { paired, text } for the setup dialog; checks `token` without storing it */
+  async function bridgeStatus(token) {
+    let j;
+    try { j = await call('/ping', null, token); } catch { return { paired: false, text: 'The bridge is not running.' }; }
+    if (!j.paired) {
+      return { paired: false, text: token
+        ? 'The bridge is running, but this token was not accepted. Copy the current one from the bridge window: it changes every time the bridge starts.'
+        : 'The bridge is running. Paste the pairing token shown in its window, then press Pair.' };
+    }
+    return { paired: true, text: `The bridge is running and paired.\npico8: ${j.pico8 || 'not found'}\ncarts folders:\n${j.roots.join('\n')}` };
+  }
+
   async function runSetup() {
-    let status;
-    try { const j = await call('/ping'); status = `The bridge is running.\npico8: ${j.pico8 || 'not found'}\ncarts folders:\n${j.roots.join('\n')}`; } catch { status = 'The bridge is not running.'; }
     const cmd = 'python tools/pico8_bridge.py --root "C:/path/to/your/demo"';
+    const status = el('pre', { className: 'ce-cmd', textContent: 'Checking the bridge…' });
+    const input = el('input', { type: 'text', value: bridgeToken.get(), spellcheck: false, autocomplete: 'off', placeholder: 'token printed by the bridge' });
+    const pair = async () => {
+      const token = input.value.trim();
+      const st = await bridgeStatus(token);
+      status.textContent = st.text;
+      if (st.paired) bridgeToken.set(token);
+    };
+    pair();
     await modal({
       title: 'Run in PICO-8',
       body: el('div', { className: 'dialog-form' },
         el('p', { textContent: 'A web page cannot start programs, so Run goes through a small helper on your computer (Python, standard library only).' }),
         el('ol', {},
           el('li', {}, 'Start tools/run_pico8_bridge.bat (double-click), or in a terminal:', el('pre', { className: 'ce-cmd', textContent: cmd })),
+          el('li', { textContent: 'Copy the pairing token it prints, paste it below and press Pair (again whenever the bridge restarts).' }),
           el('li', { textContent: 'Keep its window open. Press Run (Ctrl+R): the cart is saved, PICO-8 starts it, printh() output shows up below the code.' })),
-        el('p', { className: 'muted', textContent: 'The bridge runs carts where they are, so #include, reload() and load() find their files. It looks in PICO-8\'s carts folder and in every --root folder; --pico8 PATH if PICO-8 is not installed in the usual place.' }),
-        el('pre', { className: 'ce-cmd', textContent: status })),
-      buttons: [{ label: 'Close', value: true, primary: true }],
+        formField('Pairing token', input),
+        el('p', { className: 'muted', textContent: 'The bridge runs carts where they are, so #include, reload() and load() find their files. It looks in PICO-8\'s carts folder and in every --root folder; --pico8 PATH if PICO-8 is not installed in the usual place. It only accepts this page from a local file, localhost or 127.0.0.1.' }),
+        status),
+      actions: [{ label: 'Pair', primary: true, onClick: pair }],
+      buttons: [{ label: 'Close', value: true }],
+      onOpen: () => input.focus(),
     });
   }
 
@@ -1040,13 +1093,13 @@
     clearTimeout(sessTimer);
     sessTimer = setTimeout(() => S.kv.set(SESSION_KEY, {
       name: ed.name, parts: { head: ed.parts.head, tail: ed.parts.tail, crlf: ed.parts.crlf, sections: ed.parts.sections },
-      lua: ed.text, savedLua: ed.savedLua, handle: ed.handle, sel: [dom.ta.selectionStart, dom.ta.selectionEnd], top: dom.ta.scrollTop,
+      lua: ed.text, savedLua: ed.savedLua, baseLua: ed.baseLua, handle: ed.handle, sel: [dom.ta.selectionStart, dom.ta.selectionEnd], top: dom.ta.scrollTop,
       folder: ed.folder, rel: ed.rel, parent: ed.parent,
-    }), 500);
+    }).catch(S.autosaveFailed('Code Editor session')), 500);
   }
 
   async function restoreSession() {
-    const s = await S.kv.get(SESSION_KEY);
+    const s = await S.kv.get(SESSION_KEY).catch(S.autosaveFailed('Code Editor session'));
     if (!s || typeof s.lua !== 'string') { load(`${K.NEW_CART}function _init()\n\nend\n\nfunction _update()\n\nend\n\nfunction _draw()\n cls()\n\nend\n`, 'untitled.p8'); return; }
     ed.parts = { lua: '', ...s.parts };
     ed.name = s.name || 'untitled.p8';
@@ -1061,6 +1114,8 @@
     }
     dom.ta.value = s.lua;
     ed.savedLua = typeof s.savedLua === 'string' ? s.savedLua : s.lua;
+    ed.doc = {};
+    ed.baseLua = typeof s.baseLua === 'string' ? s.baseLua : ed.handle ? ed.savedLua : null;
     analyze();
     renderStructure();
     if (Array.isArray(s.sel)) dom.ta.setSelectionRange(...s.sel);

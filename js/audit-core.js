@@ -1,6 +1,8 @@
 // js/audit-core.js
 // Pure logic of Project Audit (port of project_audit/core + ui/scanner_worker.py):
 // #include expansion, token / character counts, cart references, project summary.
+// Comments, strings and #include lines come from the Code Editor's lexer (js/code-core.js),
+// so long brackets of any level and .p8:N tab includes are read the same way everywhere.
 // No DOM; runs in Node for tests. Files are given as a Map of 'dir/name.p8' -> text.
 
 'use strict';
@@ -10,7 +12,9 @@ const P8Audit = (() => {
   const CHAR_LIMIT = 65535;
 
   const SECTION_RE = /^__([a-z0-9_]+)__$/i;
-  const INCLUDE_RE = /^\s*#include\s+(.+?)\s*$/i;
+  // resolved when first used: index.html loads this file before code-core.js
+  let K = null;
+  const lexer = () => (K ||= typeof P8Code !== 'undefined' ? P8Code : require('./code-core.js'));
 
   /** Lua between __lua__ and the next __section__ marker ('' if there is none). */
   function extractLua(p8) {
@@ -22,18 +26,8 @@ const P8Audit = (() => {
     return lines.slice(start + 1, end).join('');
   }
 
-  const cleanInclude = (raw) => raw.trim().replace(/^["']+|["']+$/g, '').trim();
-
-  function parseIncludes(lua) {
-    const out = [];
-    for (const ln of lua.split(/\r?\n/)) {
-      const m = INCLUDE_RE.exec(ln);
-      if (m) out.push(cleanInclude(m[1]));
-    }
-    return out;
-  }
-
-  const stripIncludes = (lua) => lua.split(/(?<=\n)/).filter((ln) => !INCLUDE_RE.test(ln.replace(/\r?\n$/, ''))).join('');
+  /** #include targets as written ('lib.lua', 'gfx.p8:1'); not ones inside comments or strings */
+  const parseIncludes = (lua) => lexer().includes(lua).map((i) => i.raw);
 
   // Paths --------------------------------------------------------------- //
 
@@ -69,25 +63,32 @@ const P8Audit = (() => {
     return null;
   }
 
-  const includePayload = (path, text) => (path.toLowerCase().endsWith('.p8') ? extractLua(text) : text);
-
-  /** expand_includes: returns {text, resolved[]}; appends to warnings. */
+  /**
+   * expand_includes: returns {text, resolved[]}; appends to warnings. Only real #include lines
+   * expand (not ones in comments or strings); "cart.p8:N" pulls in code tab N of that cart.
+   */
   function expandIncludes(fs, path, lua, visited, warnings, depth = 0) {
     if (depth > 50) { warnings.push(`include depth exceeded at ${path}`); return { text: lua, resolved: [] }; }
     const dir = dirname(path);
     const resolved = [];
     let out = '';
-    for (const ln of lua.split(/(?<=\n)/)) {
-      const m = INCLUDE_RE.exec(ln.replace(/\r?\n$/, ''));
-      if (!m) { out += ln; continue; }
-      const raw = cleanInclude(m[1]);
-      const target = resolveInclude(fs, dir, raw);
-      if (!target) {
-        warnings.push(`unresolved include: ${raw}`);
+    let at = 0;
+    for (const inc of lexer().includes(lua)) {
+      out += lua.slice(at, inc.s);
+      at = inc.e;
+      // the directive's line break is replaced by the block below
+      if (lua[at] === '\r') at++;
+      if (lua[at] === '\n') at++;
+      const { raw, tab } = inc;
+      const target = resolveInclude(fs, dir, inc.path);
+      const tabs = target && tab != null && target.toLowerCase().endsWith('.p8') ? lexer().splitCart(fs.read(target)).lua.split(/^-->8[ \t]*$/m).length : 0;
+      if (!target || (tab != null && tab >= tabs)) {
+        warnings.push(`unresolved include: ${raw}${target && tab != null ? ` (no code tab ${tab})` : ''}`);
         out += `-- [[unresolved include: ${raw}]]\n`;
         continue;
       }
-      const id = target.toLowerCase();
+      // a tab of a cart is its own unit: m.p8:1 may include m.p8:2
+      const id = tab == null ? target.toLowerCase() : `${target.toLowerCase()}:${tab}`;
       if (visited.has(id)) {
         warnings.push(`include cycle detected: ${raw}`);
         out += `-- [[include cycle: ${raw}]]\n`;
@@ -96,141 +97,69 @@ const P8Audit = (() => {
       // visited is the active include stack (cycle detection), not a global dedup:
       // a file included twice, or via two branches, expands at each occurrence like PICO-8 does.
       visited.add(id);
-      resolved.push(target);
-      const child = expandIncludes(fs, target, includePayload(target, fs.read(target)), visited, warnings, depth + 1);
+      resolved.push(tab == null ? target : `${target}:${tab}`);
+      const child = expandIncludes(fs, target, lexer().includedCode(fs.read(target), target, tab), visited, warnings, depth + 1);
       visited.delete(id);
       resolved.push(...child.resolved);
       out += `-- [[begin include: ${raw}]]\n${child.text}${child.text.endsWith('\n') ? '' : '\n'}-- [[end include: ${raw}]]\n`;
     }
-    return { text: out, resolved };
+    return { text: out + lua.slice(at), resolved };
   }
 
   // Comments + tokens ---------------------------------------------------- //
 
-  /** strip_comments_preserve_strings */
+  /** strip_comments_preserve_strings: comments of any long-bracket level and -->8 lines removed */
   function stripComments(src) {
-    let i = 0;
-    const n = src.length;
     let out = '';
-    while (i < n) {
-      const ch = src[i];
-      if (src.startsWith('[[', i)) {
-        const end = src.indexOf(']]', i + 2);
-        const stop = end < 0 ? n : end + 2;
-        out += src.slice(i, stop);
-        i = stop;
-        continue;
-      }
-      if (ch === "'" || ch === '"') {
-        let j = i + 1;
-        while (j < n) {
-          if (src[j] === '\\') { j += 2; continue; }
-          if (src[j] === ch) { j++; break; }
-          j++;
-        }
-        out += src.slice(i, Math.min(j, n));
-        i = j;
-        continue;
-      }
-      if (src.startsWith('--[[', i)) {
-        const end = src.indexOf(']]', i + 4);
-        if (end < 0) break;
-        i = end + 2;
-        continue;
-      }
-      if (src.startsWith('--', i)) {
-        i += 2;
-        while (i < n && src[i] !== '\n') i++;
-        if (i < n) { out += '\n'; i++; }
-        continue;
-      }
-      out += ch;
-      i++;
+    let at = 0;
+    for (const tk of lexer().lex(src)) {
+      if (tk.t !== 'comment' && tk.t !== 'tabsep') continue;
+      out += src.slice(at, tk.s);
+      at = tk.e;
     }
-    return out;
+    return out + src.slice(at);
   }
 
-  const OPS = ['...', '>>>', '<<', '>>', '==', '~=', '!=', '<=', '>=', '+=', '-=', '*=', '/=', '%=', '..=', '..', '^^', '||', '&&'];
-  const SINGLE_OPS = new Set('+-*/%^#=<>|&~:@?$\\');
-  const isDigit = (c) => c >= '0' && c <= '9';
-  const isIdentStart = (c) => /[\p{L}_]/u.test(c);
-  const isIdent = (c) => /[\p{L}\p{N}_]/u.test(c);
-  const isSpace = (c) => /\s/.test(c);
+  const FREE = new Set([',', '.', ';']);
+  const VALUE = new Set(['number', 'ident', 'close', 'string']);
+  const NAMES = new Set(['ident', 'api', 'callback', 'self', 'constant', 'keyword']);
+  const letterish = (tk, src) => NAMES.has(tk.t) || (tk.t === 'glyph' && /^\p{L}/u.test(src.slice(tk.s, tk.e)));
 
-  /** count_tokens_fallback: best-effort PICO-8 token count (see project_audit/core/tokenizer.py). */
+  /**
+   * Token estimate after the PICO-8 rules (see project_audit/core/tokenizer.py): every name,
+   * value, operator, string (quoted or [=*[long]=*]) and opening bracket counts 1; commas,
+   * periods, semicolons, closing brackets, local, end, comments and #include lines are free;
+   * a negative number literal is one token. Not checked against every PICO-8 version.
+   */
   function countTokens(lua) {
-    const src = stripComments(stripIncludes(lua));
-    const n = src.length;
-    let i = 0;
+    const toks = lexer().lex(lua);
     let tokens = 0;
     let last = null;
-    const scanDecimal = (j) => {
-      while (j < n && (isDigit(src[j]) || src[j] === '.')) j++;
-      if (j < n && (src[j] === 'e' || src[j] === 'E')) {
-        j++;
-        if (j < n && (src[j] === '+' || src[j] === '-')) j++;
-        while (j < n && isDigit(src[j])) j++;
+    for (let k = 0; k < toks.length; k++) {
+      const tk = toks[k];
+      const s = lua.slice(tk.s, tk.e);
+      switch (tk.t) {
+        case 'ws': case 'comment': case 'tabsep': case 'include': continue;
+        case 'string': case 'number': tokens++; last = tk.t; continue;
+        case 'bracket':
+          if ('([{'.includes(s)) { tokens++; last = 'open'; } else last = 'close';
+          continue;
+        case 'op':
+          if (FREE.has(s)) { last = 'ignored'; continue; }
+          // -1 straight after an operator / opening bracket is one negative literal
+          if (s === '-' && toks[k + 1]?.t === 'number' && toks[k + 1].s === tk.e && !VALUE.has(last)) { k++; last = 'number'; } else last = 'operator';
+          tokens++;
+          continue;
+        case 'keyword':
+          if (s === 'local' || s === 'end') { last = 'ignored'; continue; }
+          break;
+        case 'error': last = 'unknown'; continue;
+        default: break;
       }
-      return j;
-    };
-    while (i < n) {
-      const c = src[i];
-      if (isSpace(c)) { i++; continue; }
-      if (c === "'" || c === '"') {
-        i++;
-        while (i < n) {
-          if (src[i] === '\\') { i += 2; continue; }
-          if (src[i] === c) { i++; break; }
-          i++;
-        }
-        tokens++; last = 'string';
-        continue;
-      }
-      if (src.startsWith('[[', i)) {
-        const end = src.indexOf(']]', i + 2);
-        i = end < 0 ? n : end + 2;
-        tokens++; last = 'string';
-        continue;
-      }
-      if ('([{'.includes(c)) { tokens++; last = 'open'; i++; continue; }
-      if (')]}'.includes(c)) { last = 'close'; i++; continue; }
-      if (',.;'.includes(c) && !(c === '.' && i + 1 < n && isDigit(src[i + 1]))) {
-        if (!(c === '.' && src.startsWith('..', i))) { last = 'ignored'; i++; continue; }
-      }
-      if (c === '-' && i + 1 < n && isDigit(src[i + 1]) && !['number', 'ident', 'close', 'string'].includes(last)) {
-        i = scanDecimal(i + 1);
-        tokens++; last = 'number';
-        continue;
-      }
-      if (isDigit(c) || (c === '.' && i + 1 < n && isDigit(src[i + 1]))) {
-        let j = i;
-        if (/^0x/i.test(src.slice(i, i + 2))) {
-          j += 2;
-          while (j < n && /[0-9a-f.]/i.test(src[j])) j++;
-        } else if (/^0b/i.test(src.slice(i, i + 2))) {
-          j += 2;
-          while (j < n && (src[j] === '0' || src[j] === '1')) j++;
-          if (j < n && src[j] === '.' && j + 1 < n && isDigit(src[j + 1])) { j++; while (j < n && isDigit(src[j])) j++; }
-        } else {
-          j = scanDecimal(j);
-        }
-        tokens++; last = 'number';
-        i = j;
-        continue;
-      }
-      if (isIdentStart(c)) {
-        let j = i + 1;
-        while (j < n && isIdent(src[j])) j++;
-        const word = src.slice(i, j).toLowerCase();
-        if (word !== 'local' && word !== 'end') { tokens++; last = 'ident'; } else last = 'ignored';
-        i = j;
-        continue;
-      }
-      const op = OPS.find((o) => src.startsWith(o, i));
-      if (op) { tokens++; last = 'operator'; i += op.length; continue; }
-      if (SINGLE_OPS.has(c)) { tokens++; last = 'operator'; i++; continue; }
-      last = 'unknown';
-      i++;
+      // names and P8SCII glyphs (⬅️ is a predefined name); letters outside ASCII continue a name (café)
+      if (k && toks[k - 1].e === tk.s && letterish(toks[k - 1], lua) && letterish(tk, lua)) continue;
+      tokens++;
+      last = 'ident';
     }
     return tokens;
   }
@@ -275,7 +204,7 @@ const P8Audit = (() => {
       const incs = parseIncludes(extractLua(files.get(p)));
       includesOut.set(p, incs);
       for (const inc of incs) {
-        const t = resolveInclude(fs, dirname(p), inc);
+        const t = resolveInclude(fs, dirname(p), lexer().includeTarget(inc).path);
         if (t && t.toLowerCase().endsWith('.p8') && lowerCarts.has(t.toLowerCase())) includedBy.get(lowerCarts.get(t.toLowerCase())).push(p);
       }
     }
@@ -325,7 +254,7 @@ const P8Audit = (() => {
       if (r.endsWith('.p8')) referenced.add(basename(r).slice(0, -3));
     };
     for (const cs of stats) {
-      for (const r of [...cs.load_refs, ...cs.run_refs, ...cs.reload_file_refs, ...cs.cstore_file_refs, ...cs.includes_out]) addRef(r);
+      for (const r of [...cs.load_refs, ...cs.run_refs, ...cs.reload_file_refs, ...cs.cstore_file_refs, ...cs.includes_out.map((i) => i.replace(/(\.p8):\d+$/i, '$1'))]) addRef(r);
       for (const r of cs.basename_refs) referenced.add(r);
     }
     const used = [];

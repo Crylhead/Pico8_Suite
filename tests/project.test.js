@@ -48,7 +48,6 @@ t('#1 rewrite refuses to replace a computed source, length or cart name', () => 
   assert.match(lines[3], /reload\(0,0x1010,0x0020,"d0\.p8"\)/);
   assert.ok(P.checkAnchors([{ name: 'fx.p8', text: src }], [{ ref: 'a.bin', bytes: new Uint8Array(0x400), lz: false }]).errors.length >= 3);
 });
-
 // #7: a sub-range of an LZ stream cannot be unpacked; raw sub-ranges must lie inside the part
 const C = require('../js/cart-core.js');
 const lzPart = () => {

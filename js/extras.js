@@ -240,7 +240,7 @@
       if (!st.lines.length) { toast('Draw some lines first.', 'warn'); return; }
       const px = new Uint8Array(128 * 128).fill(st.bg);
       for (const l of st.lines) for (const [x, y] of X.rasterizeLine(l.x0, l.y0, l.x1, l.y1)) px[y * 128 + x] = l.c;
-      await S.assets.put(S.imageAsset({ name: st.name || 'lines', w: 128, h: 128, pixels: px, transparent: st.bg, source: 'line-tool' }));
+      if (!(await S.assets.put(S.imageAsset({ name: st.name || 'lines', w: 128, h: 128, pixels: px, transparent: st.bg, source: 'line-tool' })).catch((e) => S.reportStorageError('Line Tool to Library', e)))) return;
       toast('Saved the pixel view to the library.');
     }
 
@@ -344,7 +344,7 @@
     let saveTimer = 0;
 
     const cur = () => st.presets[st.idx];
-    const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => S.kv.set(KEYS.wave, { presets: st.presets, idx: st.idx }), 300); };
+    const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => S.kv.set(KEYS.wave, { presets: st.presets, idx: st.idx }).catch(S.autosaveFailed('Wave Designer presets')), 300); };
 
     function refresh() {
       st.cache[st.idx] = X.renderWave(cur());
@@ -534,7 +534,7 @@
         row(checkbox('Play', st.playing, (v) => { st.playing = v; }), speed, el('span', { className: 'spacer' }), status)),
       el('section', { className: 'ex-wave-groups' }, ...groups));
 
-    S.kv.get(KEYS.wave).then((d) => {
+    S.kv.get(KEYS.wave).catch(S.autosaveFailed('Wave Designer presets')).then((d) => {
       if (d && Array.isArray(d.presets) && d.presets.length === 16) {
         st.presets = d.presets.map((p) => ({ ...X.WAVE_DEFAULTS, ...p }));
         st.idx = Math.min(15, d.idx || 0);
@@ -598,7 +598,7 @@
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => S.kv.set(KEYS.lut, {
         mode: st.mode, aspect: st.aspect, motion: st.motion, settings: st.settings, slots: st.slots, slot: st.slot, exportOpts: st.exportOpts,
-      }), 400);
+      }).catch(S.autosaveFailed('LUT Creator settings')), 400);
     };
 
     const screen = () => (st.aspect === 'picotron' ? { w: 480, h: 270 } : { w: 128, h: 128 });
@@ -1062,7 +1062,7 @@
     }
 
     init(null);
-    S.kv.get(KEYS.lut).then((d) => { if (d) init(d); });
+    S.kv.get(KEYS.lut).catch(S.autosaveFailed('LUT Creator settings')).then((d) => { if (d) init(d); });
 
     return {
       panel: el('div', { className: 'ex-split' }, stage, controls),

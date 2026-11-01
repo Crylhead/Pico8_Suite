@@ -2,6 +2,8 @@
 // Code Editor model: a PICO-8 Lua lexer (PICO-8's extra operators, number formats and
 // shorthands), the API with signatures, code tabs (-->8), an outline of the functions, and
 // reading / writing the __lua__ section of a cart without touching the other sections.
+// The lexer is also the lexical model of Project Audit and Data Carts (comments and strings at
+// any long-bracket level, real #include lines, .p8:N tab includes): lex / includes / maskLua.
 // No DOM; runs in Node for tests.
 
 'use strict';
@@ -258,20 +260,54 @@ const P8Code = (() => {
     return out;
   }
 
+  /** "lib.p8:1" -> {raw, path: 'lib.p8', tab: 1}; "lib.lua" -> {raw, path: 'lib.lua', tab: null} */
+  function includeTarget(raw) {
+    raw = raw.trim().replace(/^["']+|["']+$/g, '').trim();
+    const t = /^(.*\.p8):(\d+)$/i.exec(raw);
+    return { raw, path: t ? t[1] : raw, tab: t ? Number(t[2]) : null };
+  }
+
   /**
-   * #include lines -> [{line, path, tab}]: path as written (relative to the including cart's
-   * folder), tab = the code tab of a .p8 ("file.p8:1") or null.
+   * Real #include directives (lexer 'include' tokens, so never ones inside a comment or string)
+   * -> [{line, s, e, raw, path, tab}]: path as written (relative to the including cart's folder),
+   * tab = the code tab of a .p8 ("file.p8:1") or null; s/e = offsets of the directive.
    */
-  function includes(text) {
+  function includes(text, tokens = lex(text)) {
     const out = [];
-    text.split('\n').forEach((l, i) => {
-      const m = /^\s*#include\s+(.+?)\s*$/.exec(l);
-      if (!m) return;
-      const raw = m[1].replace(/^["']+|["']+$/g, '').trim();
-      const t = /^(.*\.p8):(\d+)$/i.exec(raw);
-      out.push({ line: i, path: t ? t[1] : raw, tab: t ? Number(t[2]) : null });
-    });
+    let line = 0;
+    let at = 0;
+    for (const tk of tokens) {
+      if (tk.t !== 'include') continue;
+      const m = /^#include\s+(.+?)\s*$/.exec(text.slice(tk.s, tk.e));
+      if (!m) continue;
+      for (; at < tk.s; at++) if (text[at] === '\n') line++;
+      out.push({ line, s: tk.s, e: tk.e, ...includeTarget(m[1]) });
+    }
     return out;
+  }
+
+  /**
+   * Lexical mask shared by the Audit and Data Carts readers: the text with every comment (any
+   * long-bracket level), -->8 separator and, optionally, the contents of strings and the
+   * #include lines replaced by spaces. Same length and line breaks, so offsets and line numbers
+   * stay valid; string delimiters stay, so a masked string is still one (empty-looking) string.
+   */
+  function maskLua(text, { strings = true, includes: inc = false } = {}) {
+    const out = [];
+    let at = 0;
+    const blank = (s, e) => { out.push(text.slice(at, s), text.slice(s, e).replace(/[^\n]/g, ' ')); at = e; };
+    for (const tk of lex(text)) {
+      if (tk.t === 'comment' || tk.t === 'tabsep' || (inc && tk.t === 'include')) blank(tk.s, tk.e);
+      else if (strings && tk.t === 'string') {
+        const lv = longOpen(text, tk.s);
+        const open = lv >= 0 ? lv + 2 : 1;
+        const closed = lv >= 0 ? text.endsWith(`]${'='.repeat(lv)}]`, tk.e) && tk.e - tk.s >= 2 * open : tk.e - tk.s >= 2 && text[tk.e - 1] === text[tk.s];
+        const close = closed ? open : 0;
+        if (tk.e - close > tk.s + open) blank(tk.s + open, tk.e - close);
+      }
+    }
+    out.push(text.slice(at));
+    return out.join('');
   }
 
   /** a/b/../c.lua -> a/c.lua (forward slashes, no leading ./) */
@@ -383,7 +419,115 @@ const P8Code = (() => {
 
   const NEW_CART = 'pico-8 cartridge // http://www.pico-8.com\nversion 42\n__lua__\n';
 
-  return { KEYWORDS, API, API_NAMES, CALLBACKS, lex, bracketPairs, codeTabs, outline, includes, joinPath, includedCode, identifiers, opensBlock, DEDENT, callAt, splitCart, joinCart, NEW_CART };
+  return { KEYWORDS, API, API_NAMES, CALLBACKS, lex, bracketPairs, codeTabs, outline, includes, includeTarget, maskLua, joinPath, includedCode, identifiers, opensBlock, DEDENT, callAt, splitCart, joinCart, NEW_CART };
 })();
+
+// Saving the Code Editor's buffer into a file that PICO-8 or another tab may have changed (#4, #6).
+Object.assign(P8Code, (() => {
+  const { splitCart, joinCart } = P8Code;
+  const trimEnd = (s) => s.replace(/\n+$/, '');
+
+  /**
+   * How to write `lua` over a file whose text is now `disk`. `baseLua` is the file's Lua when it
+   * was opened / last saved, `parts` the sections the editor knows.
+   * -> { kind: 'write' | 'merge' | 'conflict', text, parts (of the file on disk), diskLua }
+   *    write: only Lua differs; merge: other sections changed on disk and are kept;
+   *    conflict: the Lua on disk changed too, so writing needs the user's decision.
+   */
+  function planSave({ parts, baseLua, disk, lua }) {
+    const d = splitCart(disk);
+    const text = joinCart(d, lua);
+    const res = { parts: d, text, diskLua: d.lua };
+    if (text === disk) return { kind: 'write', ...res };
+    if (baseLua == null || trimEnd(d.lua) !== trimEnd(baseLua) || (d.head == null) !== (parts.head == null)) return { kind: 'conflict', ...res };
+    const same = d.head === parts.head && d.tail === parts.tail && d.crlf === parts.crlf;
+    return { kind: same ? 'write' : 'merge', ...res };
+  }
+
+  /**
+   * Serialized saves of one editor. Each save captures { doc, lua, ... } when it starts and only
+   * that revision is committed, and only while `doc` is still the open document.
+   * io: snapshot() -> { doc, lua, parts, baseLua, handle, name }
+   *     isCurrent(doc), commit(doc, { lua, text?, parts?, handle?, name?, merged? }) (text: what was
+   *     written, the new baseline; parts: its sections),
+   *     read(handle) -> text, write(handle, text),
+   *     conflict({ name, diskLua, canReload }) -> 'overwrite' | 'reload' | other (cancel),
+   *     reload(doc, diskText), pickSave?(name) -> handle (throws AbortError when cancelled),
+   *     download(text, name), warn(message), done?(how, { name, merged }) (always, for messages)
+   * save({ as }) -> 'saved' | 'downloaded' | 'cancelled'
+   */
+  function createSaver(io) {
+    let tail = Promise.resolve();
+    let pending = 0;
+
+    async function run(as) {
+      const s = io.snapshot();
+      const commit = (how, extra = {}) => {
+        if (io.isCurrent(s.doc)) io.commit(s.doc, { lua: s.lua, ...extra });
+        io.done?.(how, { name: extra.name || s.name, merged: Boolean(extra.merged) });
+        return how;
+      };
+      let parts = s.parts;
+      // the file on disk now, checked right before writing; null result -> 'cancelled'
+      const guarded = async (h) => {
+        const disk = await io.read(h);
+        const plan = planSave({ parts: s.parts, baseLua: s.baseLua, disk, lua: s.lua });
+        parts = plan.parts;
+        if (plan.kind === 'conflict') {
+          const canReload = io.isCurrent(s.doc);
+          const choice = await io.conflict({ name: s.name, diskLua: plan.diskLua, canReload });
+          if (choice === 'reload' && canReload && io.isCurrent(s.doc)) io.reload(s.doc, disk);
+          if (choice !== 'overwrite') return null;
+        }
+        await io.write(h, plan.text);
+        return plan;
+      };
+      if (!as && s.handle) {
+        try {
+          const plan = await guarded(s.handle);
+          if (!plan) return 'cancelled';
+          return commit('saved', { text: plan.text, parts: splitCart(plan.text), handle: s.handle, name: s.name, merged: plan.kind === 'merge' });
+        } catch (err) {
+          io.warn(`Could not write ${s.name}: ${err.message}`);
+        }
+      } else if (s.handle) {
+        // Save As: keep the newest sprites/map/sound of the file this code came from
+        try { parts = splitCart(await io.read(s.handle)); } catch { /* unreadable: use the known sections */ }
+      }
+      if (io.pickSave) {
+        try {
+          const h = await io.pickSave(s.name);
+          let plan;
+          if (s.handle && (await h.isSameEntry?.(s.handle))) {
+            plan = await guarded(h);
+            if (!plan) return 'cancelled';
+          } else {
+            plan = { kind: 'write', parts, text: joinCart(parts, s.lua) };
+            await io.write(h, plan.text);
+          }
+          return commit('saved', { text: plan.text, parts: splitCart(plan.text), handle: h, name: h.name, merged: plan.kind === 'merge' });
+        } catch (err) {
+          if (err.name === 'AbortError') return 'cancelled';
+        }
+      }
+      io.download(joinCart(parts, s.lua), s.name);
+      return commit('downloaded');
+    }
+
+    return {
+      save({ as = false } = {}) {
+        pending++;
+        const p = tail.then(() => run(as));
+        tail = p.catch(() => {});
+        return p.finally(() => { pending--; });
+      },
+      /** resolves once every save started so far has finished */
+      idle: () => tail,
+      pending: () => pending > 0,
+    };
+  }
+
+  return { planSave, createSaver };
+})());
 
 if (typeof module !== 'undefined') module.exports = P8Code;

@@ -3,21 +3,191 @@
 // asset picker, library drawer, backups and the Home workspace.
 //
 // Every tool talks to the others through window.Suite:
-//   Suite.assets.put(asset) / get(id) / list(kind) / remove(id)   shared library (IndexedDB)
+//   Suite.assets.put(asset) / get(id) / list(kind) / remove(id)   shared library (IndexedDB;
+//                                                                   writes reject on failure, see P8Storage)
+//   Suite.kv.get(key) / set(key, value)                             tool sessions (same contract)
+//   Suite.reportStorageError(title, err) / autosaveFailed(label)    standard failure messages
 //   Suite.registerConsumer({...})                                   "Open in <tool>" entries
 //   Suite.pickAsset({...})                                          library picker dialog
 //   document 'p8:assets' event                                      library changed (also from other tabs)
 
 'use strict';
 
+/**
+ * Durable storage core (no DOM; tests/storage.test.js runs it in Node with a fake indexedDB).
+ *
+ * Outcome contract:
+ * - Writes (assets.put/remove/rename, kv.set) resolve only after the IndexedDB transaction has
+ *   committed ('complete'). Any failure (quota, DataCloneError, abort, closed connection or a
+ *   synchronous throw) rejects with a StorageError { name: 'StorageError', op, reason, cause }
+ *   where reason is 'quota' | 'clone' | 'abort' | 'closed' | 'error'. A rejected write changes
+ *   neither the cache nor the stored record (IndexedDB rolls the transaction back) and emits no
+ *   event, so the previous stored data stays readable and callers must keep their work dirty.
+ * - Reads (kv.get, the startup load) reject the same way on failure rather than looking empty.
+ * - Memory-only mode: when IndexedDB cannot be opened at startup, writes go to memory and resolve;
+ *   mode() is 'memory' and persistent() is false, so the UI can label the session as temporary.
+ *   A failed write while IndexedDB is open never falls back to memory.
+ */
+const P8Storage = (() => {
+  const DB_NAME = 'p8suite';
+  const DB_STORE = 'assets';
+  const KV_STORE = 'kv';
+
+  const REASONS = {
+    quota: 'browser storage is full (quota exceeded)',
+    clone: 'the data cannot be stored by the browser (DataCloneError)',
+    abort: 'the browser aborted the storage transaction',
+    closed: 'the browser storage connection is closed',
+    error: 'browser storage reported an error',
+  };
+
+  function classify(e) {
+    if (!e) return 'abort';
+    switch (e.name) {
+      case 'QuotaExceededError': case 'NS_ERROR_DOM_QUOTA_REACHED': return 'quota';
+      case 'DataCloneError': return 'clone';
+      case 'AbortError': return 'abort';
+      case 'InvalidStateError': case 'TransactionInactiveError': return 'closed';
+      default: return 'error';
+    }
+  }
+
+  class StorageError extends Error {
+    constructor(op, cause) {
+      const reason = classify(cause);
+      super(`${op} failed: ${REASONS[reason]}${cause?.message ? ` (${cause.message})` : ''}`);
+      this.name = 'StorageError';
+      this.op = op;
+      this.reason = reason;
+      this.cause = cause;
+    }
+  }
+
+  /** IndexedDB connection, or null when it is unavailable (memory-only session). */
+  function openDb(idb) {
+    return new Promise((resolve) => {
+      let req;
+      try {
+        req = idb.open(DB_NAME, 1);
+      } catch {
+        resolve(null);
+        return;
+      }
+      req.onupgradeneeded = () => {
+        const d = req.result;
+        if (!d.objectStoreNames.contains(DB_STORE)) d.createObjectStore(DB_STORE, { keyPath: 'id' });
+        if (!d.objectStoreNames.contains(KV_STORE)) d.createObjectStore(KV_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+      req.onblocked = () => resolve(null);
+    });
+  }
+
+  /** One transaction: resolves with the request result after 'complete', rejects otherwise. */
+  function tx(db, op, storeName, mode, fn) {
+    return new Promise((resolve, reject) => {
+      let t = null;
+      let done = false;
+      const fail = (e) => { if (!done) { done = true; reject(e instanceof StorageError ? e : new StorageError(op, e)); } };
+      try {
+        t = db.transaction(storeName, mode);
+        const req = fn(t.objectStore(storeName));
+        t.oncomplete = () => { if (!done) { done = true; resolve(req ? req.result : undefined); } };
+        t.onerror = (ev) => fail(ev?.target?.error || t.error);
+        t.onabort = () => fail(t.error);
+      } catch (e) {
+        try { t?.abort(); } catch { /* already finished */ }
+        fail(e);
+      }
+    });
+  }
+
+  function createStore({ indexedDB = null, emit = () => {}, uid, now = () => Date.now() } = {}) {
+    const cache = new Map();
+    const memKv = new Map();
+    let db = null;
+    let mode = 'pending';
+    let loadError = null;
+
+    const ready = (async () => {
+      db = indexedDB ? await openDb(indexedDB) : null;
+      mode = db ? 'persistent' : 'memory';
+      if (!db) return;
+      try {
+        for (const a of (await tx(db, 'Load Library', DB_STORE, 'readonly', (s) => s.getAll())) || []) cache.set(a.id, a);
+      } catch (e) {
+        loadError = e;
+      }
+    })();
+
+    const assets = {
+      ready,
+      list(kind = null) {
+        return [...cache.values()].filter((a) => !kind || a.kind === kind).sort((a, b) => b.modified - a.modified);
+      },
+      get: (id) => cache.get(id) || null,
+      /** Inserts or updates (keeps id when present). Resolves with the committed asset; rejects with a StorageError. */
+      async put(asset) {
+        await ready;
+        const t = now();
+        const a = { ...asset, id: asset.id || uid(), created: asset.created || t, modified: t };
+        if (db) await tx(db, 'Save to Library', DB_STORE, 'readwrite', (s) => s.put(a));
+        cache.set(a.id, a);
+        emit('put', a.id);
+        return a;
+      },
+      async remove(id) {
+        await ready;
+        if (db) await tx(db, 'Delete from Library', DB_STORE, 'readwrite', (s) => s.delete(id));
+        cache.delete(id);
+        emit('remove', id);
+      },
+      async rename(id, name) {
+        const a = cache.get(id);
+        return a ? assets.put({ ...a, name }) : null;
+      },
+      /** rereads one stored asset into the cache (another tab changed or deleted it) */
+      async refresh(id) {
+        await ready;
+        if (!db) return cache.get(id) || null;
+        const a = await tx(db, 'Read Library', DB_STORE, 'readonly', (s) => s.get(id));
+        if (a) cache.set(id, a);
+        else cache.delete(id);
+        return a || null;
+      },
+      persistent: () => mode === 'persistent',
+      mode: () => mode,
+      loadError: () => loadError,
+    };
+
+    /** Small key/value store for tool sessions (too large for localStorage). */
+    const kv = {
+      async get(key) {
+        await ready;
+        return db ? (await tx(db, 'Read session', KV_STORE, 'readonly', (s) => s.get(key))) ?? null : memKv.get(key) ?? null;
+      },
+      async set(key, value) {
+        await ready;
+        if (db) await tx(db, 'Save session', KV_STORE, 'readwrite', (s) => s.put(value, key));
+        else memKv.set(key, value);
+      },
+    };
+
+    return { ready, assets, kv };
+  }
+
+  return { StorageError, createStore, REASONS };
+})();
+
+if (typeof module !== 'undefined') module.exports = P8Storage;
+
 (() => {
+  if (typeof window === 'undefined') return;
   const App = window.P8App;
   const { rgbOf, isValidPico, quantize, encodeIndexedPng } = P8;
   const { el, $, modal, showMessage, confirmDialog, toast, download, pickFile, decodeImage, formField, sanitizeFilename, store } = App;
 
-  const DB_NAME = 'p8suite';
-  const DB_STORE = 'assets';
-  const KV_STORE = 'kv';
   const STD_PAL = Array.from({ length: 16 }, (_, i) => i);
   const MAX_IMAGE_SIDE = 1024;
 
@@ -127,44 +297,7 @@
   // Storage (IndexedDB, falls back to memory)                          //
   // ------------------------------------------------------------------ //
 
-  const cache = new Map();
-  let db = null;
   let channel = null;
-
-  function openDb() {
-    return new Promise((resolve) => {
-      let req;
-      try {
-        req = indexedDB.open(DB_NAME, 1);
-      } catch {
-        resolve(null);
-        return;
-      }
-      req.onupgradeneeded = () => {
-        const d = req.result;
-        if (!d.objectStoreNames.contains(DB_STORE)) d.createObjectStore(DB_STORE, { keyPath: 'id' });
-        if (!d.objectStoreNames.contains(KV_STORE)) d.createObjectStore(KV_STORE);
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => resolve(null);
-      req.onblocked = () => resolve(null);
-    });
-  }
-
-  function tx(mode, fn, storeName = DB_STORE) {
-    if (!db) return Promise.resolve(null);
-    return new Promise((resolve) => {
-      try {
-        const t = db.transaction(storeName, mode);
-        const req = fn(t.objectStore(storeName));
-        t.oncomplete = () => resolve(req?.result ?? null);
-        t.onerror = () => resolve(null);
-        t.onabort = () => resolve(null);
-      } catch {
-        resolve(null);
-      }
-    });
-  }
 
   function emitAssets(type, id, remote = false) {
     document.dispatchEvent(new CustomEvent('p8:assets', { detail: { type, id, remote } }));
@@ -173,60 +306,48 @@
     }
   }
 
-  const assets = {
-    ready: null,
-    list(kind = null) {
-      return [...cache.values()].filter((a) => !kind || a.kind === kind).sort((a, b) => b.modified - a.modified);
+  let idb = null;
+  try { idb = window.indexedDB || null; } catch { /* access denied: memory-only session */ }
+  const storage = P8Storage.createStore({ indexedDB: idb, emit: (type, id) => emitAssets(type, id), uid });
+  const { assets } = storage;
+
+  // a failed autosave is reported once until a later session save succeeds
+  const autosaveWarned = new Set();
+  const kv = {
+    get: storage.kv.get,
+    async set(key, value) {
+      await storage.kv.set(key, value);
+      autosaveWarned.clear();
     },
-    get: (id) => cache.get(id) || null,
-    /** Inserts or updates (keeps id when present). Returns the stored asset. */
-    async put(asset) {
-      const now = Date.now();
-      const a = { ...asset, id: asset.id || uid(), created: asset.created || now, modified: now };
-      cache.set(a.id, a);
-      await tx('readwrite', (s) => s.put(a));
-      emitAssets('put', a.id);
-      return a;
-    },
-    async remove(id) {
-      cache.delete(id);
-      await tx('readwrite', (s) => s.delete(id));
-      emitAssets('remove', id);
-    },
-    async rename(id, name) {
-      const a = cache.get(id);
-      if (a) return assets.put({ ...a, name });
-      return null;
-    },
-    persistent: () => !!db,
   };
 
-  /** Small key/value store for tool sessions (too large for localStorage). */
-  const memKv = new Map();
-  const kv = {
-    async get(key) {
-      await assets.ready;
-      return db ? tx('readonly', (s) => s.get(key), KV_STORE) : memKv.get(key) ?? null;
-    },
-    async set(key, value) {
-      await assets.ready;
-      if (db) await tx('readwrite', (s) => s.put(value, key), KV_STORE);
-      else memKv.set(key, value);
-    },
-  };
+  /**
+   * Shows why a browser-storage read/write failed. Callers keep their work dirty / unsaved.
+   * autosave: true -> one toast per label until a session save succeeds again (sessions are
+   * saved in the background; S.autosaveFailed(label) is the matching .catch handler).
+   */
+  function reportStorageError(title, e, { autosave = false } = {}) {
+    const why = e?.message || String(e);
+    if (autosave) {
+      if (autosaveWarned.has(title)) return;
+      autosaveWarned.add(title);
+      console.error(e);
+      toast(`${title}: ${why}. Keep this tab open and save or export your work.`, 'error', 8000);
+      return;
+    }
+    console.error(e);
+    showMessage(title, `${why}\n\nNothing was marked as saved and your work is still open. Free browser storage (for example export the Library, then delete unused assets) and try again, or download/export the work instead.`);
+  }
+  const autosaveFailed = (title) => (e) => reportStorageError(title, e, { autosave: true });
 
   async function loadAll() {
-    db = await openDb();
-    const all = (await tx('readonly', (s) => s.getAll())) || [];
-    for (const a of all) cache.set(a.id, a);
+    await storage.ready;
+    if (!assets.persistent()) toast('Browser storage is unavailable: this is a memory-only session. Export the Library and download your work before closing the page.', 'warn', 8000);
+    else if (assets.loadError()) reportStorageError('Library', assets.loadError());
     if ('BroadcastChannel' in window) {
       channel = new BroadcastChannel('p8suite-assets');
       channel.onmessage = async ({ data }) => {
-        if (data.type === 'remove') cache.delete(data.id);
-        else {
-          const a = await tx('readonly', (s) => s.get(data.id));
-          if (a) cache.set(a.id, a);
-        }
+        await assets.refresh(data.id).catch(() => null);
         emitAssets(data.type, data.id, true);
       };
     }
@@ -274,8 +395,13 @@
       if (!a || !['image', 'palette', 'map'].includes(a.kind)) continue;
       if (a.kind === 'image' && !(a.pixels instanceof Uint8Array && a.pixels.length === a.w * a.h)) continue;
       if (a.kind === 'map' && !(a.cells instanceof Uint8Array && a.cells.length === a.w * a.h)) continue;
-      const existing = cache.get(a.id);
-      await assets.put({ ...a, id: existing ? uid() : a.id });
+      const existing = assets.get(a.id);
+      try {
+        await assets.put({ ...a, id: existing ? uid() : a.id });
+      } catch (e) {
+        reportStorageError(`Import Library (stopped after ${n} asset(s))`, e);
+        return;
+      }
       n++;
     }
     toast(`Imported ${n} asset(s)`);
@@ -421,15 +547,22 @@
     }
     const added = [];
     for (const file of files) {
+      let data;
       try {
-        const data = await decodeImage(file);
-        if (data.width > MAX_IMAGE_SIDE || data.height > MAX_IMAGE_SIDE) {
-          toast(`${file.name}: larger than ${MAX_IMAGE_SIDE}×${MAX_IMAGE_SIDE}, skipped`, 'warn');
-          continue;
-        }
-        added.push(await assets.put(assetFromImageData(data, file.name.replace(/\.[^.]+$/, ''))));
+        data = await decodeImage(file);
       } catch {
         toast(`${file.name}: could not decode`, 'error');
+        continue;
+      }
+      if (data.width > MAX_IMAGE_SIDE || data.height > MAX_IMAGE_SIDE) {
+        toast(`${file.name}: larger than ${MAX_IMAGE_SIDE}×${MAX_IMAGE_SIDE}, skipped`, 'warn');
+        continue;
+      }
+      try {
+        added.push(await assets.put(assetFromImageData(data, file.name.replace(/\.[^.]+$/, ''))));
+      } catch (e) {
+        reportStorageError(`Import ${file.name}`, e);
+        break;
       }
     }
     if (added.length) toast(`Added ${added.length} image(s) to the library (nearest PICO-8 colors)`);
@@ -471,7 +604,7 @@
     let deleted = false;
     const rename = () => {
       const n = nameInput.value.trim();
-      if (!deleted && n && n !== a.name && assets.get(a.id)) { a.name = n; assets.rename(a.id, n); }
+      if (!deleted && n && n !== a.name && assets.get(a.id)) assets.rename(a.id, n).then(() => { a.name = n; }, (e) => reportStorageError('Rename Asset', e));
     };
 
     await modal({
@@ -485,7 +618,12 @@
           label: 'Duplicate',
           onClick: async (dlg) => {
             const { id, created, ...rest } = assets.get(a.id) || a;
-            await assets.put({ ...rest, name: `${rest.name} copy` });
+            try {
+              await assets.put({ ...rest, name: `${rest.name} copy` });
+            } catch (e) {
+              reportStorageError('Duplicate Asset', e);
+              return;
+            }
             toast('Duplicated');
             dlg.finish(true);
           },
@@ -494,8 +632,13 @@
           label: 'Delete',
           onClick: async (dlg) => {
             if (await confirmDialog('Delete Asset', `Delete "${a.name}" from the library?\n\nThis cannot be undone.`, 'Delete')) {
+              try {
+                await assets.remove(a.id);
+              } catch (e) {
+                reportStorageError('Delete Asset', e);
+                return;
+              }
               deleted = true;
-              await assets.remove(a.id);
               dlg.finish(true);
             }
           },
@@ -542,7 +685,7 @@
       drawer.list.append(el('div', { className: 'asset-item' }, card, del));
     }
     if (!assets.persistent()) {
-      drawer.list.append(el('p', { className: 'hint', textContent: 'Browser storage is unavailable: the library only lives until this page is closed. Use Export to keep it.' }));
+      drawer.list.append(el('p', { className: 'hint', textContent: 'Memory-only session: browser storage is unavailable, so the library and tool sessions only live until this page is closed. Use Export to keep it.' }));
     }
   }
 
@@ -575,7 +718,12 @@
         if (a && await confirmDialog('Delete Asset', `Delete "${a.name}" from the library?
 
 This cannot be undone.`, 'Delete')) {
-          await assets.remove(a.id);
+          try {
+            await assets.remove(a.id);
+          } catch (err) {
+            reportStorageError('Delete Asset', err);
+            return;
+          }
           toast(`Deleted "${a.name}"`);
         }
         return;
@@ -731,7 +879,12 @@ This cannot be undone.`, 'Delete')) {
       onOpen: () => input.select(),
     });
     if (!name) return;
-    await assets.put(paletteAsset({ name, colors }));
+    try {
+      await assets.put(paletteAsset({ name, colors }));
+    } catch (e) {
+      reportStorageError('Save Palette', e);
+      return;
+    }
     toast(`Saved palette "${name}" to the library`);
   }
 
@@ -752,7 +905,12 @@ This cannot be undone.`, 'Delete')) {
     const img = App.state.img;
     if (!img) { showMessage('Save Preview', 'Load a preview image first.'); return; }
     const pal = App.activePalette().map((p, i) => (p == null ? i : p));
-    await assets.put(imageAsset({ name: 'preview', w: img.w, h: img.h, pixels: img.indices.slice(), pal, source: 'palette' }));
+    try {
+      await assets.put(imageAsset({ name: 'preview', w: img.w, h: img.h, pixels: img.indices.slice(), pal, source: 'palette' }));
+    } catch (e) {
+      reportStorageError('Save Preview', e);
+      return;
+    }
     toast('Saved the preview image (custom palette slots) to the library');
   }
 
@@ -776,6 +934,9 @@ This cannot be undone.`, 'Delete')) {
     MAX_IMAGE_SIDE,
     assets,
     kv,
+    StorageError: P8Storage.StorageError,
+    reportStorageError,
+    autosaveFailed,
     imageAsset,
     paletteAsset,
     paletteRgb,

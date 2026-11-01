@@ -165,8 +165,8 @@ const P8Project = (() => {
     }
     if (a.sub >= part.len) return `${a.ref}+${hex(a.sub)} starts past the end of the part (${hex(part.len)} bytes)`;
     if (len <= 0) return `${a.ref}+${hex(a.sub)} reads ${len} bytes; the length must be positive`;
-    if (a.sub + len > part.len) return `${a.ref}+${hex(a.sub)} reads ${hex(len)} bytes, but only ${hex(part.len - a.sub)} remain in the part (${hex(part.len)} bytes)`;
-    return null;
+  if (a.sub + len > part.len) return `${a.ref}+${hex(a.sub)} reads ${hex(len)} bytes, but only ${hex(part.len - a.sub)} remain in the part (${hex(part.len)} bytes)`;
+  return null;
   }
 
   /** renames an asset in the anchor comments of `text` */
