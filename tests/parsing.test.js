@@ -226,3 +226,42 @@ t('#41 a name or list entry read on the right of a multiple assignment stays pro
     assert.match(run(lua).unresolved[0].why, /multiple assignment/, lua);
   }
 });
+
+t('#41 targets that start with a call or parentheses, and locals of shorthand if/while lines, keep their carts', () => {
+  const lib = { name: 'lib.lua', text: 'c="b.p8"\ncs={"b.p8"}\n' };
+  const run = (lua) => P.retirement(['a.p8', 'b.p8'], [{ name: 'fx.p8', text: `__lua__\n${lua}\n` }, lib]);
+  const keep = (lua, why) => { const r = run(lua); assert.deepStrictEqual(r.retire, [], lua); assert.match(r.unresolved[0].why, why, lua); };
+  keep('c="a.p8"\nc,f().x="b.p8",0\nreload(0,0,0x100,c)', /multiple assignment/);
+  keep('c="a.p8"\nc,(t).x="b.p8",0\nreload(0,0,0x100,c)', /multiple assignment/);
+  keep('c="a.p8"\nc,g"k".x="b.p8",0\nreload(0,0,0x100,c)', /multiple assignment/);
+  keep('cs={"a.p8"}\ncs[1],f{}.x="b.p8",0\nreload(0,0,0x100,cs[1])', /multiple assignment/);
+  // PICO-8 reads `if (c) x` as `if c then x end`: the local ends with its line
+  keep('#include lib.lua\nif (true) local c="a.p8"\nreload(0,0,0x100,c)', /outside the block/);
+  keep('_ENV.c="b.p8"\nwhile (false) local c="a.p8"\nreload(0,0,0x100,c)', /outside the block/);
+  keep('#include lib.lua\nif (true) local cs={"a.p8"}\nreload(0,0,0x100,cs[1])', /outside the block/);
+  keep('#include lib.lua\nfunction f() if (x) y=1 end local c="a.p8" end\nreload(0,0,0x100,c)', /block is unclear/);
+  keep('add(objs,function() local cs={"a.p8","b.p8"} reload(0,0,0x10,cs[i]) end)', /inside a function within a table or call/);
+
+  for (const lua of ['if (x) local c="a.p8" reload(0,0,0x100,c)', 'local c="a.p8"\nx,y=c,f().z\nreload(0,0,0x100,c)',
+    'function f() if (x) return end end\nlocal c="a.p8"\nif (x) then\n y=1\nend\nreload(0,0,0x100,c)']) {
+    const r = run(lua);
+    assert.deepStrictEqual([r.retire, r.unresolved], [['b.p8'], []], lua);
+  }
+});
+
+t('#41 a local of one if branch does not prove a use in its else/elseif branch', () => {
+  const lib = { name: 'lib.lua', text: 'c="b.p8"\ncs={"b.p8"}\n' };
+  const run = (lua) => P.retirement(['a.p8', 'b.p8'], [{ name: 'fx.p8', text: `__lua__\n#include lib.lua\n${lua}\n` }, lib]);
+  for (const lua of ['if x then\n local c="a.p8"\nelse\n reload(0,0,0x100,c)\nend', 'if x then\n local c="a.p8"\nelseif y then\n reload(0,0,0x100,c)\nend',
+    'if x then local c="a.p8" else reload(0,0,0x100,c) end', 'if x then\n local cs={"a.p8"}\nelse\n reload(0,0,0x100,cs[1])\nend',
+    'if (x) local c="a.p8" else reload(0,0,0x100,c)']) {
+    const r = run(lua);
+    assert.deepStrictEqual(r.retire, [], lua);
+    assert.match(r.unresolved[0].why, /outside the block/, lua);
+  }
+  const ok = (lua) => P.retirement(['a.p8', 'b.p8'], [{ name: 'fx.p8', text: `__lua__\n${lua}\n` }]);
+  for (const lua of ['if x then\n y=1\nelseif z then\n local c="a.p8"\n reload(0,0,0x100,c)\nelse\n w=1\nend', 'local c="a.p8"\nif x then y=1 else z=1 end\nreload(0,0,0x100,c)']) {
+    const r = ok(lua);
+    assert.deepStrictEqual([r.retire, r.unresolved], [['b.p8'], []], lua);
+  }
+});
