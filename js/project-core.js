@@ -315,7 +315,7 @@ const P8Project = (() => {
       other.push([k, 'is used as a whole (code it is handed to may change it)']);
     }
     const at = (k) => `line ${ctx.lineOf(sig[k].s) + 1}`;
-    if (!defs.length) return { why: `${name} is never assigned in this code` };
+    if (!defs.length) return { why: other.length ? `${name} ${other[0][1]} at ${at(other[0][0])}` : `${name} is never assigned in this code` };
     if (defs.length > 1) return { why: `${name} is assigned more than once (${defs.map((d) => at(d.k)).join(', ')})` };
     if (other.length) return { why: `${name} ${other[0][1]} at ${at(other[0][0])}` };
     const d = defs[0];
