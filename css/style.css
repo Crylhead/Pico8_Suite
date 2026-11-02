@@ -178,6 +178,7 @@ kbd {
   cursor: pointer;
 }
 .menu-pop button:hover:not(:disabled), .menu-pop button:focus-visible { background: var(--accent-soft); outline: none; }
+.menu-pop button:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
 .menu-pop button:disabled { color: var(--muted); opacity: 0.6; cursor: default; }
 .menu-pop button kbd { color: var(--muted); font-size: 11px; }
 .menu-pop button small { color: var(--muted); }
@@ -217,7 +218,8 @@ kbd {
 .btn:focus-visible, .seg button:focus-visible, .menu-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .btn-primary:hover { filter: brightness(1.08); }
-.btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+/* PICO-8 red (--danger) darkened so white label text reaches 4.5:1 (WCAG AA) */
+.btn-danger { background: #e0003f; border-color: #e0003f; color: #fff; }
 .btn-ghost { background: none; border-color: transparent; }
 .btn-ghost:hover { background: var(--surface-3); border-color: transparent; }
 .icon-btn { padding: 6px; display: inline-grid; place-items: center; }

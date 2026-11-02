@@ -17,6 +17,16 @@ A tool is a workspace (`<main data-ws="...">`) plus a script that registers itse
 
 Every element with `data-show="ws1 ws2"` is hidden outside the listed workspaces. Load the script after `js/suite.js`.
 
+### Keyboard and accessibility contract
+
+The shell provides keyboard behavior for standard markup; use it instead of custom key handling (details and the manual regression script: [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md)):
+
+- **Option groups:** `role="radiogroup"` (with an `aria-label`) containing `role="radio"` buttons with `aria-checked`. Select in a `click` listener and update `aria-checked`. The shell maintains the roving tabindex and Arrow/Home/End keys, including for groups created later.
+- **Menus:** `.menu` > `.menu-btn` (`aria-haspopup="menu"`) + `.menu-pop[role=menu]` with `role="menuitem"` buttons. Keyboard handling and focus return are automatic.
+- **Dialogs:** use `App.modal({ title, body, buttons, alert })` / `App.showMessage(title, msg, 'error')`. The title names the dialog, and focus returns to the opener. Pass `alert: true` (or a `danger` button) for warnings, errors and destructive confirmations.
+- **Shortcuts:** `App.registerShortcuts(ws, handler)` does not receive `Enter`/`Space` aimed at a keyboard-focused button, checkbox, link, select or menu/radio item, nor arrow keys inside an option group or open menu.
+- Every icon-only control needs an `aria-label`. Never rely on color or `title` (hover) alone for state, warnings or errors.
+
 ## 2. Script
 
 ```js

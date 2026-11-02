@@ -850,6 +850,7 @@
 
   function toast(message, kind = 'info', ms = 3400) {
     const t = el('div', { className: `toast ${kind}`, textContent: message });
+    if (kind === 'error' || kind === 'warn') t.setAttribute('role', 'alert');
     dom.toasts.append(t);
     setTimeout(() => t.remove(), ms);
   }
@@ -857,15 +858,23 @@
   /**
    * Generic modal. buttons: [{label, value, primary, danger, validate}] close the dialog;
    * actions: [{label, onClick, primary}] stay open (left side).
+   * alert: announce as an alertdialog (warnings, errors, destructive confirmations; implied by a danger button).
+   * The dialog is named by its title, a string body describes it, and focus returns to the opener on close.
    */
-  function modal({ title, body, buttons = [{ label: 'OK', value: true, primary: true }], actions = [], wide = false, onOpen }) {
+  let modalSeq = 0;
+  function modal({ title, body, buttons = [{ label: 'OK', value: true, primary: true }], actions = [], wide = false, alert = false, onOpen }) {
     return new Promise((resolve) => {
-      const dlg = el('dialog', { className: `modal${wide ? ' wide' : ''}` });
+      const id = `modal-${++modalSeq}`;
+      const opener = document.activeElement;
+      const dlg = el('dialog', { className: `modal${wide ? ' wide' : ''}`, attrs: { 'aria-labelledby': `${id}-title` } });
+      if (alert || buttons.some((b) => b.danger)) dlg.setAttribute('role', 'alertdialog');
       const closeBtn = el('button', { type: 'button', className: 'btn btn-ghost icon-btn', textContent: '✕', attrs: { 'aria-label': 'Close' } });
-      const head = el('header', { className: 'modal-head' }, el('h2', { textContent: title }), closeBtn);
+      const head = el('header', { className: 'modal-head' }, el('h2', { id: `${id}-title`, textContent: title }), closeBtn);
       const bodyEl = el('div', { className: 'modal-body' });
-      if (typeof body === 'string') bodyEl.append(el('pre', { className: 'msg', textContent: body }));
-      else if (body) bodyEl.append(body);
+      if (typeof body === 'string') {
+        bodyEl.append(el('pre', { id: `${id}-desc`, className: 'msg', textContent: body }));
+        dlg.setAttribute('aria-describedby', `${id}-desc`);
+      } else if (body) bodyEl.append(body);
       const foot = el('footer', { className: 'modal-foot' });
 
       let done = false;
@@ -874,6 +883,7 @@
         done = true;
         dlg.close();
         dlg.remove();
+        restoreFocus(opener);
         resolve(value);
       };
       dlg.finish = finish; // lets action handlers close the dialog with a result
@@ -915,7 +925,15 @@
     });
   }
 
-  const showMessage = (title, message) => modal({ title, body: message });
+  /** focus back to the control that opened a dialog/menu, if it is still usable */
+  function restoreFocus(node) {
+    if (!node || node === document.body || !node.isConnected || node.disabled || !node.getClientRects().length) return false;
+    if (node.closest('dialog') && !node.closest('dialog').open) return false;
+    node.focus({ preventScroll: true });
+    return true;
+  }
+
+  const showMessage = (title, message, kind) => modal({ title, body: message, alert: kind === 'error' || kind === 'warn' });
 
   const confirmDialog = (title, message, yes = 'Yes') =>
     modal({ title, body: message, buttons: [{ label: 'No', value: false }, { label: yes, value: true, primary: true }] })
@@ -1597,37 +1615,70 @@
     }
   }
 
-  function openMenu(menu, focusFirst = false) {
+  const menuItems = (menu) => [...menu.querySelectorAll('.menu-pop button:not(:disabled)')].filter((b) => !b.hidden);
+
+  /** focus: 'first' | 'last' | null (pointer opening leaves focus on the button) */
+  function openMenu(menu, focus = null) {
     closeMenus();
     menu.classList.add('open');
     menu.querySelector('.menu-btn').setAttribute('aria-expanded', 'true');
-    if (focusFirst) menu.querySelector('.menu-pop button:not(:disabled)')?.focus();
+    const items = menuItems(menu);
+    if (focus) items[focus === 'last' ? items.length - 1 : 0]?.focus();
   }
 
+  // Menu buttons follow the WAI-ARIA APG menu button pattern: Enter/Space/Down open on the first
+  // item, Up on the last; inside, Up/Down/Home/End move, Left/Right switch to the neighbouring
+  // menu, Escape closes and returns to the button, Tab closes and moves on.
   function bindMenus() {
+    const visibleMenus = () => [...document.querySelectorAll('#menubar .menu')].filter((m) => m.getClientRects().length);
     for (const menu of document.querySelectorAll('.menu')) {
       const btn = menu.querySelector('.menu-btn');
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
         if (menu.classList.contains('open')) closeMenus();
-        else openMenu(menu);
+        else openMenu(menu, e.detail === 0 ? 'first' : null); // detail 0: keyboard activation
       });
       btn.addEventListener('pointerenter', (e) => {
         if (e.pointerType === 'mouse' && document.querySelector('.menu.open') && !menu.classList.contains('open')) openMenu(menu);
       });
       btn.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowDown') { e.preventDefault(); openMenu(menu, true); }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          e.stopPropagation();
+          openMenu(menu, e.key === 'ArrowUp' ? 'last' : 'first');
+        } else if (e.key === 'Escape' && menu.classList.contains('open')) {
+          e.stopPropagation();
+          closeMenus();
+        }
       });
       menu.querySelector('.menu-pop').addEventListener('keydown', (e) => {
-        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-        e.preventDefault();
-        const items = [...menu.querySelectorAll('.menu-pop button:not(:disabled)')];
+        const items = menuItems(menu);
         const i = items.indexOf(document.activeElement);
-        items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+        const move = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[e.key];
+        if (move !== undefined) {
+          items[(move + items.length) % items.length]?.focus();
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          const list = visibleMenus();
+          const next = list[(list.indexOf(menu) + (e.key === 'ArrowRight' ? 1 : -1) + list.length) % list.length];
+          if (next) openMenu(next, 'first');
+        } else if (e.key === 'Escape') {
+          closeMenus();
+          btn.focus();
+        } else if (e.key === 'Tab') {
+          closeMenus();
+          btn.focus(); // the default Tab action then continues from the button
+          e.stopPropagation();
+          return;
+        } else return;
+        e.preventDefault();
+        e.stopPropagation(); // keep workspace shortcuts (e.g. arrow nudging) out of menu navigation
       });
     }
     document.addEventListener('click', (e) => {
       const item = e.target.closest('[data-action]');
       if (item && !item.closest('dialog')) {
+        const menu = item.closest('.menu');
+        // return focus to the menu button first, so dialogs opened by the action restore it
+        if (menu && menu.contains(document.activeElement)) menu.querySelector('.menu-btn').focus({ preventScroll: true });
         closeMenus();
         if (!item.disabled) actions[item.dataset.action]?.(item.dataset);
         return;
@@ -1636,9 +1687,60 @@
     });
   }
 
-  const isTyping = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+  // Radio groups ([role=radiogroup] segmented controls, workspace tabs, ...) use a roving
+  // tabindex: only the checked (else first enabled) radio is a Tab stop, and Arrow keys/Home/End
+  // move focus and select by clicking, so each owner's click handler stays the single code path.
+  const groupRadios = (g) => [...g.querySelectorAll('[role=radio]')].filter((r) => r.closest('[role=radiogroup]') === g);
+  function syncRadioGroup(g) {
+    const radios = groupRadios(g);
+    const usable = radios.filter((r) => !r.disabled && !r.hidden);
+    const stop = usable.find((r) => r.getAttribute('aria-checked') === 'true') || usable[0];
+    for (const r of radios) {
+      const want = r === stop ? 0 : -1;
+      if (r.tabIndex !== want) r.tabIndex = want;
+    }
+  }
+  function bindRadioGroups() {
+    for (const g of document.querySelectorAll('[role=radiogroup]')) syncRadioGroup(g);
+    new MutationObserver((records) => {
+      const groups = new Set();
+      for (const m of records) {
+        const own = m.target.closest?.('[role=radiogroup]');
+        if (own) groups.add(own);
+        if (m.type !== 'childList') continue;
+        for (const n of m.addedNodes) {
+          if (n.nodeType !== 1 || !n.querySelector('[role=radio]')) continue;
+          for (const g of n.querySelectorAll('[role=radiogroup]')) groups.add(g);
+          if (n.matches('[role=radiogroup]')) groups.add(n);
+        }
+      }
+      for (const g of groups) syncRadioGroup(g);
+    }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-checked', 'disabled', 'hidden'] });
+    document.addEventListener('keydown', (e) => {
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const radio = e.target.closest?.('[role=radio]');
+      const g = radio?.closest('[role=radiogroup]');
+      if (!g) return;
+      const items = groupRadios(g).filter((r) => !r.disabled && r.getClientRects().length);
+      const i = items.indexOf(radio);
+      const to = { ArrowRight: i + 1, ArrowDown: i + 1, ArrowLeft: i - 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[e.key];
+      if (to === undefined || !items.length) return;
+      e.preventDefault();
+      e.stopPropagation(); // capture phase: workspace shortcuts never see radio navigation keys
+      const next = items[(to + items.length) % items.length];
+      if (next === radio) return;
+      next.focus();
+      if (next.getAttribute('aria-checked') !== 'true') next.click();
+    }, true);
+  }
 
+  const isTyping = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+  const ACTIVATABLE = 'button, a[href], select, summary, input[type=checkbox], input[type=radio], [role=button], [role=menuitem], [role=radio], [role=checkbox], [role=switch], [role=tab]';
+
+  let pointerFocus = null; // the control that received focus from the latest pointer press
   function bindShortcuts() {
+    document.addEventListener('pointerdown', (e) => { const label = e.target.closest?.('label'); pointerFocus = (label?.control || e.target.closest?.(ACTIVATABLE)) || null; }, true);
+    document.addEventListener('focusin', (e) => { if (e.target !== pointerFocus) pointerFocus = null; }, true);
     document.addEventListener('keydown', (e) => {
       if (document.querySelector('dialog[open]')) {
         if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('sw')) {
@@ -1653,6 +1755,9 @@
       if (own) {
         if (e.key === 'F1') { e.preventDefault(); showDocs(); return; }
         if (e.key === 'Escape' && document.querySelector('.menu.open')) { closeMenus(); return; }
+        // a control focused by keyboard/script keeps Enter/Space for its own activation; one focused by
+        // a pointer press does not, so e.g. Space-panning after clicking a tool button still works
+        if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.(ACTIVATABLE) && e.target !== pointerFocus) return;
         own(e, isTyping(e.target));
         return;
       }
@@ -1714,18 +1819,11 @@
     });
   }
 
+  /** click selection; Arrow/Home/End keys come from bindRadioGroups (role=radiogroup) */
   function bindSeg(seg, onChange) {
     seg.addEventListener('click', (e) => {
       const b = e.target.closest('button[data-value]');
       if (b) onChange(b.dataset.value);
-    });
-    seg.addEventListener('keydown', (e) => {
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-      const buttons = [...seg.querySelectorAll('button')];
-      const i = buttons.findIndex((b) => b.getAttribute('aria-checked') === 'true');
-      const next = buttons[(i + (e.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length];
-      next.focus();
-      onChange(next.dataset.value);
     });
   }
 
@@ -1734,6 +1832,7 @@
     if (mode === 'light' || mode === 'dark') root.dataset.theme = mode;
     else delete root.dataset.theme;
     dom.themeToggle.title = `Theme: ${mode === 'light' || mode === 'dark' ? mode : 'system'}`;
+    dom.themeToggle.setAttribute('aria-label', `${dom.themeToggle.title}. Change theme`);
   }
 
   function bindControls() {
@@ -1843,6 +1942,7 @@
 
   function setWorkspace(ws, { persist = true } = {}) {
     if (!workspaces().includes(ws)) ws = 'home';
+    const focused = document.activeElement;
     document.body.dataset.workspace = ws;
     for (const main of document.querySelectorAll('main[data-ws]')) main.hidden = main.dataset.ws !== ws;
     for (const node of document.querySelectorAll('[data-show]')) node.hidden = !node.dataset.show.split(/\s+/).includes(ws);
@@ -1850,6 +1950,10 @@
       tab.setAttribute('aria-checked', String(tab.dataset.value === ws));
     }
     for (const name of document.querySelectorAll('#wsTitle span')) name.classList.toggle('on', name.dataset.ws === ws);
+    // focus inside the workspace/menu that was just hidden would fall back to <body>: keep it on the tab
+    if (focused && focused !== document.body && !focused.getClientRects().length) {
+      document.querySelector(`#wsTabs [data-value="${ws}"]`)?.focus({ preventScroll: true });
+    }
     if (persist) {
       store.set(KEYS.workspace, ws);
       if (location.hash !== `#${ws}`) history.replaceState(null, '', `#${ws}`);
@@ -1869,6 +1973,7 @@
     buildPaletteSlots();
     buildRampEditor();
     bindMenus();
+    bindRadioGroups();
     bindShortcuts();
     bindControls();
     renderRecent();

@@ -62,6 +62,7 @@ The app can be hosted on a static server for the browser tools. A remote host do
 - `js/audit-core.js`, `js/audit.js`: Project Audit (pure logic / UI)
 - `js/extras-core.js`, `js/extras.js`: Extra Tools (pure logic / UI)
 - `js/terrain-core.js`, `js/terrain.js`: Terrain Lab engine (runs in two Web Workers and in Node) / UI, a tab of Extra Tools
+- `docs/ACCESSIBILITY.md`: shared keyboard/focus/dialog behavior, measured contrast and target sizes, known canvas limitations and the manual keyboard regression script
 - `docs/COMPRESSION.md`: which data cart compression the suite offers, and the PICO-8 measurements behind it
 - `js/project-core.js`, `js/project.js`: demo projects, anchors, packing (pure logic) / Cart Builder UI
 - `js/datacarts-core.js`: sections and palettes of data carts, read from the fx code (pure logic)

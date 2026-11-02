@@ -1528,6 +1528,14 @@
           <tr><td><kbd>Del</kbd> / <kbd>Esc</kbd></td><td>Clear / deselect the selected palette slot</td></tr>
           <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Move the fade slider (when focused)</td></tr>
         </table>
+        <p><b>Keyboard navigation</b> (all workspaces; see <code>docs/ACCESSIBILITY.md</code>):</p>
+        <table class="keys">
+          <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Move between controls. Each option group (workspace tabs, segmented buttons, color pickers) is one Tab stop: its selected option.</td></tr>
+          <tr><td><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>Home</kbd> <kbd>End</kbd></td><td>In an option group: select the previous / next / first / last option (in the workspace tabs this switches workspace).</td></tr>
+          <tr><td><kbd>Enter</kbd> / <kbd>Space</kbd> / <kbd>↓</kbd> (<kbd>↑</kbd>)</td><td>On a menu (File, Edit, …): open it on the first (last) item. In a menu: <kbd>↑</kbd> <kbd>↓</kbd> <kbd>Home</kbd> <kbd>End</kbd> move, <kbd>←</kbd> <kbd>→</kbd> open the neighbouring menu, <kbd>Enter</kbd> runs the item, <kbd>Esc</kbd> closes it and returns to the menu button, <kbd>Tab</kbd> closes it.</td></tr>
+          <tr><td><kbd>Enter</kbd> / <kbd>Space</kbd></td><td>Activate the focused button or checkbox when you reached it with the keyboard. After clicking a control with the mouse they keep their workspace meaning (e.g. <kbd>Space</kbd>-drag to pan).</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Close a dialog; focus returns to the control that opened it. Errors and destructive confirmations are announced as alerts.</td></tr>
+        </table>
 
         <h3 id="doc-formats">File formats</h3>
         <ul>
