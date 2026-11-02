@@ -44,6 +44,53 @@
 .ws-tabs svg { width: 20px; height: 20px; flex: none; }
 .ws-tabs button[aria-checked="true"] { color: var(--accent); background: none; box-shadow: inset 0 -2px 0 var(--accent); }
 .ws-tabs button:hover { color: var(--text); }
+/* Workspace navigation (#53): category groups, names on wide screens, Find tool */
+.ws-sep { flex: none; width: 1px; margin: var(--space-3) var(--space-2); background: var(--border-strong); }
+.ws-tab-label { display: none; margin-left: var(--space-3); font-size: var(--fs-md); white-space: nowrap; }
+@media (min-width: 1600px) {
+  :root:not([data-compact-nav]) .ws-tab-label { display: inline; }
+  :root:not([data-compact-nav]) .ws-title { display: none; } /* every tab shows its name */
+}
+.ws-find { display: inline-flex; align-items: center; gap: var(--space-3); padding: 6px; color: var(--muted); }
+.ws-find:hover { color: var(--text); }
+.ws-find svg { width: 20px; height: 20px; flex: none; }
+.ws-find-current, .ws-find-chevron { display: none; }
+.ws-find-current { align-items: center; gap: var(--space-3); min-width: 0; color: var(--text); }
+.ws-find-current span { overflow: hidden; text-overflow: ellipsis; }
+/* phones: the bar cannot show every tab, so one button names the open workspace and opens the list */
+@media (max-width: 640px) {
+  .seg.ws-tabs { display: none; }
+  .ws-find { flex: 1 1 0; min-width: 0; justify-content: flex-start; padding: 6px 10px; background: var(--surface-2); border: 1px solid var(--border); font-weight: var(--fw-label); }
+  .ws-find .ws-find-search { display: none; }
+  .ws-find-current { display: inline-flex; }
+  .ws-find-chevron { display: block; margin-left: auto; color: var(--muted); }
+}
+
+dialog.ws-find-modal { width: min(560px, calc(100vw - 24px)); }
+dialog.ws-find-modal .modal-body { display: flex; flex-direction: column; min-height: 0; padding-bottom: var(--space-4); }
+.ws-find-dialog { display: flex; flex-direction: column; min-height: 0; gap: var(--space-3); }
+.ws-find-label { font-weight: var(--fw-label); font-size: var(--fs-md); }
+.ws-find-input { font: inherit; font-size: var(--fs-base); color: var(--text); background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: var(--radius-ctl); padding: 8px 10px; width: 100%; }
+.ws-find-input:focus { outline: var(--focus-width) solid var(--focus-color); outline-offset: -1px; border-color: transparent; }
+.ws-find-dialog .hint { margin: 0; }
+.ws-find-status { margin: 0; color: var(--muted); font-size: var(--fs-sm); }
+.ws-find-status.ws-find-empty { color: var(--text); font-size: var(--fs-md); padding: var(--space-6) 0; }
+.ws-find-list { overflow-y: auto; max-height: min(60vh, 520px); margin: 0 calc(-1 * var(--space-4)); padding: 0 var(--space-4); }
+.ws-find-heading { margin: var(--space-5) 0 var(--space-2); font-size: var(--fs-xs); font-weight: var(--fw-label); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.ws-find-option { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: var(--space-5); align-items: start; padding: var(--space-4) var(--space-5); border: 1px solid transparent; border-radius: var(--radius-ctl); cursor: pointer; }
+.ws-find-option > svg, .ws-find-option > .ws-icon-blank { width: 20px; height: 20px; margin-top: 1px; color: var(--muted); }
+.ws-find-option:hover { background: var(--surface-2); }
+.ws-find-option[aria-selected="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.ws-find-option[aria-selected="true"] > svg { color: var(--accent); }
+.ws-find-text { display: grid; gap: var(--space-1); min-width: 0; }
+.ws-find-name { font-weight: var(--fw-label); }
+.ws-find-where { font-weight: 400; color: var(--muted); font-size: var(--fs-sm); }
+.ws-find-now { margin-left: var(--space-3); font-size: var(--fs-xs); padding: 1px 8px; }
+.ws-find-desc { color: var(--muted); font-size: var(--fs-sm); }
+
+.tool-groups { display: grid; gap: var(--space-7); }
+.tool-group h4 { margin: 0 0 var(--space-4); font-size: var(--fs-base); }
+.tool-group h4 .muted { font-weight: 400; font-size: var(--fs-md); }
 
 #libraryBtn .count:not(:empty) {
   display: inline-block;

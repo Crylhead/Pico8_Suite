@@ -1131,7 +1131,7 @@
   S.registerTool({
     ws: 'map', name: 'Map Editor',
     desc: 'PICO-8 tile maps: paint with tiles or blocks from a sprite sheet, 128×32 / 128×64 cart maps or up to 256×256 for data carts, .p8 in and out.',
-    color: '#29adff', tags: ['map', 'tiles', '.p8'],
+    color: '#29adff', tags: ['map', 'tiles', '.p8'], category: 'create',
   });
   S.registerConsumer({ id: 'map-open', label: 'Map Editor', kinds: ['map'], accepts: (a) => (a.w <= M.MAX_SIDE && a.h <= M.MAX_SIDE ? true : `The Map Editor supports up to ${M.MAX_SIDE}×${M.MAX_SIDE} cells.`), open: openAsset });
   S.registerConsumer({ id: 'map-tileset', label: 'Map Editor tileset', kinds: ['image'], accepts: tilesetOk, open: useImageAsTileset });

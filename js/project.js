@@ -755,7 +755,7 @@
     document.addEventListener('p8:workspace', () => { if (document.body.dataset.workspace === 'cartbuilder') restore(); });
   }
 
-  S.registerTool({ ws: 'cartbuilder', name: 'Cart Builder', desc: 'A demo project folder: its data as assets, packed into data carts (drag or auto-pack); the fx find their data through --@data anchors.', color: '#00e436', tags: ['project', 'pack', 'reload'] });
+  S.registerTool({ ws: 'cartbuilder', name: 'Cart Builder', desc: 'A demo project folder: its data as assets, packed into data carts (drag or auto-pack); the fx find their data through --@data anchors.', color: '#00e436', tags: ['project', 'pack', 'reload'], category: 'develop' });
 
   // folder handles can also come from elsewhere (tests, drag & drop)
   window.P8CartBuilder = { useFolder };

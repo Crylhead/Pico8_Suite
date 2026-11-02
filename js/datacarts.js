@@ -796,7 +796,7 @@ Set Start to the address where the palette table begins (the “palette table”
     });
   }
 
-  S.registerTool({ ws: 'datacarts', name: 'Data Carts', desc: 'See what every data cart holds and which ranges the code reloads; pack new data carts and get the reload() lines.', color: '#ffa300', tags: ['reload', 'memory map', 'pack'] });
+  S.registerTool({ ws: 'datacarts', name: 'Data Carts', desc: 'See what every data cart holds and which ranges the code reloads; pack new data carts and get the reload() lines.', color: '#ffa300', tags: ['reload', 'memory map', 'pack'], category: 'inspect' });
 
   bind();
   renderAll();

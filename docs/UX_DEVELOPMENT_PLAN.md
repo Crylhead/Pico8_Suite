@@ -35,6 +35,8 @@ Sources: [NN/g usability heuristics](https://www.nngroup.com/articles/ten-usabil
 
 The top-level navigation should scale beyond eleven icon-only workspaces. Preferred information architecture is **Create** (Pixel Studio, Palette & Fades, Tile Maker, Map Editor, Terrain Lab), **Develop** (Code Editor, Cart Builder), **Inspect** (Project Audit, Data Carts), **Utilities** (Data Tools, remaining Extra Tools). This is a *discovery grouping*, not authorization to relocate or remove tools or break deep links. Offer persistent text labels at normal desktop widths, a compact collapsible mode, tool search/quick switch, active workspace state, and keyboard navigation. Update `EXTENDING.md` so new tools declare category/description/capabilities once.
 
+**Implemented (#53):** `js/nav-core.js` (`P8Nav`) holds the categories, search and `#ws/sub` routes. The workspace bar is ordered and separated by category with text labels from 1600px (icons below; *Compact* keeps icons), a **Find tool** dialog (`Ctrl`/`⌘`+`K`) searches every tool including Extra Tools tabs, narrow screens (≤640px) replace the tabs with that button, Home groups its cards by category, and `document.title` names the open tool. Category metadata and the Utilities fallback are documented in [EXTENDING.md](../EXTENDING.md#navigation-metadata). Recently used tools on Home remain for #68.
+
 Home should offer: resume recent browser assets, reopen an available project when permissions allow, new/create/import actions, recently used tools, and clear local-only storage messaging. Nothing silently opens protected folders. Never conflate a Library asset with a writable local project file.
 
 ### Project context (optional, explicit)

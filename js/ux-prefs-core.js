@@ -20,7 +20,7 @@ const P8Prefs = (() => {
   // helpLevel: optional explanatory help only (hints, future tooltips). Accessible names, labels,
   //   warnings, errors and confirmations are shown at every level.
   // autoOfferTours: whether onboarding tours may offer themselves; replaying them stays available.
-  // compactNav: hide the active workspace name box in the workspace bar.
+  // compactNav: hide the active workspace name box and keep the workspace tabs icon-only on wide screens.
   // motion: 'system' follows the OS reduced-motion setting; 'reduce' always reduces.
   const SCHEMA = Object.freeze({
     helpLevel: Object.freeze(['concise', 'off', 'detailed']),

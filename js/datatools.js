@@ -318,7 +318,7 @@
   S.registerTool({
     ws: 'data', name: 'Data Tools',
     desc: 'Binary → PICO-8 string literals (files, text or library images) and greyscale nibble splitting.',
-    color: '#ffa300', tags: ['bytes', 'strings', 'nibbles'],
+    color: '#ffa300', tags: ['bytes', 'strings', 'nibbles'], category: 'utilities',
   });
   S.registerConsumer({ id: 'data-bin', label: 'Binary → String', kinds: ['image'], open: (a) => { App.setWorkspace('data'); chooseImage(a); } });
   S.registerConsumer({ id: 'data-nibble', label: 'Nibble Split', kinds: ['image'], open: (a) => { App.setWorkspace('data'); nibbleFromAsset(a); } });

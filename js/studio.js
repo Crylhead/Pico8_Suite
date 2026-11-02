@@ -3236,7 +3236,7 @@
   S.registerTool({
     ws: 'studio', name: 'Pixel Studio',
     desc: 'Pixel editor limited to PICO-8: 16 of 32 colors, fill patterns, layers, frames + onion skin, sprite sheet, .p8 and [gfx] clipboard.',
-    color: '#29adff', tags: ['draw', 'sprites', 'animation'],
+    color: '#29adff', tags: ['draw', 'sprites', 'animation'], category: 'create',
   });
   S.registerConsumer({
     id: 'studio-open', label: 'Pixel Studio', kinds: ['image'],
