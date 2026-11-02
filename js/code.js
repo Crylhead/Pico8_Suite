@@ -50,6 +50,7 @@
     files: new Map(),       // relative path (lower case) -> {rel, handle}
     rel: null,              // the open file's path inside the folder
     parent: null,           // {rel, name}: the cart this include was opened from
+    loc: {},                // the open file's location: a new object on load and when Save As moves it
     incs: [],               // P8Audit.includeMeter items: [{line, path, tab, rel, found, cycle, depth, missing, tokens, warnings}]
     incTokens: 0,
     fileCache: new Map(),   // rel -> {stamp, text}
@@ -684,6 +685,7 @@
     ed.handle = handle;
     ed.rel = rel;
     ed.parent = parent;
+    ed.loc = {};
     ed.incs = [];
     ed.incTokens = 0;
     dom.ta.value = ed.parts.lua;
@@ -776,18 +778,7 @@
   const saver = K.createSaver({
     snapshot: () => ({ doc: ed.doc, lua: ed.text, parts: ed.parts, baseLua: ed.baseLua, handle: ed.handle, name: ed.name }),
     isCurrent: (doc) => doc === ed.doc,
-    commit: (doc, r) => {
-      ed.savedLua = r.lua;
-      if (r.text != null) {
-        ed.parts = r.parts;
-        ed.baseLua = r.parts.lua;
-        ed.handle = r.handle;
-        ed.name = r.name;
-      }
-      renderTitle();
-      renderStructure();
-      saveSession();
-    },
+    commit: (doc, r) => commitSave(doc, r),
     done: (how, r) => toast(how === 'downloaded' ? `Downloaded ${r.name}: replace the original with it` : `Saved ${r.name}${r.merged ? ' (kept the sprite/map/sound changes made on disk)' : ''}`),
     read: readHandle,
     write: writeHandle,
@@ -798,13 +789,46 @@
     warn: (msg) => toast(msg, 'warn', 4000),
   });
 
+  /** a finished save of the open document; Save As into another file moves it: its folder path and
+   *  include parent belonged to the old file, so they are cleared and the path is looked up again */
+  function commitSave(doc, r) {
+    ed.savedLua = r.lua;
+    if (r.text != null) {
+      ed.parts = r.parts;
+      ed.baseLua = r.parts.lua;
+      ed.handle = r.handle;
+      ed.name = r.name;
+      if (r.moved) {
+        ed.loc = {};
+        ed.rel = null;
+        ed.parent = null;
+        relocate(doc, ed.loc);
+      }
+    }
+    renderTitle();
+    renderStructure();
+    saveSession();
+  }
+
+  /** the open folder's path of a document Save As moved (none when it was saved outside the folder) */
+  async function relocate(doc, loc) {
+    if (!ed.folder || !ed.folderReady) return;
+    const { handle, folder } = ed;
+    const p = await folder.resolve(handle).catch(() => null);
+    if (!p || ed.doc !== doc || ed.loc !== loc || ed.handle !== handle || ed.folder !== folder) return;
+    ed.rel = p.join('/');
+    ed.files.set(ed.rel.toLowerCase(), { rel: ed.rel, handle });
+    renderStructure();
+    saveSession();
+  }
+
   /** -> 'saved' (written to a file handle) | 'downloaded' (fallback copy, not in place) | 'cancelled' */
   const save = (opts) => saver.save(opts);
 
   // everything that replaces the open code (or runs it) is bound to the open document and its saved
   // revision, and checked again after every wait: newer edits stay open or are discarded only on request
   const transitions = K.createTransitions({
-    current: () => ({ doc: ed.doc, lua: ed.text, savedLua: ed.savedLua, handle: ed.handle, name: ed.name }),
+    current: () => ({ doc: ed.doc, loc: ed.loc, lua: ed.text, savedLua: ed.savedLua, handle: ed.handle, name: ed.name }),
     idle: () => saver.idle(),
     save: () => save(),
     confirmDiscard,
@@ -822,13 +846,14 @@
     const r = await transitions.open({
       what: `Reload "${ed.name}" from disk?`,
       prepare: async () => {
-        const { handle, name } = ed;
+        // the same file again: its folder path and include parent still apply
+        const { handle, name, rel, parent } = ed;
         try {
           if ((await handle.queryPermission?.({ mode: 'read' })) !== 'granted') await handle.requestPermission?.({ mode: 'read' });
-          return { text: await (await handle.getFile()).text(), handle, name };
+          return { text: await (await handle.getFile()).text(), handle, name, rel, parent };
         } catch (err) { showMessage('Reload', err.message); return null; }
       },
-      apply: ({ text, handle, name }) => { load(text, name, handle); toast('Reloaded'); },
+      apply: ({ text, handle, name, rel, parent }) => { load(text, name, handle, { rel, parent }); toast('Reloaded'); },
     });
     explain('Reload', r, 'reload it');
   }
@@ -860,8 +885,9 @@
     await listFolder();
     // the open file may live in this folder
     if (ed.handle && !ed.rel) {
-      const p = await h.resolve(ed.handle).catch(() => null);
-      if (p) ed.rel = p.join('/');
+      const { doc, loc, handle } = ed;
+      const p = await h.resolve(handle).catch(() => null);
+      if (p && ed.doc === doc && ed.loc === loc && ed.handle === handle && ed.folder === h) ed.rel = p.join('/');
     }
     renderStructure();
     saveSession();
@@ -1026,8 +1052,11 @@
   async function runCart() {
     App.setWorkspace('code');
     const doc = ed.doc;
-    const target = await runTarget();
-    if (!target) { showMessage('Run', 'This .lua file is not included by a cart in the open folder, so there is nothing to run. Open the cart instead.'); return; }
+    const { loc, name, rel, parent } = ed;
+    const notIncluded = () => showMessage('Run', 'This .lua file is not included by a cart in the open folder, so there is nothing to run. Open the cart instead.');
+    // Run is bound to the document, the location it was asked for and (after saving) the saved revision
+    const here = () => ed.doc === doc && ed.loc === loc && ed.name === name && ed.rel === rel && ed.parent === parent;
+    if (!(await runTarget())) { if (here()) notIncluded(); return; }
     // PICO-8 runs what is on disk: save first (includes are read by PICO-8 itself) and send exactly the
     // saved code, so newer unsaved edits are never presented as the cart on disk
     const r = await transitions.ready(doc);
@@ -1035,11 +1064,27 @@
       if (r.why === 'unsaved') showMessage('Run', `${r.name} was not saved in place, so PICO-8 would run the old version from disk. Save it, then Run again.`);
       else if (r.why === 'changed') showMessage('Run', `${r.name} was edited while it was being saved, so the file on disk is older than the code on screen. Save it, then Run again.`);
       else if (r.why === 'switched') showMessage('Run', 'Another file was opened before Run could start. Run again.');
+      else if (r.why === 'moved') showMessage('Run', `${r.name} was saved as ${r.to}, a different file, so Run stopped: what it was asked to run is not on disk. Run again to run ${r.to}.`);
       return;
     }
+    // the target (and the parent cart's text) is read after the save, for the saved file; every read is
+    // checked again, so neither another document, a moved file nor a newer save can be substituted
+    const stale = () => {
+      if (ed.doc !== doc) showMessage('Run', 'Another file was opened before Run could start. Run again.');
+      else if (!here()) showMessage('Run', `${name} was saved into another file or folder before Run could start. Run again.`);
+      else if (r.inPlace && ed.savedLua !== r.lua) showMessage('Run', `${name} was saved again while Run was starting. Run again to run the newest version.`);
+      else return false;
+      return true;
+    };
+    if (stale()) return;
+    const target = await runTarget();
+    if (stale()) return;
+    if (!target) { notIncluded(); return; }
+    const text = await target.text(r.lua);
+    if (stale()) return;
     let res;
     try {
-      res = await call('/run', { name: target.name, text: await target.text(r.lua) });
+      res = await call('/run', { name: target.name, text });
     } catch (err) {
       if (err instanceof TypeError || err.status === 401) { runSetup(); return; }
       showMessage('Run', err.message);
@@ -1140,6 +1185,7 @@
     ed.handle = s.handle || null;
     ed.rel = s.rel ?? null;
     ed.parent = s.parent || null;
+    ed.loc = {};
     ed.folder = s.folder || null;
     // the browser keeps the folder, but asks again for access after a reload
     if (ed.folder) {

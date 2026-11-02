@@ -448,8 +448,9 @@ Object.assign(P8Code, (() => {
    * Serialized saves of one editor. Each save captures { doc, lua, ... } when it starts and only
    * that revision is committed, and only while `doc` is still the open document.
    * io: snapshot() -> { doc, lua, parts, baseLua, handle, name }
-   *     isCurrent(doc), commit(doc, { lua, text?, parts?, handle?, name?, merged? }) (text: what was
-   *     written, the new baseline; parts: its sections),
+   *     isCurrent(doc), commit(doc, { lua, text?, parts?, handle?, name?, merged?, moved? }) (text: what
+   *     was written, the new baseline; parts: its sections; moved: Save As wrote another file than the
+   *     one the document came from, so its location (folder path, include parent) no longer applies),
    *     read(handle) -> text, write(handle, text),
    *     conflict({ name, diskLua, canReload }) -> 'overwrite' | 'reload' | other (cancel),
    *     reload(doc, diskText), pickSave?(name) -> handle (throws AbortError when cancelled),
@@ -498,14 +499,15 @@ Object.assign(P8Code, (() => {
         try {
           const h = await io.pickSave(s.name);
           let plan;
-          if (s.handle && (await h.isSameEntry?.(s.handle))) {
+          const same = Boolean(s.handle && (await h.isSameEntry?.(s.handle)));
+          if (same) {
             plan = await guarded(h);
             if (!plan) return 'cancelled';
           } else {
             plan = { kind: 'write', parts, text: joinCart(parts, s.lua) };
             await io.write(h, plan.text);
           }
-          return commit('saved', { text: plan.text, parts: splitCart(plan.text), handle: h, name: h.name, merged: plan.kind === 'merge' });
+          return commit('saved', { text: plan.text, parts: splitCart(plan.text), handle: h, name: h.name, merged: plan.kind === 'merge', moved: !same });
         } catch (err) {
           if (err.name === 'AbortError') return 'cancelled';
         }
@@ -534,15 +536,19 @@ Object.assign(P8Code, (() => {
    * and that no newer text appeared. Newer edits are never dropped silently: the buffer stays open
    * (no save is retried, so typing cannot cause a save loop) or, without a file to save into, the
    * user confirms the discard.
-   * io: current() -> { doc, lua, savedLua, handle, name }, idle() (pending saves finished),
+   * io: current() -> { doc, loc, lua, savedLua, handle, name } (loc: the document's location, a new
+   *     object whenever a Save As moves it to another file), idle() (pending saves finished),
    *     save() -> 'saved' | 'downloaded' | 'cancelled', confirmDiscard(what) -> boolean
    * open({ what, autosave, prepare, apply }): leave the document (autosave: write it in place first,
    *   as moving between folder files does), await prepare() (the incoming document; null aborts),
    *   revalidate, then apply(prepared) synchronously. A newer open() supersedes an older one.
    * ready(doc): before Run, save the open document in place; -> { ok, lua, inPlace } where lua is
-   *   the saved text (inPlace) or, for a document without a file, the text to run as a copy.
-   * Failures -> { ok: false, why, name, how? }; why: 'superseded' | 'switched' (another document
+   *   the saved text (inPlace) or, for a document without a file, the text to run as a copy. A save
+   *   that moved the document (Save As into another file) is 'moved' (to: its new name): what Run
+   *   was asked for is no longer the file on disk, so the caller asks for Run again.
+   * Failures -> { ok: false, why, name, how?, to? }; why: 'superseded' | 'switched' (another document
    *   was opened meanwhile) | 'unsaved' (the save did not write in place; how = its outcome) |
+   *   'moved' (saved, but into another file) |
    *   'changed' (edited during the save / while the next document loaded) | 'kept' (discard
    *   declined) | 'failed' (prepare returned null).
    */
@@ -595,12 +601,13 @@ Object.assign(P8Code, (() => {
     }
 
     async function ready(doc = io.current().doc) {
-      const name = io.current().name;
+      const { name, loc } = io.current();
       if (io.current().doc !== doc) return no('switched', name);
       await io.idle();
       if (io.current().doc !== doc) return no('switched', name);
       const r = await settle(doc, name, () => true);
       if (r.fail) return r.fail;
+      if (r.cur.loc !== loc) return no('moved', name, { to: r.cur.name });
       return r.cur.handle ? { ok: true, name, lua: r.cur.savedLua, inPlace: true } : { ok: true, name, lua: r.cur.lua, inPlace: false };
     }
 
