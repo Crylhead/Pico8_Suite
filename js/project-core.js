@@ -86,86 +86,356 @@ const P8Project = (() => {
     return a;
   }
 
-  /** reload() call on a line -> {start, end, args} (start/end index the line) */
-  function reloadCall(line) {
-    const m = /\breload\s*\(/.exec(line.replace(/--.*$/, (c) => ' '.repeat(c.length)));
-    if (!m) return null;
-    const a = V.callArgs(line, m.index + m[0].length - 1);
-    return a ? { start: m.index, end: a.end + 1, args: a.args } : null;
+  // ------------------------------------------------------------------ //
+  // Executable Lua (shared lexer): what mutation and retirement may     //
+  // rely on. Comments, strings and long brackets never count as code.   //
+  // ------------------------------------------------------------------ //
+
+  const SKIP = new Set(['ws', 'comment', 'tabsep', 'include']);
+  const NAME = new Set(['ident', 'api', 'callback']);
+  // assignment operators (PICO-8 also has the compound ones: += ..= |= ...)
+  const isAssign = (s) => s === '=' || (s.length > 1 && s.endsWith('=') && !['==', '~=', '!=', '<=', '>='].includes(s));
+
+  /** the Lua of a cart text (or the whole text of a .lua file) -> {code, at (offset in text), firstLine (0-based)} */
+  function luaOf(text) {
+    const m = /^__lua__[ \t\r]*$/m.exec(text);
+    if (!m) return { code: text, at: 0, firstLine: 0 };
+    const at = Math.min(text.length, m.index + m[0].length + 1);
+    const e = /^__\w+__[ \t\r]*$/m.exec(text.slice(at));
+    const end = e ? Math.max(at, at + e.index - 1) : text.length;
+    return { code: text.slice(at, end), at, firstLine: text.slice(0, at).split('\n').length - 1 };
   }
 
-  /** anchors in one cart's text -> [{line (0-based), ref | set, sub, ranged, error, call, lz}]; error = malformed anchor */
-  function findAnchors(text) {
+  /**
+   * Lexical view of one cart's Lua: every token (toks) and the significant ones (sig, no whitespace,
+   * comments or #include lines) with, per significant token, the bracket depth, whether it is in a
+   * declaration list (local a,b / for a,b) or a function's parameter list.
+   */
+  function luaContext(text) {
+    const { code, at, firstLine } = luaOf(text);
+    const toks = K.lex(code);
+    const sig = toks.filter((tk) => !SKIP.has(tk.t));
+    const src = (tk) => (tk ? code.slice(tk.s, tk.e) : '');
+    const index = new Map(sig.map((tk, k) => [tk.s, k]));
+    const pairs = K.bracketPairs(sig, code);
+    const partner = (k) => { const p = sig[k] ? pairs.get(sig[k].s) : null; return p == null ? -1 : index.get(p); };
+    const nl = [];
+    for (let i = code.indexOf('\n'); i >= 0; i = code.indexOf('\n', i + 1)) nl.push(i);
+    /** code offset -> 0-based line of the whole text */
+    const lineOf = (off) => { let lo = 0; let hi = nl.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (nl[mid] < off) lo = mid + 1; else hi = mid; } return firstLine + lo; };
+    const info = [];
+    const stack = [];
+    let decl = false;
+    let paramEnd = -1;
+    sig.forEach((tk, k) => {
+      const s = src(tk);
+      if (decl && !(NAME.has(tk.t) || s === ',')) decl = false;
+      info.push({ depth: stack.length, top: stack[stack.length - 1] || null, decl, param: tk.s < paramEnd });
+      if (tk.t === 'bracket') { if ('([{'.includes(s)) stack.push(s); else stack.pop(); }
+      if (tk.t === 'keyword' && (s === 'local' || s === 'for')) decl = src(sig[k + 1]) !== 'function';
+      if (tk.t === 'keyword' && s === 'function') {
+        let j = k + 1;
+        while (j < sig.length && (NAME.has(sig[j].t) || sig[j].t === 'self' || ['.', ':'].includes(src(sig[j])))) j++;
+        const close = src(sig[j]) === '(' ? partner(j) : -1;
+        if (close >= 0) paramEnd = Math.max(paramEnd, sig[close].s);
+      }
+    });
+    return {
+      text, code, at, firstLine, toks, sig, src, partner, lineOf, info,
+      env: sig.some((tk) => NAME.has(tk.t) && (src(tk) === '_ENV' || src(tk) === '_G')),
+      includes: toks.filter((tk) => tk.t === 'include'),
+    };
+  }
+
+  /** the arguments of the call whose name is sig[k] -> {close (sig index of ")"), args: [{from, to (sig indexes), text}]} | null */
+  function callAt(ctx, k) {
+    const { sig, src, partner, code } = ctx;
+    if (src(sig[k + 1]) !== '(') return null;
+    const close = partner(k + 1);
+    if (close < 0) return null;
+    const args = [];
+    let from = -1;
+    let to = -1;
+    for (let j = k + 2; j <= close; j++) {
+      const s = src(sig[j]);
+      if (j === close || s === ',') {
+        if (from >= 0) args.push({ from, to, text: code.slice(sig[from].s, sig[to].e) });
+        else if (j !== close || args.length) args.push({ from: j, to: j - 1, text: '' });
+        from = -1;
+        continue;
+      }
+      if (from < 0) from = j;
+      const p = sig[j].t === 'bracket' && '([{'.includes(s) ? partner(j) : -1;
+      to = p >= 0 ? p : j;
+      if (p >= 0) j = p;
+    }
+    return { close, args };
+  }
+
+  /** executable calls name(...) (not obj.name / obj:name / definitions) -> [{k, s, e (code offsets), line, endLine, args}] */
+  function realCalls(ctx, name) {
     const out = [];
-    text.split('\n').forEach((line, i) => {
-      const a = parseAnchor(line);
-      if (!a) return;
-      out.push({ line: i, ...a, call: reloadCall(line), lz: /\bunlz\s*\(/.test(line), text: line.trim() });
+    ctx.sig.forEach((tk, k) => {
+      if (!NAME.has(tk.t) || ctx.src(tk) !== name) return;
+      const prev = ctx.src(ctx.sig[k - 1]);
+      if (prev === '.' || prev === ':' || prev === 'function' || ctx.info[k].param) return;
+      const call = callAt(ctx, k);
+      if (!call) return;
+      const end = ctx.sig[call.close];
+      out.push({ k, s: tk.s, e: end.e, line: ctx.lineOf(tk.s), endLine: ctx.lineOf(end.s), args: call.args });
     });
     return out;
   }
 
-  /** the list literal a cart-set reload indexes: `name = {"a.p8", ...}` -> {name, start, end} in text */
-  function listLiteral(text, expr) {
-    const m = /^([A-Za-z_]\w*)\s*\[/.exec((expr || '').trim());
-    if (!m) return null;
-    const re = new RegExp(`\\b${m[1]}\\s*=\\s*\\{`, 'g');
-    const lm = re.exec(text);
-    if (!lm) return null;
-    const close = text.indexOf('}', lm.index + lm[0].length);
-    if (close < 0) return null;
-    const body = text.slice(lm.index + lm[0].length, close);
-    return { name: m[1], start: lm.index + lm[0].length, end: close, carts: [...body.matchAll(/["']([^"']+)["']/g)].map((x) => x[1]) };
+  /** a plain string literal ("x", 'x', [[x]]: no escapes, quotes or line breaks) -> its text, or null */
+  function plainString(s) {
+    const m = /^(?:"([^"'\\\n]*)"|'([^"'\\\n]*)'|\[(=*)\[\n?([^"'\]\n]*)\]\3\])$/.exec(s);
+    return m ? (m[1] ?? m[2] ?? m[4]) : null;
+  }
+
+  /** whether the expression goes on at sig[j] (so the value before it is only part of it) */
+  function goesOn(ctx, j) {
+    const tk = ctx.sig[j];
+    if (!tk) return false;
+    const s = ctx.src(tk);
+    if (tk.t === 'string' || ['(', '[', '{'].includes(s)) return true;
+    if (tk.t === 'keyword') return s === 'and' || s === 'or';
+    return tk.t === 'op' && s !== ';' && s !== '?';
   }
 
   /**
-   * Rewrites src / len / cart of every anchored reload() in `text` (and, for cart sets, the
-   * cart names in the list literal). where(ref) -> {cart, off, len, lz}; whereSet(name) -> {off, len, carts}.
+   * The one binding of `name` that the executable code allows to be trusted, or why there is none.
+   * Every token `name` that is not a field (a.name), a table key ({name=...}) or the binding itself
+   * must be a read: a second assignment, a compound assignment, a declaration (parameter, loop
+   * variable, local without the value), a multiple assignment, an #include the binding is visible to
+   * or _ENV/_G for a global make it unprovable. kind 'list' also allows only cs[...] (never assigned),
+   * #cs and all/ipairs/pairs/count(cs): any other use may hand the table to code that changes it.
+   * -> {k (sig index of the name), rhs (sig index after "="), local} | {why}
+   */
+  function bindingOf(ctx, name, kind, useAt) {
+    const { sig, src, info } = ctx;
+    const defs = [];
+    const other = [];
+    for (let k = 0; k < sig.length; k++) {
+      const tk = sig[k];
+      if (!NAME.has(tk.t) || src(tk) !== name) continue;
+      const prev = src(sig[k - 1]);
+      const next = src(sig[k + 1]);
+      if (prev === '.' || prev === ':') continue;
+      if (info[k].top === '{' && ['{', ',', ';'].includes(prev) && next === '=') continue;
+      const local = prev === 'local' && next === '=';
+      if (info[k].param || prev === 'function' || (info[k].decl && !local)) { other.push([k, 'is declared again (parameter, loop variable or local without a value)']); continue; }
+      if (next === '=') {
+        if (prev === ',' || info[k].depth > 0) other.push([k, 'is assigned in a multiple assignment']);
+        else defs.push({ k, local, rhs: k + 2 });
+        continue;
+      }
+      if (isAssign(next)) { other.push([k, `is changed with ${next}`]); continue; }
+      if (next === ',' && info[k].depth === 0) { other.push([k, 'may be assigned in a multiple assignment']); continue; }
+      if (kind !== 'list') continue; // a string cannot be changed through a read
+      if (next === '[') {
+        const close = ctx.partner(k + 1);
+        if (close < 0) other.push([k, 'is indexed without a closing ]']);
+        else if (isAssign(src(sig[close + 1]))) other.push([k, `has an entry replaced (${ctx.code.slice(tk.s, sig[close + 1].e)})`]);
+        continue;
+      }
+      if (prev === '#') continue;
+      const fn = src(sig[k - 2]);
+      if (prev === '(' && next === ')' && ['all', 'ipairs', 'pairs', 'count'].includes(fn) && !['.', ':'].includes(src(sig[k - 3]))) continue;
+      other.push([k, 'is used as a whole (code it is handed to may change it)']);
+    }
+    const at = (k) => `line ${ctx.lineOf(sig[k].s) + 1}`;
+    if (!defs.length) return { why: `${name} is never assigned in this code` };
+    if (defs.length > 1) return { why: `${name} is assigned more than once (${defs.map((d) => at(d.k)).join(', ')})` };
+    if (other.length) return { why: `${name} ${other[0][1]} at ${at(other[0][0])}` };
+    const d = defs[0];
+    if (!d.local && ctx.env) return { why: `the code uses _ENV/_G, which can change the global ${name}` };
+    const inc = ctx.includes.find((i) => !d.local || i.s > sig[d.k].s);
+    if (inc) return { why: `#include at line ${ctx.lineOf(inc.s) + 1} brings code that may change ${name}` };
+    if (d.local && useAt != null && useAt < sig[d.k].s) return { why: `${name} is used before its local declaration (${at(d.k)})` };
+    return d;
+  }
+
+  /**
+   * The string value of the expression sig[from..to] if the code proves it: plain string literals,
+   * whole decimal numbers and names bound once to such a value, joined by "..". -> {value} | {why}
+   */
+  function stringValue(ctx, from, to, useAt, depth = 0) {
+    const { sig, src } = ctx;
+    const text = ctx.code.slice(sig[from]?.s ?? 0, sig[to]?.e ?? 0);
+    if (to < from || (to - from) % 2) return { why: `the cart name ${text} is computed` };
+    for (let j = from + 1; j < to; j += 2) if (src(sig[j]) !== '..') return { why: `the cart name ${text} is computed` };
+    let value = '';
+    for (let j = from; j <= to; j += 2) {
+      const tk = sig[j];
+      const s = src(tk);
+      if (tk.t === 'string') {
+        const v = plainString(s);
+        if (v == null) return { why: `the cart name ${s} cannot be resolved` };
+        value += v;
+      } else if (tk.t === 'number' && /^\d+$/.test(s)) value += String(Number(s));
+      else if (NAME.has(tk.t)) {
+        if (depth > 3) return { why: `${s} is bound through too many names to follow` };
+        const b = bindingOf(ctx, s, 'string', useAt);
+        if (b.why) return b;
+        let end = b.rhs;
+        while (src(sig[end + 1]) === '..') end += 2;
+        if (goesOn(ctx, end + 1)) return { why: `${s} is assigned a computed value (line ${ctx.lineOf(sig[b.k].s) + 1})` };
+        const v = stringValue(ctx, b.rhs, end, sig[b.k].s, depth + 1);
+        if (v.why) return v.why.startsWith('the cart name') ? { why: `${s} is assigned a computed value (line ${ctx.lineOf(sig[b.k].s) + 1})` } : v;
+        value += v.value;
+      } else return { why: `the cart name ${text} is computed` };
+    }
+    return { value };
+  }
+
+  /**
+   * The cart list that list[index] (sig[from..to]) reads, proven from the executable code: one binding
+   * `[local] list = {"a.p8", 'b.p8'; [[c.p8]]}` of plain strings (comments and , ; allowed), no other
+   * change to list (bindingOf). -> {name, open, close (text offsets inside the braces), entries:
+   * [{s, e (text offsets), name}], carts, comments, line} | {why}
+   */
+  function cartList(ctx, from, to, useAt) {
+    const { sig, src } = ctx;
+    const text = ctx.code.slice(sig[from]?.s ?? 0, sig[to]?.e ?? 0);
+    if (!(sig[from] && NAME.has(sig[from].t) && src(sig[from + 1]) === '[' && ctx.partner(from + 1) === to)) return { why: `${text} is not a complete list index name[i]` };
+    const name = src(sig[from]);
+    const b = bindingOf(ctx, name, 'list', useAt);
+    if (b.why) return b;
+    const line = ctx.lineOf(sig[b.k].s) + 1;
+    const open = b.rhs;
+    const close = src(sig[open]) === '{' ? ctx.partner(open) : -1;
+    if (close < 0) return { why: `${name} is not assigned a table literal {"a.p8", ...} (line ${line})` };
+    if (goesOn(ctx, close + 1)) return { why: `the table literal of ${name} is part of a longer expression (line ${line})` };
+    const entries = [];
+    for (let j = open + 1; j < close; j++) {
+      const tk = sig[j];
+      const v = tk.t === 'string' ? plainString(src(tk)) : null;
+      const sep = j + 1 === close || [',', ';'].includes(src(sig[j + 1]));
+      if (v && sep) { entries.push({ s: ctx.at + tk.s, e: ctx.at + tk.e, name: v }); j++; continue; }
+      let e = j;
+      for (;;) {
+        if (sig[e].t === 'bracket' && ctx.partner(e) > e) e = ctx.partner(e);
+        if (e + 1 >= close || [',', ';'].includes(src(sig[e + 1]))) break;
+        e++;
+      }
+      const entry = ctx.code.slice(tk.s, sig[e].e);
+      return { why: v && src(sig[j + 1]) === '..' ? `the entry ${entry} of ${name} is concatenated, not a literal cart name (line ${line})` : `the entry ${entry} of ${name} is not a plain "name.p8" string (line ${line})` };
+    }
+    if (!entries.length || entries.some((en) => !en.name)) return { why: `the list ${name} is empty or has an empty name (line ${line})` };
+    const comments = ctx.toks.some((tk) => tk.t === 'comment' && tk.s > sig[open].s && tk.s < sig[close].s);
+    return { name, open: ctx.at + sig[open].e, close: ctx.at + sig[close].s, entries, carts: entries.map((en) => en.name), comments, line };
+  }
+
+  /**
+   * The carts a cart-name argument (sig[from..to]) can name, for destructive decisions: only what
+   * the code proves (literal, single-bound names, fully resolvable "..", proven cart lists).
+   * -> {names: [cart names as written]} ([] = the running cart) | {why}
+   */
+  function cartTargets(ctx, from, to, useAt) {
+    if (to < from || (from === to && ctx.src(ctx.sig[from]) === 'nil')) return { names: [] };
+    if (NAME.has(ctx.sig[from].t) && ctx.src(ctx.sig[from + 1]) === '[') {
+      const l = cartList(ctx, from, to, useAt);
+      return l.why ? l : { names: l.carts };
+    }
+    const v = stringValue(ctx, from, to, useAt);
+    return v.why ? v : { names: [v.value] };
+  }
+
+  /**
+   * Anchors in one cart's text, found through the shared lexer: a --@data marker in a real line
+   * comment of the Lua (never inside a string or a long comment), anchoring the one executable
+   * reload() call on that line. Several calls on the line, or a call spread over several lines, is a
+   * `problem` (never a guess). Cart-set anchors carry their proven `list` (cartList) or its why.
+   * -> [{line (0-based), ref | set, sub, ranged, error, problem, call: {s, e (text offsets), args: [text]} | null, list, lz, text, name, nameAt}]
+   */
+  function findAnchors(text, ctx = luaContext(text)) {
+    const out = [];
+    const lines = text.split('\n');
+    const reloads = realCalls(ctx, 'reload');
+    const unlz = new Set(realCalls(ctx, 'unlz').map((c) => c.line));
+    for (const tk of ctx.toks) {
+      if (tk.t !== 'comment') continue;
+      const c = ctx.code.slice(tk.s, tk.e);
+      if (/^--\[=*\[/.test(c)) continue; // a long comment is never an anchor
+      const a = parseAnchor(c);
+      if (!a) continue;
+      const line = ctx.lineOf(tk.s);
+      const m = MARKER.exec(c);
+      const nm = /^(\s+)([A-Za-z_]\w*)(?=\.|\[\])/.exec(c.slice(m.index + m[0].length));
+      const on = reloads.filter((r) => r.line <= line && r.endLine >= line);
+      const r = on.length === 1 ? on[0] : null;
+      const problem = on.length > 1 ? `more than one reload() on the anchored line ${line + 1}; put each anchored call on its own line`
+        : r && r.line !== r.endLine ? `the anchored reload() spans several lines (${r.line + 1}–${r.endLine + 1}); put it on one line with its anchor` : null;
+      const call = r && !problem ? { s: ctx.at + r.s, e: ctx.at + r.e, args: r.args.map((x) => x.text) } : null;
+      const list = call && a.set && r.args.length >= 4 ? cartList(ctx, r.args[3].from, r.args[3].to, r.s) : null;
+      out.push({ line, ...a, problem, call, list, lz: unlz.has(line), text: lines[line].trim(), name: nm ? nm[2] : null, nameAt: nm ? ctx.at + tk.s + m.index + m[0].length + nm[1].length : null });
+    }
+    return out.sort((x, y) => x.line - y.line);
+  }
+
+  /**
+   * Rewrites src / len / cart of every anchored reload() in `text` (and, for cart sets, the cart
+   * names in the proven list binding). where(ref) -> {cart, off, len, lz}; whereSet(name) -> {off, len, carts}.
+   * Only the anchored calls and the list entries change; a rejected anchor changes nothing.
    * -> {text, changes: [..], errors: [..]}
    */
   function rewriteAnchors(text, where, whereSet = () => null) {
     const lines = text.split('\n');
     const changes = [];
     const errors = [];
-    const lists = [];
+    const edits = []; // {s, e, text} in text offsets, never overlapping
+    const lists = new Map(); // list binding offset -> {set, line}
     for (const a of findAnchors(text)) {
       const id = a.set ? `${a.set}[]` : a.ref;
-      if (a.error) { errors.push({ line: a.line + 1, ref: id || '--@data', msg: a.error }); continue; }
+      const fail = (msg) => errors.push({ line: a.line + 1, ref: id || '--@data', msg });
+      if (a.error) { fail(a.error); continue; }
       const problem = anchorCallProblem(a);
-      if (problem) { errors.push({ line: a.line + 1, ref: id, msg: problem }); continue; }
+      if (problem) { fail(problem); continue; }
       let call;
       if (a.set) {
         const ps = whereSet(a.set);
-        if (!ps) { errors.push({ line: a.line + 1, ref: id, msg: `no cart set “${a.set}” in the project` }); continue; }
+        if (!ps) { fail(`no cart set “${a.set}” in the project`); continue; }
+        const l = a.list;
+        const prior = lists.get(l.open);
+        if (prior && prior.set !== a.set) { fail(`the cart list ${l.name} (line ${l.line}) is already the list of ${prior.set}[] (line ${prior.line}); one list cannot hold two sets`); continue; }
+        if (!prior) {
+          const same = l.entries.length === ps.carts.length;
+          if (!same && l.comments) { fail(`the cart list ${l.name} (line ${l.line}) has comments and would change from ${l.entries.length} to ${ps.carts.length} carts; edit it by hand`); continue; }
+          lists.set(l.open, { set: a.set, line: a.line + 1 });
+          const body = ps.carts.map((c) => `"${c}"`).join(', ');
+          const before = text.slice(l.open, l.close);
+          const listEdits = same ? l.entries.filter((en, k) => en.name !== ps.carts[k]).map((en) => ({ s: en.s, e: en.e, text: `"${ps.carts[l.entries.indexOf(en)]}"` }))
+            : [{ s: l.open, e: l.close, text: body }];
+          if (listEdits.length) {
+            let after = before;
+            for (const ed of [...listEdits].sort((x, y) => y.s - x.s)) after = after.slice(0, ed.s - l.open) + ed.text + after.slice(ed.e - l.open);
+            changes.push({ line: l.line, ref: id, before: `${l.name}={${before.trim()}}`, after: `${l.name}={${after.trim()}}` });
+            edits.push(...listEdits);
+          }
+        }
         call = `reload(${a.call.args[0]},${hex(ps.off)},${hex(ps.len)},${a.call.args[3]})`;
-        lists.push({ expr: a.call.args[3], carts: ps.carts, line: a.line + 1, ref: id });
       } else {
         const p = where(a.ref);
-        if (!p) { errors.push({ line: a.line + 1, ref: id, msg: `no part “${a.ref}” in the project` }); continue; }
+        if (!p) { fail(`no part “${a.ref}” in the project`); continue; }
         const bad = anchorRangeProblem(a, p);
-        if (bad) { errors.push({ line: a.line + 1, ref: id, msg: bad }); continue; }
+        if (bad) { fail(bad); continue; }
         // an explicit +offset (even +0x0) marks a sub-range read: it keeps its own length.
         // a bare ref reads the whole part, so it follows the part when it is resized.
         const len = a.ranged ? constExpr(a.call.args[2]).value : p.len;
         call = `reload(${a.call.args[0]},${hex(p.off + a.sub)},${hex(len)},"${p.cart}")`;
       }
-      const line = lines[a.line];
-      const next = line.slice(0, a.call.start) + call + line.slice(a.call.end);
-      if (next !== line) { changes.push({ line: a.line + 1, ref: id, before: line.trim(), after: next.trim() }); lines[a.line] = next; }
-    }
-    let out = lines.join('\n');
-    for (const l of lists) {
-      const lit = listLiteral(out, l.expr);
-      if (!lit) { errors.push({ line: l.line, ref: l.ref, msg: `the cart list ${l.expr} is not a literal {"a.p8",...} in this cart` }); continue; }
-      const body = l.carts.map((c) => `"${c}"`).join(', ');
-      if (out.slice(lit.start, lit.end).trim() !== body) {
-        changes.push({ line: lineOf(out, lit.start), ref: l.ref, before: `${lit.name}={${out.slice(lit.start, lit.end).trim()}}`, after: `${lit.name}={${body}}` });
-        out = out.slice(0, lit.start) + body + out.slice(lit.end);
+      if (text.slice(a.call.s, a.call.e) !== call) {
+        const line = lines[a.line];
+        const at = a.call.s - (text.lastIndexOf('\n', a.call.s - 1) + 1);
+        changes.push({ line: a.line + 1, ref: id, before: line.trim(), after: (line.slice(0, at) + call + line.slice(at + a.call.e - a.call.s)).trim() });
+        edits.push({ s: a.call.s, e: a.call.e, text: call });
       }
     }
+    let out = text;
+    for (const ed of edits.sort((x, y) => y.s - x.s)) out = out.slice(0, ed.s) + ed.text + out.slice(ed.e);
     return { text: out, changes, errors };
   }
-  const lineOf = (text, i) => text.slice(0, i).split('\n').length;
 
   /**
    * Why an anchored reload() cannot be rewritten without changing what the fx does, or null.
@@ -173,12 +443,14 @@ const P8Project = (() => {
    * literal: a computed one (e.g. frame*0x200) would be replaced by a fixed value.
    */
   function anchorCallProblem(a) {
+    if (a.problem) return a.problem;
     if (!a.call || a.call.args.length < 4) return 'no reload(dest,src,len,cart) on this line';
     const s = constExpr(a.call.args[1]);
     if (s.why) return `the source ${a.call.args[1]} ${s.why}; an anchored reload() needs a literal source`;
     const l = constExpr(a.call.args[2]);
     if (l.why) return `the length ${a.call.args[2]} ${l.why}; an anchored reload() needs a literal length`;
     if (!a.set && literalCart(a.call.args[3]) == null) return `the cart name ${a.call.args[3]} is not a literal "name.p8"`;
+    if (a.set && a.list?.why) return `the cart list ${a.call.args[3]} cannot be rewritten: ${a.list.why}`;
     return null;
   }
 
@@ -202,9 +474,11 @@ const P8Project = (() => {
     return null;
   }
 
-  /** renames an asset in the anchor comments of `text` */
+  /** renames an asset in the real anchor comments of `text` (never in strings or long comments) */
   function renameInText(text, from, to) {
-    return text.replace(new RegExp(`(--@data\\s+)${from}(\\.|\\[\\])`, 'g'), `$1${to}$2`);
+    let out = text;
+    for (const a of findAnchors(text).filter((x) => x.name === from).reverse()) out = out.slice(0, a.nameAt) + to + out.slice(a.nameAt + from.length);
+    return out;
   }
 
   /**
@@ -326,6 +600,19 @@ const P8Project = (() => {
     return out.length ? out : [{ name: 'data', off: 0, len, kind: 'hex', fx: null }];
   }
 
+  /** whether code offset `off` (a line end) lies inside a token: a long string / comment, or an unterminated quoted string */
+  function lineEndOpen(ctx, off) {
+    return ctx.toks.some((tk) => {
+      if (tk.t === 'ws' || tk.s >= off) return false;
+      if (tk.e > off) return true;
+      const q = ctx.code[tk.s];
+      if (tk.e !== off || tk.t !== 'string' || (q !== '"' && q !== "'")) return false;
+      let i = tk.s + 1;
+      while (i < tk.e && ctx.code[i] !== q) i += ctx.code[i] === '\\' ? 2 : 1;
+      return i >= tk.e;
+    });
+  }
+
   /**
    * carts: Map(lower name -> {name, text, rom, lua, luaAt, used, reads}) as Data Carts builds it.
    * Every reload() of a data cart becomes an anchor and its bytes a part:
@@ -341,43 +628,60 @@ const P8Project = (() => {
     const ranges = new Map(); // cart -> [{src, len, uses: [{file, line, text}]}]
     const sets = [];          // [{fx, list, carts, src, len, line, text}]
     const skipped = [];       // [{file, line, why, carts?}]: left unchanged; `carts` stay in place
-    // the carts a cart-name expression may read; null = cannot tell which
-    const mayRead = (expr, text) => {
-      const target = C.reloadTarget(expr, text);
-      return target ? [...carts.values()].filter((c) => target.match(c.name)).map((c) => c.name) : null;
+    // the carts a cart-name argument may read, as far as the code proves it; null = cannot tell which
+    const mayRead = (ctx, arg, at) => {
+      const t = cartTargets(ctx, arg.from, arg.to, at);
+      if (t.why) return null;
+      const want = new Set(t.names.flatMap((n) => { const b = baseName(n); return [b, `${b}.p8`]; }));
+      return [...carts.values()].filter((c) => want.has(c.name.toLowerCase())).map((c) => c.name);
     };
     for (const fx of carts.values()) {
       if (!fx.text) continue;
+      const ctx = luaContext(fx.text);
       const lines = fx.text.split('\n');
-      lines.forEach((line, i) => {
-        const anchor = parseAnchor(line);
-        if (anchor && !anchor.error) return;
-        const call = reloadCall(line);
-        // a malformed anchor is never anchored a second time; what its call reads stays in place
-        if (anchor) { skipped.push({ file: fx.name, line: i + 1, why: `${anchor.error} (left as it is)`, carts: call && call.args.length >= 4 ? mayRead(call.args[3], fx.text) : [] }); return; }
-        if (!call || call.args.length < 4) return;
-        const range = constRange(call.args[1], call.args[2]);
-        const cartName = literalCart(call.args[3]);
+      const starts = [];
+      lines.reduce((o, l) => { starts.push(o); return o + l.length + 1; }, 0);
+      const anchors = findAnchors(fx.text, ctx);
+      const calls = realCalls(ctx, 'reload');
+      for (const call of calls) {
+        const i = call.line;
+        const line = lines[i];
+        const skip = (why, cs) => skipped.push({ file: fx.name, line: i + 1, why: `${why} (left as it is)`, carts: cs });
+        const may = () => (call.args.length >= 4 ? mayRead(ctx, call.args[3], call.s) : []);
+        const anchor = anchors.find((a) => a.line >= call.line && a.line <= call.endLine);
+        if (anchor) {
+          // a malformed or ambiguous anchor is never anchored a second time; what its call reads stays in place
+          if (anchor.error || anchor.problem) skip(anchor.error || anchor.problem, may());
+          continue;
+        }
+        if (call.args.length < 4) continue;
+        if (calls.some((c) => c !== call && c.line <= call.endLine && c.endLine >= call.line)) { skip(`more than one reload() on line ${i + 1}, an anchor could not tell them apart`, may()); continue; }
+        if (call.line !== call.endLine) { skip(`the reload() spans several lines (${call.line + 1}–${call.endLine + 1}), an anchor needs it on one line`, may()); continue; }
+        if (lineEndOpen(ctx, starts[i] + line.length - ctx.at)) { skip('the line ends inside a string or long comment, an anchor cannot be added after it', may()); continue; }
+        const args = call.args.map((a) => a.text);
+        const range = constRange(args[1], args[2]);
+        const cartName = literalCart(args[3]);
         if (cartName == null) {
-          const ll = listLiteral(fx.text, call.args[3]);
-          const okList = ll && ll.carts.length && ll.carts.every((c) => carts.has(c.toLowerCase()) && !isMusic(c) && !isTracks(c));
-          if (okList && !range.why) { sets.push({ fx: fx.name, list: ll.name, carts: ll.carts, src: range.src, len: range.len, line: i, text: line }); return; }
+          const arg = call.args[3];
+          const indexed = NAME.has(ctx.sig[arg.from]?.t) && ctx.src(ctx.sig[arg.from + 1]) === '[';
+          const ll = indexed ? cartList(ctx, arg.from, arg.to, call.s) : null;
+          const okList = ll && !ll.why && ll.carts.every((c) => carts.has(c.toLowerCase()) && !isMusic(c) && !isTracks(c));
+          if (okList && !range.why) { sets.push({ fx: fx.name, list: ll.name, carts: ll.carts, src: range.src, len: range.len, line: i, text: line }); continue; }
           // the carts this call may read stay where they are
-          const may = mayRead(call.args[3], fx.text);
-          const why = !ll ? `cart name ${call.args[3]} is computed` : !okList ? 'cart list with music, tracks or missing carts' : range.why;
-          skipped.push({ file: fx.name, line: i + 1, why: `${why} (left as it is)`, carts: may });
-          return;
+          const why = !ll ? `cart name ${args[3]} is computed` : ll.why ? `cart list ${args[3]}: ${ll.why}` : !okList ? 'cart list with music, tracks or missing carts' : range.why;
+          skip(why, mayRead(ctx, arg, call.s));
+          continue;
         }
         const cn = cartName.toLowerCase();
-        if (isMusic(cn) || isTracks(cn)) return;
-        if (!carts.get(cn)) { skipped.push({ file: fx.name, line: i + 1, why: `${cartName} not found` }); return; }
-        if (range.why) { skipped.push({ file: fx.name, line: i + 1, why: `${range.why} (left as it is)`, carts: [carts.get(cn).name] }); return; }
+        if (isMusic(cn) || isTracks(cn)) continue;
+        if (!carts.get(cn)) { skipped.push({ file: fx.name, line: i + 1, why: `${cartName} not found` }); continue; }
+        if (range.why) { skip(range.why, [carts.get(cn).name]); continue; }
         const r = { src: range.src, len: range.len, uses: [{ file: fx.name, line: i, text: line }] };
         if (!ranges.has(cn)) ranges.set(cn, []);
         const list = ranges.get(cn);
         const same = list.find((x) => x.src === r.src && x.len === r.len);
         if (same) same.uses.push(...r.uses); else list.push(r);
-      });
+      }
     }
     const assets = [];
     const names = new Set();
@@ -617,55 +921,34 @@ const P8Project = (() => {
   // Retiring carts: only what the final sources no longer reference     //
   // ------------------------------------------------------------------ //
 
-  /** the Lua of a cart text (or the whole text of a .lua file) -> {code, firstLine (0-based)} */
-  function luaOf(text) {
-    const lines = text.split('\n');
-    const at = lines.findIndex((l) => /^__lua__\s*$/.test(l));
-    if (at < 0) return { code: text, firstLine: 0 };
-    let end = lines.findIndex((l, i) => i > at && /^__\w+__\s*$/.test(l));
-    if (end < 0) end = lines.length;
-    return { code: lines.slice(at + 1, end).join('\n'), firstLine: at + 1 };
-  }
-
   const baseName = (p) => p.replace(/\\/g, '/').split('/').pop().toLowerCase();
   // the cart argument of the calls that name other carts (run() takes a parameter, not a cart)
   const CART_ARG = { reload: 3, cstore: 3, load: 0 };
-  const SKIP = new Set(['ws', 'comment', 'tabsep', 'include']);
-
-  /** a string token as a "name" literal for reloadTarget, or null if it cannot be one */
-  function stringLiteral(src) {
-    const m = /^(?:"([^"'\\\n]*)"|'([^"'\\\n]*)'|\[(=*)\[\n?([^"'\]\n]*)\]\3\])$/.exec(src);
-    return m ? `"${m[1] ?? m[2] ?? m[4]}"` : null;
-  }
-
   /**
-   * The calls of reload / cstore / load in Lua (comments and #include lines already blanked) that
-   * may name a cart -> [{at (offset of the name), text, expr | why}]. expr = the cart argument
-   * ('' = none: the running cart); why = it cannot be told which cart is named. Calls are
-   * name(args), name"str", name'str', name[==[str]==] and name{table}; obj.load / obj:load and
-   * function definitions are not the API. Any other use of the name (local f=load) is a why.
+   * The calls of reload / cstore / load in executable Lua that may name a cart -> [{at (code offset of
+   * the name), text, from, to (sig indexes of the cart argument; to < from = none: the running cart) | why}].
+   * Calls are name(args), name"str", name'str', name[==[str]==] and name{table}; obj.load / obj:load
+   * and function definitions are not the API. Any other use of the name (local f=load) is a why.
    */
-  function cartCalls(code) {
-    const toks = K.lex(code).filter((tk) => !SKIP.has(tk.t));
-    const src = (tk) => (tk ? code.slice(tk.s, tk.e) : '');
+  function cartCalls(ctx) {
+    const { sig, src, code } = ctx;
     const out = [];
-    toks.forEach((tk, k) => {
+    sig.forEach((tk, k) => {
       const name = src(tk);
       if (!(name in CART_ARG) || !['api', 'ident'].includes(tk.t)) return;
-      const prev = src(toks[k - 1]);
-      const next = toks[k + 1];
+      const prev = src(sig[k - 1]);
+      const next = sig[k + 1];
       if (prev === '.' || prev === ':' || prev === 'function' || prev === 'local' || src(next) === '=') return;
       const ref = (end, more) => out.push({ at: tk.s, text: code.slice(tk.s, end).replace(/\s+/g, ' '), ...more });
       if (src(next) === '(') {
-        const call = V.callArgs(code, next.s);
+        const call = callAt(ctx, k);
         if (!call) { ref(next.e, { why: 'the call is not closed' }); return; }
-        const expr = call.args[CART_ARG[name]] || '';
-        ref(call.end + 1, { expr: stringLiteral(expr) ?? expr });
+        const arg = call.args[CART_ARG[name]];
+        ref(sig[call.close].e, arg ? { from: arg.from, to: arg.to } : { from: 0, to: -1 });
       } else if (next?.t === 'string') {
         // name"x" passes one argument: only load's cart comes first
         if (CART_ARG[name] > 0) return;
-        const lit = stringLiteral(src(next));
-        ref(next.e, lit ? { expr: lit } : { why: `the cart name ${src(next)} cannot be resolved` });
+        ref(next.e, { from: k + 1, to: k + 1 });
       } else if (src(next) === '{') {
         if (CART_ARG[name] === 0) ref(next.e, { why: 'load is called with a table, the cart name cannot be resolved' });
       } else ref(tk.e, { why: `${name} is used without a call here, the cart it may name cannot be traced` });
@@ -697,36 +980,25 @@ const P8Project = (() => {
       const f = queue.shift();
       if (scanned.has(f.name)) continue;
       scanned.add(f.name);
-      const { code: raw, firstLine } = luaOf(f.text);
-      // comments blanked by the shared lexer (strings kept: offsets, lines and literals stay)
-      const code = K.maskLua(raw, { strings: false });
-      const lineAt = (i) => firstLine + code.slice(0, i).split('\n').length;
-      for (const inc of K.includes(code)) {
+      const ctx = luaContext(f.text);
+      for (const inc of K.includes(ctx.code, ctx.toks)) {
         const lc = baseName(inc.path);
-        const line = firstLine + inc.line + 1;
+        const line = ctx.firstLine + inc.line + 1;
         if (cand.has(lc)) keep(lc, `${f.name}:${line} #include ${inc.raw}`);
         else if (!/[\\/]/.test(inc.path) && byName.has(lc)) queue.push(byName.get(lc));
         else unresolved.push({ file: f.name, line, call: `#include ${inc.raw}`, why: `the included ${inc.raw} cannot be read here, its references are unknown` });
       }
-      for (const c of cartCalls(code)) {
-        const where = { file: f.name, line: lineAt(c.at), call: c.text };
+      for (const c of cartCalls(ctx)) {
+        const where = { file: f.name, line: ctx.lineOf(c.at) + 1, call: c.text };
         if (c.why) { unresolved.push({ ...where, why: c.why }); continue; }
-        const expr = c.expr;
-        if (!expr || expr === 'nil') continue; // the running cart itself
-        const ident = /^[A-Za-z_]\w*$/.test(expr);
-        const assigned = ident ? (code.match(new RegExp(`\\b${expr}\\s*=(?!=)`, 'g')) || []).length : 0;
-        const target = ident && assigned !== 1 ? null : C.reloadTarget(expr, code);
-        if (!target) {
-          unresolved.push({ ...where, why: ident && assigned > 1 ? `${expr} is assigned more than once` : `the cart name ${expr} cannot be resolved` });
-          continue;
-        }
+        // only what the code proves: a computed name, a changed table or an unknown fragment keeps every candidate
+        const target = cartTargets(ctx, c.from, c.to, c.at);
+        if (target.why) { unresolved.push({ ...where, why: target.why }); continue; }
         const by = `${f.name}:${where.line} ${c.text}`;
-        if (!target.inferred) {
-          const n = baseName(target.label);
-          keep(n, by);
-          keep(`${n}.p8`, by);
-        } else {
-          for (const lc of cand.keys()) if (target.match(lc) || target.match(lc.replace(/\.p8$/, ''))) keep(lc, by);
+        for (const n of target.names) {
+          const b = baseName(n);
+          keep(b, by);
+          keep(`${b}.p8`, by);
         }
       }
     }
@@ -1084,7 +1356,7 @@ const P8Project = (() => {
   }
 
   return {
-    FORMAT, CART, TYPES, hex, safeName, assetToJson, assetFromJson, findAnchors, rewriteAnchors, renameInText, listLiteral,
+    FORMAT, CART, TYPES, hex, safeName, assetToJson, assetFromJson, findAnchors, rewriteAnchors, renameInText,
     constExpr, constRange, retirement, JOURNAL, WriteError, createLock, digest, transact, recover, adopt, segmentsOf, segmentImage, setSegment, imageBytes, partsOf, autoPack, placements, buildCarts, verifyCarts, checkAnchors, isMusic, isTracks,
   };
 })();
