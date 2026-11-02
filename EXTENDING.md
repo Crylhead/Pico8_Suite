@@ -76,6 +76,26 @@ Background session saves use `S.kv.set(key, value).catch(S.autosaveFailed('My To
 
 When IndexedDB cannot be opened at startup the suite runs an explicit **memory-only session**: writes succeed in memory, `S.assets.persistent()` is `false` and `S.assets.mode()` is `'memory'`; the suite shows a warning and the Library labels it. A write that fails while IndexedDB is open never falls back to memory.
 
+### UX preferences
+
+`js/ux-prefs-core.js` (`P8Prefs`) holds the user's display/help choices in one schema-versioned `localStorage` record (`p8suite.uxPrefs`); the shell exposes the instance as `P8App.prefs` and edits it in **Help › Settings…** (`P8App.showSettings()`). Invalid or corrupt fields fall back to their defaults one by one, fields from a newer schema version survive a write, and blocked storage never throws (`prefs.status().persistent === false`; the preference still applies for the page). Only these choices are stored, no identifiers or telemetry.
+
+| Field | Values (first = default) | Effect |
+| --- | --- | --- |
+| `helpLevel` | `concise`, `off`, `detailed` | `<html data-help-level>`; elements with `.help-optional` hide at `off`, `.help-detailed` show only at `detailed` |
+| `autoOfferTours` | `true`, `false` | for onboarding tours (#61): never auto-offer when `false`; replaying stays available |
+| `compactNav` | `false`, `true` | `<html data-compact-nav>` hides the workspace name box |
+| `motion` | `system`, `reduce` | `<html data-motion>`; `P8App.reducedMotion()` is also true when the OS asks for reduced motion |
+
+```js
+P8App.prefs.get().helpLevel;                       // read (a copy)
+P8App.prefs.set({ helpLevel: 'off' });             // → { changed: ['helpLevel'], saved: true }; invalid values throw TypeError
+document.addEventListener('p8:preferences', (e) => { /* e.detail: { prefs, changed, saved } */ });
+el.scrollIntoView({ behavior: P8App.reducedMotion() ? 'auto' : 'smooth' });
+```
+
+Use `.help-optional` / `.help-detailed` only for purely explanatory text. Never put labels, accessible names, warnings, errors, status or save feedback in them: those must stay visible at every help level. A new field needs a `SCHEMA` entry whose first value reproduces the previous behaviour, a Settings control, documentation here and in the F1 help, and (for an incompatible change) a `VERSION` bump with a `MIGRATIONS` step. Tests: `tests/ux-prefs.test.js`.
+
 ### Document save status
 
 `js/doc-status-core.js` (`P8DocStatus`) is the shared save/operation state contract (#58). It tracks one open document and shows a badge with an icon and text for each state: not saved, unsaved, saving, saved (Library/file/project), downloaded copy, memory-only, failed, conflict. Use it instead of a plain `dirty` flag. The Map Editor (`js/map.js`) is the reference adapter.
@@ -105,26 +125,6 @@ addEventListener('beforeunload', (e) => { if (status.atRisk()) e.preventDefault(
 ```
 
 Results for an older document or an older save ticket are ignored, and an error stays visible until a later save succeeds or the user dismisses it. Tests: `tests/doc-status.test.js`.
-
-### UX preferences
-
-`js/ux-prefs-core.js` (`P8Prefs`) holds the user's display/help choices in one schema-versioned `localStorage` record (`p8suite.uxPrefs`); the shell exposes the instance as `P8App.prefs` and edits it in **Help › Settings…** (`P8App.showSettings()`). Invalid or corrupt fields fall back to their defaults one by one, fields from a newer schema version survive a write, and blocked storage never throws (`prefs.status().persistent === false`; the preference still applies for the page). Only these choices are stored, no identifiers or telemetry.
-
-| Field | Values (first = default) | Effect |
-| --- | --- | --- |
-| `helpLevel` | `concise`, `off`, `detailed` | `<html data-help-level>`; elements with `.help-optional` hide at `off`, `.help-detailed` show only at `detailed` |
-| `autoOfferTours` | `true`, `false` | for onboarding tours (#61): never auto-offer when `false`; replaying stays available |
-| `compactNav` | `false`, `true` | `<html data-compact-nav>` hides the workspace name box |
-| `motion` | `system`, `reduce` | `<html data-motion>`; `P8App.reducedMotion()` is also true when the OS asks for reduced motion |
-
-```js
-P8App.prefs.get().helpLevel;                       // read (a copy)
-P8App.prefs.set({ helpLevel: 'off' });             // → { changed: ['helpLevel'], saved: true }; invalid values throw TypeError
-document.addEventListener('p8:preferences', (e) => { /* e.detail: { prefs, changed, saved } */ });
-el.scrollIntoView({ behavior: P8App.reducedMotion() ? 'auto' : 'smooth' });
-```
-
-Use `.help-optional` / `.help-detailed` only for purely explanatory text. Never put labels, accessible names, warnings, errors, status or save feedback in them: those must stay visible at every help level. A new field needs a `SCHEMA` entry whose first value reproduces the previous behaviour, a Settings control, documentation here and in the F1 help, and (for an incompatible change) a `VERSION` bump with a `MIGRATIONS` step. Tests: `tests/ux-prefs.test.js`.
 
 ## Live palettes between tools
 
