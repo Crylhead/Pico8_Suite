@@ -2,6 +2,10 @@
 
 Applies throughout this repository. Follow current user instructions and platform policies first. Use [CONTRIBUTING.md](CONTRIBUTING.md) for setup and available commands; the task-based validation rules below determine which checks to run. Never skip an explicitly required check or weaken CI to save tokens.
 
+## UI/UX tasks and documentation contract
+
+For an assigned UX issue, consult [docs/UX_DEVELOPMENT_PLAN.md](docs/UX_DEVELOPMENT_PLAN.md) (shared philosophy, acceptance standards and issue dependencies) and the specific issue before editing. Preserve the full power-user feature set. User-visible changes must update the affected in-app help/tool descriptions, option/shortcut documentation and any affected onboarding metadata once those registries exist. Optional educational hints can be disabled, but accessible names, warnings and save/error feedback cannot. User diagnostic data must remain local, sanitized and user-approved for export. Do not duplicate the pending #40–#44 correctness tasks or treat this roadmap as permission for unscoped redesigns. Apply the proportional testing policy below.
+
 ## Scope and working conduct
 
 - Implement the assigned task and necessary dependencies. Check current code and related open PRs before duplicating work; historical reviews are evidence, not the current backlog.
