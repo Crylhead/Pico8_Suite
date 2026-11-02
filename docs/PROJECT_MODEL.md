@@ -1,6 +1,6 @@
 # Demo project model and Cart Builder
 
-This describes the implementation in the standalone Pico8_Suite repository as re-reviewed on 2026-11-01 at [ca36c07f2e770055f2c0f69a62bde4142a4dea2f](https://github.com/Crylhead/Pico8_Suite/commit/ca36c07f2e770055f2c0f69a62bde4142a4dea2f). It replaces the older phase-1 proposal. Open defects are tracked in the [health review](HEALTH_REVIEW_2026-11-01_ca36c07.md); implemented behavior below is not a guarantee that those defects are resolved.
+This describes the implementation in the standalone Pico8_Suite repository as re-reviewed on 2026-11-02 at [72f6e029412ce06afe0576bd60f59aca0d44c52f](https://github.com/Crylhead/Pico8_Suite/commit/72f6e029412ce06afe0576bd60f59aca0d44c52f). It replaces the older phase-1 proposal. Open defects and fix provenance are tracked in the [current health review](HEALTH_REVIEW_2026-11-02_72f6e02.md); implemented behavior below is not a guarantee that those defects are resolved.
 
 ## Folder and persistence
 
@@ -107,7 +107,9 @@ Retirement candidates are carts the project wrote before, or adopted, that the n
 - The Write confirmation lists the carts that will move, the carts that stay with the line that references them, and any unresolved references.
 - Carts that stay are no longer owned by the project afterwards. Their names are reserved, and later writes never overwrite or retire them.
 
-Partial adoption does not grant permission to retire a cart: a source cart is retired only when this check passes at write time. The scan is lexical, not a Lua evaluator: a local or field that shadows `load` is still treated as the PICO-8 function (which keeps carts, never retires them), and names built at run time beyond the patterns above are unresolved.
+Partial adoption does not grant permission to retire a cart: a source cart is retired only when this check passes at write time. The scan is lexical, not a Lua evaluator: a local name that shadows `load` may still be treated as the PICO-8 function (conservatively retaining carts); member calls are excluded as described above. **Known gap [#41](https://github.com/Crylhead/Pico8_Suite/issues/41):** the shared preview resolver guesses that unknown concatenation fragments are numeric and treats initial literal tables as exhaustive even after mutation. Some computed names are therefore incorrectly classified as resolved and their actual targets can retire. The unresolved-reference policy above does not yet cover those cases.
+
+**Mutation parsing limits:** [#42](https://github.com/Crylhead/Pico8_Suite/issues/42) records cart-set list parsing that accepts computed elements or selects a commented-out binding; [#43](https://github.com/Crylhead/Pico8_Suite/issues/43) records line-based anchor discovery inside string/comment bodies. Whole anchor suffix validation is implemented, but does not close these lexical/binding gaps.
 
 ### Recoverable writes
 
@@ -134,6 +136,8 @@ On opening, recovery takes the same lock and decides from the files, not from th
 | empty file | — | The browser stopped while creating the journal, before any other file changed; removes it. |
 
 An unreadable journal, an unknown state or any restore failure leaves the journal (with the originals) in place and reports it. Journals written before this format carry no digests, so a leftover `committed` one is treated as unverifiable: it is finished only if every file still holds its original contents (then nothing is retired), otherwise you are asked as for a mixed folder. The File System Access API has no atomic rename; correctness relies on each file's close replacing its contents as a whole, as Chrome/Edge do through a swap file.
+
+**Known recovery-retry gap [#40](https://github.com/Crylhead/Pico8_Suite/issues/40):** when rollback of a committed write is interrupted or fails while restoring retired carts, the persisted `rolling-back` marker loses that remaining obligation. A later recovery can see all `writes[]` restored, skip cart restoration and remove the journal with an `old` result while a required cart is still in `unused/`. The decision table describes payload handling; it does not establish complete old-project recovery at this boundary.
 
 #### One writer at a time
 

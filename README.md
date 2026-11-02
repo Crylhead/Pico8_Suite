@@ -80,7 +80,7 @@ The app can be hosted on a static server for the browser tools. A remote host do
 
 ## Reviews and current work
 
-Start with the [2026-11-01 post-fix review](docs/HEALTH_REVIEW_2026-11-01_ca36c07.md), reviewed at [ca36c07f2e770055f2c0f69a62bde4142a4dea2f](https://github.com/Crylhead/Pico8_Suite/commit/ca36c07f2e770055f2c0f69a62bde4142a4dea2f). The original 14 issues are closed and their fixes are merged; six reproduced follow-ups (#30–#35) remain. Each has evidence, scope and acceptance checks. The [initial standalone review](docs/HEALTH_REVIEW_2026-11-01.md) is preserved as historical evidence.
+Start with the [2026-11-02 third review](docs/HEALTH_REVIEW_2026-11-02_72f6e02.md), reviewed at [72f6e029412ce06afe0576bd60f59aca0d44c52f](https://github.com/Crylhead/Pico8_Suite/commit/72f6e029412ce06afe0576bd60f59aca0d44c52f). Original issues #1–#14 and follow-ups #30–#35 are closed, with their fixes merged. Five further reproduced findings are open as #40–#44: recovery retries, computed retirement targets, cart-set parsing, lexical anchor discovery and Save As/Run identity. Each issue has evidence and acceptance checks. The [second review](docs/HEALTH_REVIEW_2026-11-01_ca36c07.md) and [initial standalone review](docs/HEALTH_REVIEW_2026-11-01.md) remain historical evidence; fix provenance is recorded in the latest review.
 
 The earlier reviews remain in Demotools, not this repository. Their [historical index](https://github.com/Crylhead/Demotools/blob/4a2855b99efb2e7a265961c63f1ac809adea3ed2/reviews/README.md) includes the health reassessment, Tile Maker reconstruction plan and permanent **Send to + Library** UX proposal. Those are historical findings/design proposals; no final Send to layout has been selected or implemented here.
 
@@ -94,7 +94,7 @@ Run the committed regression entry point from the repository root:
 node tests/regress.js
 ```
 
-On 2026-11-01 the post-fix review reran **43 JavaScript regressions and five Python bridge tests**, all passing. All 23 JavaScript files passed `node --check`, the bridge passed syntax compilation, and static HTML/link checks passed. [GitHub Actions](.github/workflows/ci.yml) now runs the regression, syntax, static and bridge checks on PRs and pushes to `main`; the reviewed main run succeeded. Focused additional probes still reproduced #30–#35, so these passing checks do not establish complete coverage. See [CONTRIBUTING.md](CONTRIBUTING.md) for commands and the [current review](docs/HEALTH_REVIEW_2026-11-01_ca36c07.md) for validation limits.
+On 2026-11-02 the third review reran **68 JavaScript regressions and five Python bridge tests**, all passing. Every `js/*.js` passed `node --check`, the bridge passed syntax compilation, and static HTML checks passed (392 unique IDs, 25 local script/style references). [GitHub Actions](.github/workflows/ci.yml) runs these checks on PRs and pushes to `main`; the reviewed main run succeeded. Additional core/actual-function probes reproduced #40–#44, so passing CI does not establish complete coverage. Browser validation was attempted but no executable was available; Windows and PICO-8 runtime checks were not performed. See [CONTRIBUTING.md](CONTRIBUTING.md) for commands and the [current review](docs/HEALTH_REVIEW_2026-11-02_72f6e02.md) for evidence and limits.
 
 ### Historical validation reports
 

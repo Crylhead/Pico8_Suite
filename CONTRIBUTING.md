@@ -44,14 +44,14 @@ For a UI change, test its main journey and cancellation/error path in a browser,
 
 ## Agent and collaborator workflow
 
-1. Start with the assigned [issue](https://github.com/Crylhead/Pico8_Suite/issues) and the [current health review](docs/HEALTH_REVIEW_2026-11-01_ca36c07.md). Compare its pinned reviewed source against your current base and reproduce before changing code.
-2. Prioritize the current follow-ups: recovery state/transaction ownership (#31/#32), document transitions (#30), cart retirement (#33), and anchor parsing (#34); the Code Editor include meter is #35. Original issues #1–#14 are closed, so recheck current code before treating an old finding as open.
+1. Start with the assigned [issue](https://github.com/Crylhead/Pico8_Suite/issues) and the [current health review](docs/HEALTH_REVIEW_2026-11-02_72f6e02.md). Compare its pinned reviewed source against your current base and reproduce before changing code.
+2. Prioritize recovery retries (#40), then conservative retirement targets and cart-set parsing (#41/#42). Lexical anchor discovery is #43; Save As/Run identity is #44. Original issues #1–#14 and follow-ups #30–#35 are closed with merged fixes; recheck current code before treating historical findings as open.
 3. Keep each implementation focused. Work on a feature branch based on current `main` and open a PR unless the maintainer explicitly asks for direct commits. Preserve byte formats, palette-slot identity, raw-default compression and current UX features.
 4. Reuse the core/UI split. Add a few meaningful regression cases for the specific defect and success path; avoid broad rewrites, new test frameworks or large repetitive suites.
 5. For fake filesystem/storage/bridge tests, cover cancellation, denied writes, external changes and partial failures without writing a real demo or launching PICO-8.
 6. Explain the resulting behavior, exact validation/results and remaining limits in the PR. Reference the issue and record the fix commit when resolved.
 
-Coordinate #31/#32 under one transaction/recovery owner. #33/#34 touch project parsing and should avoid conflicting rewrites. #30 needs transition-level tests in addition to saver-helper tests. #35 can proceed independently. The original fixes and CI already exist; extend their focused tests instead of rebuilding them.
+Coordinate #41–#43 because they share project parsing and destructive decisions. #40 needs interruption/retry coverage of recovery itself, including retired carts, beyond transaction-only snapshots. #44 needs actual Run payload and saved-file context checks. The original fixes and CI already exist; preserve and extend their focused tests instead of rebuilding them.
 
 The permanent **Send to** control, Asset Dock and Output Shelf are earlier UX options, not an approved implementation layout. Keep that design discussion separate from the current correctness fixes; historical references are linked from the review.
 
