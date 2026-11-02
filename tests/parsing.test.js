@@ -184,3 +184,45 @@ t('#43 adoption anchors only executable, unambiguous one-line calls; renames tou
   const text = 's="--@data fx_e.bin"\nreload(0,0,10,"d0.p8") --@data fx_e.bin';
   assert.strictEqual(P.renameInText(text, 'fx_e', 'font'), 's="--@data fx_e.bin"\nreload(0,0,10,"d0.p8") --@data font.bin');
 });
+
+// integrated review: assignments hidden in nested functions, locals outside their block, _ENV calls
+t('#41 nested multiple assignments, out-of-scope locals and _ENV/_G calls keep their carts', () => {
+  const keep = (lua, why) => {
+    const r = P.retirement(['a.p8', 'b.p8'], [{ name: 'fx.p8', text: `pico-8 cartridge\n__lua__\n${lua}\n__gfx__\n00\n` }]);
+    assert.deepStrictEqual(r.retire, [], lua);
+    if (why) assert.match(r.unresolved.map((u) => u.why).join(' / '), why, lua);
+  };
+  keep('c="a.p8"\nfoo(function() c,x="b.p8",0 end)\nreload(0,0,0x100,c)', /multiple assignment/);
+  keep('c="a.p8"\nt={function() x,c=0,"b.p8" end}\nt[1]()\nreload(0,0,0x100,c)', /multiple assignment/);
+  keep('c="a.p8"\nt={function() x=1;c="b.p8" end}\nreload(0,0,0x100,c)', /assigned/);
+  keep('cs={"a.p8"}\nt={function() x=1;cs={"b.p8"} end}\nreload(0,0,0x100,cs[1])', /assigned/);
+  keep('cs={"a.p8"}\ncs[1],x="b.p8",0\nreload(0,0,0x100,cs[1])', /multiple assignment/);
+  keep('#include lib.lua\nfunction f() local c="a.p8" end\nreload(0,0,0x100,c)', /outside the block|include/);
+  keep('function f() local c="a.p8" end\n_ENV.c="b.p8"\nreload(0,0,0x100,c)', /outside the block|_ENV/);
+  keep('function f() local cs={"a.p8"} end\n_ENV.cs={"b.p8"}\nreload(0,0,0x100,cs[1])', /outside the block|_ENV/);
+  keep('if x then local c="a.p8" end\nreload(0,0,0x100,c)', /outside the block/);
+  keep('_ENV.reload(0,0,0x100,"b.p8")\nload"a.p8"');
+  keep('_G.load("b.p8")\nload"a.p8"');
+  keep('o=setmetatable({},{__index=_ENV})\no.load("b.p8")\nload"a.p8"', /globals table/);
+  keep('_G["load"]("b.p8")\nload"a.p8"', /globals table/);
+
+  // still proven: a local used inside its block (also with PICO-8 shorthand ifs), a single global
+  const ok = (lua) => P.retirement(['a.p8', 'b.p8'], [{ name: 'fx.p8', text: `__lua__\n${lua}\n` }]);
+  let r = ok('function f()\n local c="a.p8"\n if (x) y=1\n while (z) z-=1\n reload(0,0,0x100,c)\nend');
+  assert.deepStrictEqual([r.retire, r.unresolved], [['b.p8'], []]);
+  r = ok('t={f=function() reload(0,0,0x100,cs[i]) end, n=1}\ncs={"a.p8"}\nfor i=1,#cs do x,y=cs[i],1 end');
+  assert.deepStrictEqual([r.retire, r.unresolved], [['b.p8'], []]);
+  r = ok('local _ENV=self\n_G.x=1\nload"a.p8"');
+  assert.deepStrictEqual([r.retire, r.unresolved], [['b.p8'], []]);
+});
+
+t('#41 a name or list entry read on the right of a multiple assignment stays proven; as a target it does not', () => {
+  const run = (lua) => P.retirement(['a.p8', 'b.p8'], [{ name: 'fx.p8', text: `__lua__\n${lua}\n` }]);
+  for (const lua of ['c="a.p8"\nx,y=c,1\nload(c)', 'cs={"a.p8"}\nx,y=cs[1],2\nload(cs[1])', 'c="a.p8"\nfunction f() return c, 1 end\nload(c)']) {
+    assert.deepStrictEqual([run(lua).retire, run(lua).unresolved], [['b.p8'], []], lua);
+  }
+  for (const lua of ['c="a.p8"\nc, self.x = "b.p8", 1\nload(c)', 'cs={"a.p8"}\ncs[1], t[2] = "b.p8", 1\nload(cs[1])', 'c="a.p8"\ndo c,x="b.p8",1 end\nload(c)']) {
+    assert.deepStrictEqual(run(lua).retire, [], lua);
+    assert.match(run(lua).unresolved[0].why, /multiple assignment/, lua);
+  }
+});
