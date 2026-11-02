@@ -172,3 +172,82 @@ A small tool that does not need its own workspace can go into Extra Tools. Eithe
 
 For registered plug-ins, Extra Tools adds the tab (with the next <kbd>Alt</kbd>+number), shows the panel and calls `draw()` when the tab opens or resizes, `tick(dt)` every frame while it is visible and `key(e)` for key presses (return `true` when handled). Optional `category` and `tags` (as in `registerTool`) place the plug-in in Find tool; without them it is listed under Utilities. Each Extra Tools tab gets the address `#extras/<id>`.
 
+
+## Diagnostics and Report a problem
+
+`js/diagnostics-core.js` (`P8Diag`, #62) keeps a bounded in-memory log (100 records) of sanitized error summaries: window `error`, `unhandledrejection`, Worker `error`/`messageerror` and explicit failures. Nothing is stored or transmitted; the log is lost when the tab closes and cannot capture a crashed tab or process. Tools report failures with `P8App.diagnostics.report(source, 'E_TOOL_ACTION', error, 'state')` (never pass project content in `state`) and attach workers with `P8App.diagnostics.watchWorker(worker, 'worker:name')`. **Help › Report a problem…** (#63) shows two editable previews: the text summary for copying and the diagnostics JSON for downloading; each action exports exactly its corresponding preview. The user may open the GitHub form (`.github/ISSUE_TEMPLATE/bug_report.yml`); no diagnostics travel in the URL.
+
+## Active project context
+
+`js/project-context-core.js` (#55) is an optional, read-only reference to the active project folder, shown in the app bar as "Project: name" with its access state. It owns nothing: it writes no files, scans nothing and never opens a project by itself. Library-only and download workflows ignore it.
+
+- Consumers: `P8App.projectContext.get()` → frozen `{ id, name, source, handle, access, message }`; `await check()` re-queries the handle (do this before relying on access; never assume an old `granted`); `subscribe(fn)` receives `{ type: 'select'|'replace'|'clear'|'access', project, previous }` once per change, also as the `p8:projectcontext` document event (`p8:project` is Project Audit's scan hand-off to Data Carts and unrelated).
+- `access`: `granted`, `prompt` (reconnect needed), `denied`, `stale` (handle unusable), `unsupported` (name only, no handle API). Denied, revoked or stale handles never fall back to another folder.
+- Tools that open a project call `P8App.projectContextPublisher.select({ name, source, handle })` (Cart Builder does) and `clear(source)`; only the publishing tool can clear its project. `reconnect()` must run in a user gesture.
+- After a reload only `{ name, source, handle }` is remembered; the project returns as `prompt` until permission is verified. Adapters (#56) must still request/verify permission and handle external changes before any write. The indicator never means "saved".
+
+## Help registry (F1)
+
+`js/help-data.js` holds the canonical help content and `js/help-core.js` (`P8Help`) the lookup API; the older long-form text in `#docsTemplate` (index.html) stays available as **Help › Full documentation** until its content is migrated (`tests/help.test.js` lists the sections that are still full-documentation-only). F1 opens the topic of the current workspace with a search box, the Help index and a link to the detailed reference.
+
+- **A new tool must add a `kind: 'tool'` topic** whose `ws` equals its workspace id (purpose, inputs, outputs, key actions, restrictions, related topics, shortcuts) and bump `rev` when its behavior changes. The test fails for a workspace tab or `registerTool` entry without a topic, a dangling `related`/`legacy` reference or a duplicate id.
+- Stable ids: topics (`code`), controls and actions (`code.run`). Renamed ids need an entry in `ALIASES` so tooltips (#60) and tours (#61) keep working.
+- API: `P8Help.topic(id)`, `forWorkspace(ws)`, `control(controlId)` → `{ topic, control }`, `search(query)`, `toc()`. Do not scrape the DOM for help text.
+- In the app: `P8App.runAction('docs')` opens Help, `docs-full` the long-form documentation.
+
+## Explanatory tooltips
+
+`js/ux-tooltips.js` (`P8Tips`, #60) shows optional tips for elements marked `data-help-id="<control id>"`. The text always comes from the help registry (`controls[]` / `actions[]` with `text`, optional `detail`); never write tooltip text in HTML or JS. Concise shows `text`, Detailed adds `detail` and a pointer to F1, Off shows nothing (**Help › Settings…**, applies without reload).
+
+- Tips appear after a delay on mouse hover and on keyboard focus (also after a touch tap), hide on Escape (consumed only while a tip is visible), on leaving, scrolling or a preference change, and never take focus or pointer events. Dragging or painting suppresses them.
+- A native `title` on a marked control that already has visible text or an `aria-label` is moved to `data-title-orig`, so the registry tip replaces it and Off applies consistently. Put essential information in a label, status text, error or warning, never only in a tip.
+- Unknown ids do nothing. `tests/tooltips.test.js` fails if a `data-help-id` in `index.html` has no registry text.
+
+## Quick tours
+
+`js/tours-core.js` (engine, no DOM), `js/tours-data.js` (built-in tours) and `js/tours.js` (UI), #61. Tours are optional: a first-run welcome offers *Start tour* / *Explore independently* / *Never auto-offer* (only when `autoOfferTours` is on, help level is not Off, no dialog is open and the user is on Home); **Help › Quick tours…** lists and replays them. Esc, the close button or finishing ends a tour; the page is never blocked (no backdrop) and tours never write project data.
+
+- Register a tour with `P8Tours.register({ id, title, summary, major, steps })`; a tool without a tour is fine. A step has a stable `id`, a `title`, `text` or a registry `helpId`, an optional `target` selector (stable id, class or `[data-help-id]`, never `nth-child`) and optional `before: { ws, click }` (switch workspace / tab only). A step whose target is missing or hidden is skipped; a tour with no usable step says so and ends.
+- **Versioning:** bump `major` only for a meaningful new capability: users who finished or closed an older major keep their status and see "What's new" in the list, no forced replay. Copy or layout edits do not change `major`.
+- Progress is a single local record (`p8suite.tours`: welcome choice and per-tour status/major); unavailable storage falls back to this page only.
+- `tests/tours.test.js` fails for invalid metadata, an unknown `helpId`, or a selector id/class/ws that no longer exists in `index.html` or `js/`. When you rename or remove a marked control, update its tour steps in the same PR.
+
+## Adding a tool: documentation obligations
+
+A new workspace or tool must, in the same PR: add its help topic and shortcuts (`js/help-data.js`), use stable control ids, add an optional tour or none (never required: a tool without one registers fine), and update the long-form F1 text or note the parity gap. `tests/docs-integrity.test.js` enforces this offline with actionable messages; see [docs/UX_RELEASE_CHECKLIST.md](docs/UX_RELEASE_CHECKLIST.md) for the full list and the manual release acceptance plan.
+
+## Resizable side panels
+
+`js/panels-core.js` (model, persistence) and `js/panels.js` (UI), #64. Pixel Studio, Map Editor and Terrain Lab get a splitter and a hide/show button at the left edge of their side panel. The width is the CSS variable `--side-w` on the layout element (`.layout-studio`, `.layout-map`, `.tl-split`); the grid column reads `var(--side-w, <old width>)`, so the old width is the default and nothing changes without the script.
+
+- Keyboard: focus the splitter (`role="separator"`, `aria-valuenow/min/max`), ArrowLeft/ArrowRight resize (Shift = 64 px, else 16), Home/End = narrowest/widest, Enter hides/shows, `0` or double-click resets. Settings › Reset to defaults also restores all panels.
+- Bounds: at least the panel minimum and never so wide that the canvas drops below 320 px; the width is re-clamped on resize.
+- Persistence: `p8suite.layout` (`{ v, panels: { id: { w, c } } }`); corrupt or out-of-range values fall back per panel; blocked storage only loses persistence.
+- Narrow screens: at each layout's existing breakpoint (studio 860 px, map 900 px, terrain 1000 px) the layout stacks, splitter and toggle are hidden, a stored collapse is ignored and every control is reachable by scrolling. A hidden panel on desktop is `inert` and keeps its toggle.
+- To add a panel: add an entry to `PANELS` in `js/panels.js`, use `var(--side-w, <default>)` in its grid, and give the layout `position: relative` via `.has-splitter` (added automatically).
+
+## Long-running renders: preview / final status
+
+`js/render-status-core.js` (`P8RenderStatus`, #67) describes what Terrain Lab's status badge may say; `js/terrain.js` feeds it and renders it. The render pipeline, algorithms and output bytes are unchanged.
+
+| State | Meaning | Exports |
+| --- | --- | --- |
+| Queued | your latest edit has no result yet; the image shown is from before it and is marked stale (dashed frame) | off |
+| Preview | a fast low-resolution result of the latest edit is shown | off |
+| Preview · rendering final… | that preview is current, the full-resolution render runs | off |
+| Final | full-resolution result of the latest edit | **on** |
+| Stale | the image is older than the latest edit and nothing is running (use Retry) | off |
+| Render failed | worker or render error with an Error ID (also in Help › Report a problem) and a **Retry** that replaces both workers and renders the latest edit again; edits are kept | off |
+
+A result for an older revision is dropped, never shown as current. Every edit updates the badge synchronously before the preview job is sent. No progress percentages are shown or invented. Another long-running tool can reuse `describe()` with its own revision counters and `errorText()`; `diagnostics.watchWorker(worker, source, onRecord)` gives the Error ID.
+
+`window.P8TerrainDebug` (`state()`, `changed()`, `retry()`, `ackSamples`, `ackSummary()`) is for manual measurement only; nothing is sent anywhere.
+
+## Home launcher
+
+`js/home-core.js` (`P8Home`, #68) builds Home from the tool registry: **Continue** (the last tool other than Home, key `p8pal.lastTool`, plus the optional active project), **What do you want to do?** (task shortcuts grouped Create / Edit / Import / Analyze) and **All tools** (cards). A tool adds shortcuts with `tasks: [{ group, label, hint, open?: { click } }]` in `Suite.registerTool`; `open.click` selects a tab inside the tool (Terrain Lab does). A tool without `tasks` only gets its card; an unknown `group` falls back to Edit.
+
+- A shortcut only switches workspace (and selects the named tab); it never opens a folder or replaces another tool's work.
+- A remembered project shows as **Reconnect** (the click is the permission request); granted = **Continue project**; denied, revoked, missing and name-only projects show an explanation and no action. No project: the text says how to open one.
+- The storage notice says the Library and tool sessions are browser-only; when IndexedDB is unavailable (`assets.mode() === 'memory'`) it becomes a warning.
+- `tests/home.test.js` fails for a task group that does not exist and when one of the six first-run tasks (pixel art, palette, terrain, code, audit, packing) is missing.

@@ -833,6 +833,7 @@
     me.sheetName = a.sheetName || '';
     buildSheetCanvas();
     loadMap(m, { name: a.name, assetId: a.id || null, dirty: !a.id, libModified: a.modified ?? null });
+    return true;
   }
 
   async function openFromLibrary() {
@@ -857,6 +858,7 @@
     if (ok !== true) { showMessage('Tileset', ok); return; }
     setSheet(sheetFromImage(a), { pal: a.pal, id: a.id || null, name: a.name });
     toast(`Tileset: ${a.name} (${a.w}×${a.h}, ${(a.w / T) * (a.h / T)} tiles)`);
+    return true;
   }
 
   async function tilesetFromLibrary() {
@@ -1129,12 +1131,14 @@
   // ------------------------------------------------------------------ //
 
   S.registerTool({
-    ws: 'map', name: 'Map Editor',
+    ws: 'map', category: 'create', name: 'Map Editor',
     desc: 'PICO-8 tile maps: paint with tiles or blocks from a sprite sheet, 128×32 / 128×64 cart maps or up to 256×256 for data carts, .p8 in and out.',
-    color: '#29adff', tags: ['map', 'tiles', '.p8'], category: 'create',
+    tasks: [{ group: 'create', label: 'Build a map', hint: 'Paint a PICO-8 map with a tileset' }], color: '#29adff', tags: ['map', 'tiles', '.p8'], category: 'create',
   });
-  S.registerConsumer({ id: 'map-open', label: 'Map Editor', kinds: ['map'], accepts: (a) => (a.w <= M.MAX_SIDE && a.h <= M.MAX_SIDE ? true : `The Map Editor supports up to ${M.MAX_SIDE}×${M.MAX_SIDE} cells.`), open: openAsset });
-  S.registerConsumer({ id: 'map-tileset', label: 'Map Editor tileset', kinds: ['image'], accepts: tilesetOk, open: useImageAsTileset });
+  // Send-to destinations (#57): open() does not ask, so `unsaved` triggers the central Replace / Cancel prompt
+  const mapUnsaved = () => (status.dirty() ? 'The current map has changes that are not saved to the library.' : false);
+  S.registerConsumer({ id: 'map-open', label: 'Map Editor', kinds: ['map'], unsaved: mapUnsaved, accepts: (a) => (a.w <= M.MAX_SIDE && a.h <= M.MAX_SIDE ? true : `The Map Editor supports up to ${M.MAX_SIDE}×${M.MAX_SIDE} cells.`), open: openAsset });
+  S.registerConsumer({ id: 'map-tileset', label: 'Map Editor tileset', kinds: ['image'], accepts: tilesetOk, unsaved: mapUnsaved, open: useImageAsTileset });
 
   App.registerShortcuts('map', onKey);
   App.registerActions({

@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a problem in the PICO-8 Suite
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use **Help > Report a problem...** in the Suite to prepare a summary. It is generated locally and never sent automatically.
+        Do not paste project code, images or file paths you consider private.
+  - type: textarea
+    id: what
+    attributes:
+      label: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs. actual behavior
+  - type: input
+    id: tool
+    attributes:
+      label: Workspace / tool and Suite version
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics summary
+      description: Paste the reviewed summary. Attach the downloaded diagnostics JSON manually if you want to; GitHub cannot attach it for you.

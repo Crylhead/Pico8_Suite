@@ -787,7 +787,10 @@ Set Start to the address where the palette table begins (the “palette table”
 
     document.addEventListener('p8:project', () => {
       // the folder arrives a moment later (analyse() fills it); load on the next tick
-      setTimeout(() => { const P = window.P8Project; if (P?.files) loadProject(P.files, P.root); }, 0);
+      setTimeout(() => {
+        const P = window.P8Project;
+        if (P?.files) { loadProject(P.files, P.root); projectLink?.setMode(P.adopted ? 'adopted' : 'independent', P.root); }
+      }, 0);
     });
     document.addEventListener('p8:workspace', () => {
       if (document.body.dataset.workspace !== 'datacarts') return;
@@ -796,7 +799,17 @@ Set Start to the address where the palette table begins (the “palette table”
     });
   }
 
-  S.registerTool({ ws: 'datacarts', name: 'Data Carts', desc: 'See what every data cart holds and which ranges the code reloads; pack new data carts and get the reload() lines.', color: '#ffa300', tags: ['reload', 'memory map', 'pack'], category: 'inspect' });
+  // #56: Data Carts shows what Project Audit scanned; adopting the active project scans it there.
+  // The pack list (bytes you collected) is kept: only the cart list is replaced, as with any rescan.
+  let projectLink = null;
+  if (window.P8ProjectAdapter) {
+    projectLink = window.P8ProjectAdapter.mount(document.querySelector('main[data-ws="datacarts"] .dc-top'), {
+      tool: 'Data Carts',
+      adopt: async (h) => (window.P8Project?.use ? window.P8Project.use(h) : false),
+    });
+  }
+
+  S.registerTool({ ws: 'datacarts', category: 'inspect', name: 'Data Carts', desc: 'See what every data cart holds and which ranges the code reloads; pack new data carts and get the reload() lines.', tasks: [{ group: 'analyze', label: 'Inspect data carts', hint: 'What each cart holds and what reload() reads' }], color: '#ffa300', tags: ['reload', 'memory map', 'pack'] });
 
   bind();
   renderAll();

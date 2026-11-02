@@ -173,3 +173,16 @@ Map Editor and Code Editor/Run already exist; they are no longer future phases. 
 
 Live tile editing, shared document/revision semantics and a permanent Send to action remain design proposals. See the [historical review index](https://github.com/Crylhead/Demotools/blob/4a2855b99efb2e7a265961c63f1ac809adea3ed2/reviews/README.md); do not treat those proposals as delivered features.
 
+
+## Cart Builder workflow and preflight (UX #66)
+
+The Cart Builder UI is organised as four stages, shown as a strip above the stacks (`js/preflight-core.js`, `stages()`):
+
+1. **Analyze** (read-only): opening a folder reads `demo/`, `assets/` and `demo/suite.json`. Nothing is written.
+2. **Plan**: place every part into a data cart. Besides drag-and-drop and Auto-pack, each part has **Move…** (cart, "A new cart" or "Not placed"), which uses the same `moveTo()` as a drop.
+3. **Validate**: the report below the stacks and the existing checks (anchors, sizes, byte-for-byte cart check). Errors block writing.
+4. **Commit**: **Write Carts** first opens a preflight dialog (`build()`), generated from the plan `writeAll()` already computed: every file target with its action (added / changed / removed / moved to `unused/`), counts, the carts that stay because they are still referenced, and unresolved references (which prevent any cart from being moved). Only the confirm button writes. Cancel or Esc writes nothing and keeps the in-memory arrangement. The strip shows *Commit: done* only after a verified write and only while nothing changed since.
+
+**Adopt** is the one action that writes before "Write Carts": its preflight dialog lists the anchor edits per fx cart, the new `assets/*.json` files and `demo/suite.json` before the first byte is written.
+
+Unchanged by this UX layer (issues #40–#44 own them): plan validation, `P.transact`, journaling and recovery, retirement analysis, anchor rewriting and the resulting bytes. The preflight only presents the same data; it never writes or computes a different plan.
