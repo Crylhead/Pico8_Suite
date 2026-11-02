@@ -78,6 +78,10 @@ The app can be hosted on a static server for the browser tools. A remote host do
 - PNG export (`P8.encodeIndexedPng`) can write a transparent color.
 - Dialog action buttons can close their dialog with `dlg.finish(value)`.
 
+## UI/UX roadmap and agent work packages
+
+The [UI/UX development plan](docs/UX_DEVELOPMENT_PLAN.md) defines the Suite's product design philosophy, shared acceptance criteria, staged experience improvements, a living documentation/help contract, optional tooltips and versioned onboarding, and user-controlled diagnostic/bug-reporting workflows. Its [18 focused issues](docs/UX_DEVELOPMENT_PLAN.md#github-work-package-index-18-independently-assignable-issues) can be assigned to coding agents with explicit dependencies and exclusions. This roadmap preserves expert features, PICO-8 compatibility, standalone tool usage and the zero-build architecture. Existing correctness issues #40–#44 are separate and are not part of the UX backlog.
+
 ## Reviews and current work
 
 Start with the [2026-11-02 third review](docs/HEALTH_REVIEW_2026-11-02_72f6e02.md), reviewed at [72f6e029412ce06afe0576bd60f59aca0d44c52f](https://github.com/Crylhead/Pico8_Suite/commit/72f6e029412ce06afe0576bd60f59aca0d44c52f). Original issues #1–#14 and follow-ups #30–#35 are closed, with their fixes merged. Five further reproduced findings are open as #40–#44: recovery retries, computed retirement targets, cart-set parsing, lexical anchor discovery and Save As/Run identity. Each issue has evidence and acceptance checks. The [second review](docs/HEALTH_REVIEW_2026-11-01_ca36c07.md) and [initial standalone review](docs/HEALTH_REVIEW_2026-11-01.md) remain historical evidence; fix provenance is recorded in the latest review.
