@@ -112,7 +112,8 @@ const P8Project = (() => {
    * enclosing bracket or block (top: '(' '[' '{' or 'block'), the innermost block (block: sig index of
    * its function/do/then/repeat, -1 at the top level; blockEnd(i): sig index of its end/until), whether
    * it is in a declaration list (local a,b / for a,b) or a function's parameter list. PICO-8's
-   * shorthand `if (c) x` / `while (c) x` opens no block (no then/do).
+   * shorthand `if (c) x` / `while (c) x` (no then/do on its line) is `if c then x end`: a block that
+   * ends with its line (or, if a bracket opened on the line is still open, once that closes).
    */
   function luaContext(text) {
     const { code, at, firstLine } = luaOf(text);
@@ -129,6 +130,7 @@ const P8Project = (() => {
     const info = [];
     const stack = []; // {kind: '(' '[' '{' | 'block', k}
     const ends = new Map();
+    const unclear = new Set(); // lines where an end/until follows a shorthand if/while: which block it closes is unclear
     let depth = 0;
     let decl = false;
     let paramEnd = -1;
@@ -136,11 +138,14 @@ const P8Project = (() => {
     const close = (block, k) => {
       while (stack.length) {
         const top = stack.pop();
-        if (top.kind === 'block') { if (block) { ends.set(top.k, k); return; } ends.set(top.k, k); } else { depth--; if (!block) return; }
+        // a shorthand if/while block (line set) has no end of its own: an `end` on its line belongs further out
+        if (top.kind === 'block') { ends.set(top.k, k); if (top.line != null && block) unclear.add(top.line); if (block && top.line == null) return; } else { depth--; if (!block) return; }
       }
     };
     sig.forEach((tk, k) => {
       const s = src(tk);
+      const line = lineOf(tk.s);
+      for (let top = stack[stack.length - 1]; top && top.line != null && top.line < line; top = stack[stack.length - 1]) { stack.pop(); ends.set(top.k, k); }
       if (decl && !(NAME.has(tk.t) || s === ',')) decl = false;
       const top = stack[stack.length - 1];
       let block = -1;
@@ -154,6 +159,12 @@ const P8Project = (() => {
         else if (s === 'then') { if (!elseif) stack.push({ kind: 'block', k }); elseif = false; }
         else if (['function', 'do', 'repeat'].includes(s)) stack.push({ kind: 'block', k });
         else if (s === 'end' || s === 'until') close(true, k);
+        else if ((s === 'if' || s === 'while') && src(sig[k + 1]) === '(') {
+          const word = s === 'if' ? 'then' : 'do';
+          let j = k + 1;
+          while (j < sig.length && lineOf(sig[j].s) === line && !(sig[j].t === 'keyword' && src(sig[j]) === word)) j++;
+          if (j >= sig.length || lineOf(sig[j].s) !== line) { stack.push({ kind: 'block', k, line }); }
+        }
       }
       if (tk.t === 'keyword' && (s === 'local' || s === 'for')) decl = src(sig[k + 1]) !== 'function';
       if (tk.t === 'keyword' && s === 'function') {
@@ -165,7 +176,7 @@ const P8Project = (() => {
     });
     const blockEnd = (b) => (b < 0 || !ends.has(b) ? sig.length : ends.get(b));
     return {
-      text, code, at, firstLine, toks, sig, src, partner, lineOf, info, blockEnd,
+      text, code, at, firstLine, toks, sig, src, partner, lineOf, info, blockEnd, unclear,
       env: sig.some((tk) => NAME.has(tk.t) && (src(tk) === '_ENV' || src(tk) === '_G')),
       includes: toks.filter((tk) => tk.t === 'include'),
     };
@@ -227,18 +238,25 @@ const P8Project = (() => {
     return tk.t === 'op' && s !== ';' && s !== '?';
   }
 
-  /** whether sig[j] (a ",") continues a list of assignment targets: `, a.b, c[i] =` */
+  /**
+   * whether sig[j] (a ",") continues a list of assignment targets: `, a.b, c[i], f().x, (t).y, g"k".z =`.
+   * Every Lua prefix expression is followed (calls included), so a target is never missed; an
+   * expression list that merely runs into the next statement may be taken for targets (conservative).
+   */
   function targetsFollow(ctx, j) {
     const { sig, src } = ctx;
+    const after = (i) => { const p = ctx.partner(i); return p > i ? p + 1 : -1; };
     let i = j;
     while (src(sig[i]) === ',') {
       i++;
-      if (!sig[i] || !(NAME.has(sig[i].t) || sig[i].t === 'self')) return false;
-      i++;
+      if (!sig[i]) return false;
+      if (NAME.has(sig[i].t) || sig[i].t === 'self') i++;
+      else if (src(sig[i]) === '(') { i = after(i); if (i < 0) return false; } else return false;
       for (;;) {
-        const s = src(sig[i]);
+        const tk = sig[i];
+        const s = src(tk);
         if ((s === '.' || s === ':') && sig[i + 1] && NAME.has(sig[i + 1].t)) i += 2;
-        else if (s === '[' && ctx.partner(i) > i) i = ctx.partner(i) + 1;
+        else if (tk && tk.t === 'bracket' && '([{'.includes(s)) { i = after(i); if (i < 0) return false; } else if (tk && tk.t === 'string') i++;
         else break;
       }
     }
@@ -300,6 +318,7 @@ const P8Project = (() => {
     if (!d.local && ctx.env) return { why: `the code uses _ENV/_G, which can change the global ${name}` };
     const inc = ctx.includes.find((i) => !d.local || i.s > sig[d.k].s);
     if (inc) return { why: `#include at line ${ctx.lineOf(inc.s) + 1} brings code that may change ${name}` };
+    if (d.local && ctx.unclear.has(ctx.lineOf(sig[d.k].s))) return { why: `${name} is declared local on a line where end/until follows a shorthand if/while (${at(d.k)}), so its block is unclear` };
     if (d.local && useAt != null && useAt < sig[d.k].s) return { why: `${name} is used before its local declaration (${at(d.k)})` };
     if (d.local && useAt != null && sig[ctx.blockEnd(info[d.k].block)] && useAt >= sig[ctx.blockEnd(info[d.k].block)].s) return { why: `${name} is used outside the block of its local declaration (${at(d.k)}), where another ${name} applies` };
     return d;
