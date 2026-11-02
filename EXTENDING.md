@@ -106,6 +106,10 @@ addEventListener('beforeunload', (e) => { if (status.atRisk()) e.preventDefault(
 
 Results for an older document or an older save ticket are ignored, and an error stays visible until a later save succeeds or the user dismisses it. Tests: `tests/doc-status.test.js`.
 
+## UI tokens and primitives
+
+Style new controls with the shared tokens and primitives from [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) (live reference: `docs/design-system.html`) instead of new colours, sizes or focus styles. Use `.btn`, `.seg[role=radiogroup]`, `label.field`, `.select`, `fieldset.panel-group` > `legend.panel-heading`, `p.status-line[data-tone]`, `.notice[data-tone]` and `progress.progress`. Express state with attributes: `aria-pressed`/`aria-checked` (selected), `aria-busy` (busy), `disabled`, `aria-invalid` + `aria-describedby` (error). Use `--status-error` for error text, because `--danger` is not text-safe. Keep tool-specific selectors under the tool's own prefix.
+
 ## Live palettes between tools
 
 Besides the library, tools can offer what is open right now. `S.registerPaletteSource({ id, label, get })` publishes a palette; `get()` returns `{ pal, fades, name }` or `null`. Here `pal` holds 16 PICO-8 colors and `fades` is `{ dark, bright }`, each fade table in the Palette & Fades format or `null`. `S.paletteSources()` lists the sources and `S.paletteSource(id)` reads one. Palette & Fades (`palette`) and Pixel Studio (`studio`) register theirs, and Terrain Lab uses them for its PICO-8 view.
