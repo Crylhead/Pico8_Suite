@@ -626,7 +626,8 @@
   }
 
   async function importImageData(data, name) {
-    if (tm.dirty && tm.result && !(await confirmDialog('Import Image', 'Replace the current tile set? Unsaved changes will be lost.', 'Replace'))) return;
+    // Send-to destination (#57): asks itself, so a cancel returns false
+    if (tm.dirty && tm.result && !(await confirmDialog('Import Image', 'Replace the current tile set? Unsaved changes will be lost.', 'Replace'))) return false;
     App.setWorkspace('tiles');
     tm.name = name;
     tm.original = T.fromImageData(data);
@@ -639,6 +640,7 @@
     requestAnimationFrame(zoomFit);
     await rebuild({ confirmModified: false });
     requestAnimationFrame(zoomFit);
+    return true;
   }
 
   async function importImage() {

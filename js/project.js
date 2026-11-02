@@ -33,13 +33,15 @@
     pendingHandle: null, // remembered folder that still needs permission
     journalPending: false, // an interrupted write left suite.journal.json: no writes until it is recovered
     busy: false,         // a write, adoption or recovery is running: other mutations and folder switches wait
+    writtenSig: null,    // layoutSig() when the project was loaded / last written (#66: tells "written" from "changed since")
+    lastWrite: '',       // what the last verified write produced, shown by the workflow strip; cleared on open
     disk: new Map(),     // "demo/x.p8" | "assets/x.json" | "demo/suite.json" -> raw text as read (null: absent); writes expect it unchanged
   };
 
   const dom = {
     open: $('#cbOpen'), reconnect: $('#cbReconnect'), root: $('#cbRoot'), status: $('#cbStatus'),
     pack: $('#cbPack'), write: $('#cbWrite'), addLib: $('#cbAddLib'), addMap: $('#cbAddMap'), addFile: $('#cbAddFile'),
-    parts: $('#cbParts'), stacks: $('#cbStacks'), report: $('#cbReport'), adopt: $('#cbAdopt'),
+    parts: $('#cbParts'), stacks: $('#cbStacks'), report: $('#cbReport'), adopt: $('#cbAdopt'), stages: $('#cbStages'),
   };
 
   // ------------------------------------------------------------------ //
@@ -83,6 +85,9 @@
     pj.root = h;
     pj.demo = demo;
     pj.pendingHandle = null;
+    pj.writtenSig = null;
+    pj.lastWrite = '';
+    App.projectContextPublisher?.select({ name: h.name, source: 'cartbuilder', handle: h }).catch(() => {});
     try { await S.kv.set(KV_HANDLE, h); } catch { /* not storable: ask again next time */ }
     await load();
   }
@@ -265,6 +270,80 @@
   const repack = () => { const size = new Map(pj.parts.map((p) => [p.ref, p.bytes.length])); for (const c of pj.layout) { let off = 0; for (const it of c.items) { it.off = off; off += size.get(it.ref) || 0; } } };
 
   // ------------------------------------------------------------------ //
+  // Preflight dialog and workflow stages (#66, js/preflight-core.js)      //
+  // ------------------------------------------------------------------ //
+
+  const ACTION_TEXT = { add: 'added', change: 'changed', retire: 'moved to unused/', remove: 'removed' };
+
+  /** shows every file target before a write; resolves true only on the confirm button (Cancel / Esc = false, nothing written) */
+  async function showPreflight(report, title, intro) {
+    const section = (action) => {
+      const rows = report.files.filter((f) => f.action === action);
+      if (!rows.length) return null;
+      return el('section', {}, el('h3', { textContent: `${rows.length} ${ACTION_TEXT[action]}` }),
+        el('ul', { className: 'pf-list' }, ...rows.map((f) => el('li', {}, el('code', { textContent: f.path }), el('span', { className: 'muted', textContent: ` ${f.why}` })))));
+    };
+    const body = el('div', { className: 'pf' },
+      el('p', { className: 'pf-intro', textContent: intro }),
+      el('p', { className: 'pf-summary', textContent: report.summary }),
+      ...['add', 'change', 'remove', 'retire'].map(section).filter(Boolean),
+      report.kept.length ? el('section', {}, el('h3', { textContent: 'Stay in place (still referenced)' }), el('ul', { className: 'pf-list' }, ...report.kept.map((k) => el('li', { textContent: `${k.cart} (${k.by})` })))) : null,
+      report.unresolved.length ? el('section', {}, el('h3', { className: 'cb-warn', textContent: 'References that cannot be resolved, so no cart is moved' }),
+        el('ul', { className: 'pf-list' }, ...report.unresolved.map((u) => el('li', {}, el('code', { textContent: `${u.file}:${u.line}` }), el('span', { textContent: ` ${u.call} (${u.why})` }))))) : null);
+    const v = await modal({
+      title, body, wide: true, alert: true,
+      buttons: [{ label: 'Cancel', value: false }, { label: report.confirmLabel, value: true, primary: true }],
+    });
+    return v === true;
+  }
+
+  /** signature of the arrangement, to tell "written" from "changed since" */
+  const layoutSig = () => JSON.stringify(pj.layout.map((c) => [c.name, c.items.map((i) => i.ref)]));
+
+  function renderStages() {
+    if (!dom.stages) return;
+    const chk = pj.project ? P.checkAnchors(anchorFiles(), pj.parts, pj.layout) : { errors: [], warnings: [] };
+    if (pj.project && pj.writtenSig == null) pj.writtenSig = layoutSig();
+    const list = P8Preflight.stages({
+      open: Boolean(pj.root), hasProject: Boolean(pj.root && pj.project), partCount: pj.parts.length,
+      unplaced: pj.project ? pj.parts.filter((p) => !placed().has(p.ref)).length : 0,
+      errors: chk.errors.length, warnings: chk.warnings.length,
+      needsWrite: Boolean(pj.project) && (pj.dirtyAssets.size > 0 || pj.dirtyTexts.size > 0 || pj.writtenSig !== layoutSig()),
+      lastWrite: pj.lastWrite || '',
+    });
+    const ICON = { done: '✓', current: '●', todo: '○', blocked: '✕' };
+    dom.stages.replaceChildren(...list.map((s, i) => el('li', { className: `cb-stage cb-stage-${s.status}`, attrs: s.status === 'current' ? { 'aria-current': 'step' } : {} },
+      el('span', { className: 'cb-stage-icon', textContent: ICON[s.status], attrs: { 'aria-hidden': 'true' } }),
+      el('strong', { textContent: `${i + 1}. ${s.label}` }),
+      el('span', { className: 'sr-only', textContent: ` (${s.status})` }),
+      el('span', { className: 'muted cb-stage-detail', textContent: s.detail }))));
+  }
+
+  /** keyboard / button alternative to dragging: choose the cart (or "not placed") for a part */
+  async function movePartDialog(ref) {
+    if (pj.busy) { showMessage('Cart Builder', 'Wait until the current write has finished.'); return; }
+    const p = partOf(ref);
+    if (!p) return;
+    const here = pj.layout.find((c) => c.items.some((i) => i.ref === ref));
+    const sel = el('select', { className: 'select', attrs: { 'aria-label': `Cart for ${ref}` } },
+      ...pj.layout.map((c) => el('option', { value: c.name, textContent: `${c.name} (${kb(P.CART - cartUsed(c))} free)` })),
+      el('option', { value: '+', textContent: 'A new cart' }),
+      el('option', { value: '', textContent: 'Not placed (remove from carts)' }));
+    sel.value = here ? here.name : '';
+    const v = await modal({
+      title: `Move ${ref}`,
+      body: el('div', { className: 'dialog-form' }, el('p', { className: 'muted', textContent: `${kb(p.bytes.length)}${here ? ` · now in ${here.name}` : ' · not placed'}. Nothing is written until Write Carts.` }),
+        el('label', { className: 'field' }, el('span', { textContent: 'Move to' }), sel)),
+      buttons: [{ label: 'Cancel', value: null }, { label: 'Move', primary: true, value: () => sel.value }],
+      onOpen: () => sel.focus(),
+    });
+    if (v == null || pj.busy) return;
+    if (v === (here ? here.name : '')) return;
+    moveTo(ref, v);
+    toast(v === '' ? `${ref} is not placed any more.` : `${ref} moved to ${v === '+' ? 'a new cart' : v}.`);
+  }
+
+  // ------------------------------------------------------------------ //
   // Adopting an existing demo                                          //
   // ------------------------------------------------------------------ //
 
@@ -272,7 +351,16 @@
     const plan = pj.adoptPlan;
     if (!plan) return;
     const kept = plan.keptCarts.length ? ` Kept in place, because reload() lines left as they are still read them: ${plan.keptCarts.join(', ')}.` : '';
-    const ok = await confirmDialog('Adopt this demo', `The suite takes over the data of ${plan.sourceCarts.length} carts as ${plan.assets.length} assets (assets/), adds ${plan.edits.length} --@data anchors to the fx code and then packs new data carts. Old carts nothing reads any more move to demo/unused/.${kept} The demo runs the same as before.\n\nNothing is written until you press “Write carts”, except the anchors and assets now.`, 'Adopt');
+    // #66: the first writes of adoption are listed file by file (anchors in fx carts, new assets, the manifest)
+    const perFile = new Map();
+    for (const e of plan.edits) perFile.set(e.file, (perFile.get(e.file) || 0) + 1);
+    const report = P8Preflight.build({
+      mode: 'adopt', prefix: inDemo(''), onDisk: new Set([...pj.texts.keys()].map((n) => n.toLowerCase())),
+      carts: [], rewrites: [...perFile].map(([name, changes]) => ({ name, changes })),
+      assets: plan.assets.map((a) => ({ name: a.name, exists: false })), manifestExists: pj.disk.get('demo/suite.json') != null,
+      retire: [], kept: plan.keptCarts.map((c) => ({ cart: c, by: 'a reload() line left as it is' })), unresolved: [],
+    });
+    const ok = await showPreflight(report, 'Adopt this demo: writes now', `The suite takes over the data of ${plan.sourceCarts.length} carts as ${plan.assets.length} assets (assets/), adds ${plan.edits.length} --@data anchors to the fx code and then packs new data carts. Old carts nothing reads any more move to demo/unused/.${kept} The demo runs the same as before.\n\nNothing is written until you press “Write carts”, except the anchors and assets now.`);
     if (!ok) return;
     // anchors into the fx files
     const byFile = new Map();
@@ -359,7 +447,17 @@
     const unusedDir = inDemo('unused/');
     const keptNote = kept.length ? `\n\nStays in place because it is still referenced:\n${kept.map((k) => `${k.cart} (${k.by})`).join('\n')}` : '';
     const unresolvedNote = unresolved.length ? `\n\nReferences that cannot be resolved, so no cart is moved:\n${unresolved.map((u) => `${u.file}:${u.line} ${u.call} (${u.why})`).join('\n')}` : '';
-    const ok = await confirmDialog('Write carts', `Writes ${layout.length} data carts (${layout.map((c) => c.name).join(', ')}), rewrites ${rewrites.reduce((s, r) => s + r.changes.length, 0)} reload() lines in ${rewrites.length} fx carts${retire.length ? ` and moves ${retire.length} carts nobody references any more (${retire.join(', ')}) to ${unusedDir}` : ''}.${keptNote}${unresolvedNote}`, 'Write');
+    // #66: the confirmation lists the real file targets and what is added, changed or moved; nothing is written before it
+    const removedAssets = [...pj.renamed].filter(([to, from]) => to !== from && !pj.assets.some((a) => a.name === from)).map(([, from]) => from);
+    const report = P8Preflight.build({
+      mode: 'write', prefix: inDemo(''), onDisk: new Set([...pj.texts.keys()].map((n) => n.toLowerCase())),
+      carts: layout.map((c) => ({ name: c.name, parts: c.items.length })),
+      rewrites: rewrites.map((r) => ({ name: r.name, changes: r.changes.length })),
+      assets: [...pj.dirtyAssets].map((n) => ({ name: n, exists: pj.disk.has(`assets/${n}.json`) && pj.disk.get(`assets/${n}.json`) != null })),
+      removedAssets, manifestExists: pj.disk.get('demo/suite.json') != null,
+      retire, kept, unresolved,
+    });
+    const ok = await showPreflight(report, 'Write carts: review the files', 'Only these files change. Nothing is written until you confirm; Cancel keeps your arrangement and writes nothing. A failed write is explained and can be recovered; success is shown only after the write was verified.');
     if (!ok) return;
     // Store lengths for manifest inspection and optional external release checkers.
     const saved = layout.map((c) => ({ name: c.name, items: c.items.map((i) => ({ ref: i.ref, off: i.off, len: partOf(i.ref).bytes.length, lz: partOf(i.ref).lz })) }));
@@ -385,6 +483,8 @@
     pj.dirtyAssets.clear();
     pj.renamed.clear();
     pj.project = project;
+    pj.writtenSig = layoutSig();
+    pj.lastWrite = `${layout.length} data cart${layout.length === 1 ? '' : 's'}, ${rewrites.length} fx cart${rewrites.length === 1 ? '' : 's'}${retire.length ? `, ${retire.length} moved to unused/` : ''}`;
     toast(`Wrote ${layout.length} carts and ${rewrites.reduce((s, r) => s + r.changes.length, 0)} anchor lines.`, 'info', 4000);
     render();
   }
@@ -461,6 +561,7 @@
     for (const b of [dom.pack, dom.write, dom.addLib, dom.addMap, dom.addFile]) b.disabled = !has || pj.busy;
     dom.open.disabled = pj.busy;
     dom.status.textContent = pj.root ? (pj.project ? `${pj.assets.length} assets · ${pj.parts.length} parts · ${pj.layout.filter((c) => c.items.length).length} data carts` : 'not a suite project yet') : '';
+    renderStages();
     renderAdopt();
     renderParts();
     renderStacks();
@@ -526,6 +627,7 @@
         el('span', { className: 'cb-part-tools' },
           el('label', { className: 'check', title: p.set ? 'Cart sets stay raw (one reload() reads every cart of the set)' : lzOk ? 'Store LZ-packed (the anchored lines call unlz)' : an.some((x) => x.ranged) ? 'LZ needs whole-part anchors: unlz() cannot unpack a +offset range of the packed stream' : 'LZ needs anchored lines of the form  reload(tmp,…) unlz(tmp,dest)' },
             el('input', { type: 'checkbox', checked: p.lz, disabled: p.set || (!lzOk && !p.lz), dataset: { lz: p.ref } }), el('span', { textContent: 'LZ' })),
+          el('button', { className: 'btn btn-sm', type: 'button', textContent: 'Move…', disabled: pj.busy, title: 'Choose the cart for this part without dragging', attrs: { 'aria-label': `Move ${p.ref} to a cart` }, dataset: { move: p.ref } }),
           p.set ? null : el('button', { className: 'btn btn-sm', type: 'button', textContent: 'Line', title: 'Copy a reload() line with the anchor for this part', dataset: { line: p.ref } }))));
     }
     dom.parts.replaceChildren(...out);
@@ -740,6 +842,7 @@
     dom.parts.addEventListener('click', async (e) => {
       const d = e.target.dataset || {};
       if (pj.busy && (d.rename || d.segin)) { showMessage('Cart Builder', 'Wait until the current write has finished.'); return; }
+      if (d.move) return movePartDialog(d.move);
       if (d.rename) return renameAsset(d.rename);
       if (d.segout) return segmentOut(d.segout, Number(d.seg));
       if (d.segin) return segmentIn(d.segin, Number(d.seg));
@@ -755,7 +858,7 @@
     document.addEventListener('p8:workspace', () => { if (document.body.dataset.workspace === 'cartbuilder') restore(); });
   }
 
-  S.registerTool({ ws: 'cartbuilder', name: 'Cart Builder', desc: 'A demo project folder: its data as assets, packed into data carts (drag or auto-pack); the fx find their data through --@data anchors.', color: '#00e436', tags: ['project', 'pack', 'reload'], category: 'develop' });
+  S.registerTool({ ws: 'cartbuilder', category: 'develop', name: 'Cart Builder', desc: 'A demo project folder: its data as assets, packed into data carts (drag or auto-pack); the fx find their data through --@data anchors.', tasks: [{ group: 'edit', label: 'Pack data carts', hint: 'Needs a project folder (Chrome or Edge)' }], color: '#00e436', tags: ['project', 'pack', 'reload'] });
 
   // folder handles can also come from elsewhere (tests, drag & drop)
   window.P8CartBuilder = { useFolder };

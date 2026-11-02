@@ -646,11 +646,11 @@ dialog.modal::backdrop { background: rgba(5, 5, 10, 0.6); }
 /* Workspaces + Tile Maker                                            */
 /* ------------------------------------------------------------------ */
 
-:root { --ok: #4ade80; --ok-soft: #86d993; --warn: #fbbf24; --bad: #f87171; }
+:root { --ok: #4ade80; --ok-soft: #86d993; --warn: #fbbf24; --bad: #f87171; --danger-text: #ff6b8e; } /* text-safe (>=4.5:1 on every surface, #65); --danger stays for fills and borders */
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) { --ok: #15803d; --ok-soft: #3f8f52; --warn: #b45309; --bad: #dc2626; }
+  :root:not([data-theme="dark"]) { --ok: #0f6b31; --ok-soft: #3f8f52; --warn: #9a4507; --bad: #c81e1e; --danger-text: #c0002f; }
 }
-:root[data-theme="light"] { --ok: #15803d; --ok-soft: #3f8f52; --warn: #b45309; --bad: #dc2626; }
+:root[data-theme="light"] { --ok: #0f6b31; --ok-soft: #3f8f52; --warn: #9a4507; --bad: #c81e1e; --danger-text: #c0002f; }
 .ok { color: var(--ok); }
 .ok-soft { color: var(--ok-soft); }
 .warn { color: var(--warn); }

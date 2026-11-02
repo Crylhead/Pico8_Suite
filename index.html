@@ -34,6 +34,7 @@
     <button type="button" id="wsFind" class="btn btn-ghost ws-find" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" title="Find a tool (Ctrl+K)" aria-label="Find tool"><svg class="ws-find-search" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12.6 12.6 17 17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span class="ws-find-current" aria-hidden="true"></span><svg class="ws-find-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 8 10 12.5 14.5 8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 
     <div class="appbar-end">
+      <span id="projectIndicator" class="project-indicator" role="status" aria-live="polite" hidden></span>
       <button id="libraryBtn" class="btn" aria-pressed="false" title="Shared asset library">Library <span class="count" id="libraryCount"></span></button>
       <button id="themeToggle" class="btn btn-ghost icon-btn" title="Theme: system" aria-label="Toggle theme">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20V2z"/><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/></svg>
@@ -59,6 +60,7 @@
           <div class="menu-label">Send to</div>
           <button role="menuitem" data-action="ps-to-tiles">Tile Maker</button>
           <button role="menuitem" data-action="ps-to-preview">Palette &amp; Fades preview</button>
+          <button role="menuitem" data-action="ps-send">All destinations (Map Editor tileset, Terrain Lab…)…</button>
           <button role="menuitem" data-action="library-open">Library…</button>
         </div>
       </div>
@@ -321,8 +323,11 @@
       <div class="menu">
         <button class="menu-btn" aria-haspopup="menu" aria-expanded="false">Help</button>
         <div class="menu-pop" role="menu">
-          <button role="menuitem" data-action="docs">Documentation<kbd>F1</kbd></button>
+          <button role="menuitem" data-action="docs">Help<kbd>F1</kbd></button>
+          <button role="menuitem" data-action="docs-full">Full documentation</button>
+          <button role="menuitem" data-action="quick-tours">Quick tours…</button>
           <button role="menuitem" data-action="settings">Settings…</button>
+          <button role="menuitem" data-action="report-problem">Report a problem…</button>
           <hr>
           <button role="menuitem" data-action="about">About</button>
         </div>
@@ -448,7 +453,7 @@
             </div>
 
             <div class="fade-slider">
-              <input type="range" id="fadeSlider" min="0" max="31" step="1" value="16" aria-describedby="sliderReadout">
+              <input type="range" id="fadeSlider" min="0" max="31" step="1" value="16" aria-label="Fade position" aria-describedby="sliderReadout">
               <div class="slider-scale"><span>Darkest</span><span id="sliderReadout">Normal</span><span>Brightest</span></div>
             </div>
           </figure>
@@ -610,13 +615,24 @@
       </div>
     </section>
 
+    <section class="home-section" aria-labelledby="homeContinueH">
+      <h3 id="homeContinueH">Continue</h3>
+      <div class="home-continue" id="homeContinue"></div>
+      <p class="hint" id="homeStorage"></p>
+    </section>
+
+    <section class="home-section" aria-labelledby="homeTasksH">
+      <h3 id="homeTasksH">What do you want to do?</h3>
+      <div class="home-tasks" id="homeTasks"></div>
+    </section>
+
     <section class="home-section">
-      <h3>Tools</h3>
+      <h3>All tools</h3>
       <div class="tool-groups" id="homeTools"></div>
     </section>
 
     <section class="home-section">
-      <h3>Recent in the library</h3>
+      <h3>Recent in the library <span class="muted">(saved in this browser, not files on disk)</span></h3>
       <div class="asset-grid" id="homeRecent"></div>
     </section>
 
@@ -878,7 +894,7 @@
         <div class="btn-group ps-status-view" role="group" aria-label="View">
           <button class="btn btn-sm" id="psGridPx" aria-pressed="true" title="Pixel grid (zoom 600%+)">Pixels</button>
           <button class="btn btn-sm" id="psGrid8" aria-pressed="true" title="Sprite grid: 8×8 → 16×16 → off (')">8×8</button>
-          <button class="btn btn-sm" id="psTiled" aria-pressed="false" title="Show as repeating tile; drawing past the edges wraps around">Tiled</button>
+          <button class="btn btn-sm" id="psTiled" data-help-id="studio.tiled" aria-pressed="false" title="Show as repeating tile; drawing past the edges wraps around">Tiled</button>
         </div>
         <div class="btn-group ps-status-view">
           <button class="btn btn-sm" id="psZoomOut" aria-label="Zoom out">−</button>
@@ -893,7 +909,7 @@
     <aside class="ps-side">
       <section class="card ps-panel">
         <header class="ps-panel-head"><h2>Palette</h2>
-          <label class="ps-transp" title="Empty pixels export as this slot (palt)">Transparent <select id="psTransp" class="select select-sm"></select></label>
+          <label class="ps-transp" data-help-id="studio.transparent" title="Empty pixels export as this slot (palt)">Transparent <select id="psTransp" class="select select-sm"></select></label>
         </header>
         <div class="ps-palette" id="psPalette" aria-label="Palette slots"></div>
         <div class="ps-panel-actions">
@@ -1066,7 +1082,7 @@
   <main class="layout-dc" data-ws="cartbuilder" hidden>
     <section class="card dc-top">
       <div class="dt-row">
-        <button class="btn btn-primary" id="cbOpen" title="The demo project folder (contains demo/, tools/, music/); outside AppData so the browser may write to it">Open Demo Project…</button>
+        <button class="btn btn-primary" id="cbOpen" data-help-id="cartbuilder.open" title="The demo project folder (contains demo/, tools/, music/); outside AppData so the browser may write to it">Open Demo Project…</button>
         <button class="btn" id="cbReconnect" hidden></button>
         <strong id="cbRoot"></strong>
         <span class="muted" id="cbStatus"></span>
@@ -1074,8 +1090,8 @@
         <button class="btn" id="cbAddLib" disabled>Add Image from Library…</button>
         <button class="btn" id="cbAddMap" disabled title="A Map Editor map: its sprite sheet (.gfx) and map bytes (.map) as a tiles asset">Add Map from Library…</button>
         <button class="btn" id="cbAddFile" disabled>Add File…</button>
-        <button class="btn" id="cbPack" disabled title="Best fit: fewest carts; parts with the same group stay together">Auto-pack</button>
-        <button class="btn btn-primary" id="cbWrite" disabled title="Write the data carts, check them byte for byte and rewrite the --@data anchor lines">Write Carts</button>
+        <button class="btn" id="cbPack" data-help-id="cartbuilder.pack" disabled title="Best fit: fewest carts; parts with the same group stay together">Auto-pack</button>
+        <button class="btn btn-primary" id="cbWrite" data-help-id="cartbuilder.write" disabled title="Write the data carts, check them byte for byte and rewrite the --@data anchor lines">Write Carts</button>
       </div>
     </section>
     <aside class="card dc-side">
@@ -1083,6 +1099,7 @@
       <div class="cb-parts" id="cbParts"></div>
     </aside>
     <section class="card dc-main">
+      <ol class="cb-stages" id="cbStages" aria-label="Cart Builder workflow: Analyze, Plan, Validate, Commit"></ol>
       <div class="cb-adopt" id="cbAdopt" hidden></div>
       <div class="cb-stacks" id="cbStacks"></div>
       <div class="cb-report" id="cbReport"></div>
@@ -1529,7 +1546,7 @@
           <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Open project (palette or tile project, depending on the workspace)</td></tr>
           <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save project (palette or tile project)</td></tr>
           <tr><td><kbd>Ctrl</kbd>+<kbd>I</kbd></td><td>Import palette from PNG / import image into the Tile Maker</td></tr>
-          <tr><td><kbd>F1</kbd></td><td>Documentation</td></tr>
+          <tr><td><kbd>F1</kbd></td><td>Help for the current workspace</td></tr>
           <tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>⌘</kbd>+<kbd>K</kbd>)</td><td>Find tool: search all tools and switch (any workspace, also while typing)</td></tr>
           <tr><td><kbd>Del</kbd> / <kbd>Esc</kbd></td><td>Clear / deselect the selected palette slot</td></tr>
           <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Move the fade slider (when focused)</td></tr>
@@ -1573,10 +1590,18 @@
   </template>
 
   <script src="js/core.js"></script>
+  <script src="js/help-data.js"></script>
+  <script src="js/help-core.js"></script>
+  <script src="js/ux-tooltips.js"></script>
   <script src="js/ux-prefs-core.js"></script>
   <script src="js/nav-core.js"></script>
+  <script src="js/diagnostics-core.js"></script>
+  <script src="js/project-context-core.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/transfer-core.js"></script>
+  <script src="js/home-core.js"></script>
   <script src="js/suite.js"></script>
+  <script src="js/project-adapter.js"></script>
   <script src="js/doc-status-core.js"></script>
   <script src="js/tiles-core.js"></script>
   <script src="js/tiles.js"></script>
@@ -1593,11 +1618,18 @@
   <script src="js/datacarts-core.js"></script>
   <script src="js/datacarts.js"></script>
   <script src="js/project-core.js"></script>
+  <script src="js/preflight-core.js"></script>
   <script src="js/project.js"></script>
   <script src="js/extras-core.js"></script>
   <script src="js/terrain-core.js"></script>
+  <script src="js/render-status-core.js"></script>
   <script src="js/terrain.js"></script>
   <script src="js/extras.js"></script>
+  <script src="js/tours-core.js"></script>
+  <script src="js/tours-data.js"></script>
+  <script src="js/tours.js"></script>
+  <script src="js/panels-core.js"></script>
+  <script src="js/panels.js"></script>
 </body>
 </html>
 

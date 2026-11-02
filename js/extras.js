@@ -1130,7 +1130,7 @@
     if (e.altKey && /^[1-9]$/.test(e.key) && order[Number(e.key) - 1]) { e.preventDefault(); setTab(order[Number(e.key) - 1]); }
   });
 
-  S.registerTool({ ws: 'extras', name: 'Extra Tools', desc: 'LUT Creator (motion paths, 3D ball formations), Wave Designer (scope waveforms → data cart), Line Tool (vector lines → Lua) and Terrain Lab (seamless terrain → 128×128 color + height maps).', color: '#ff77a8', tags: ['LUT', 'waves', 'lines', 'terrain'], category: 'utilities' });
+  S.registerTool({ ws: 'extras', category: 'utilities', name: 'Extra Tools', desc: 'LUT Creator (motion paths, 3D ball formations), Wave Designer (scope waveforms → data cart), Line Tool (vector lines → Lua) and Terrain Lab (seamless terrain → 128×128 color + height maps).', tasks: [{ group: 'create', label: 'Generate terrain', hint: 'Seamless terrain for PICO-8', open: { click: '#exTabs [data-value="terrain"]' } }], color: '#ff77a8', tags: ['LUT', 'waves', 'lines', 'terrain'] });
   // each tab is also listed (and deep-linked as #extras/<id>) on its own in Find tool (#53)
   for (const b of dom.tabs.querySelectorAll('[data-value]')) {
     const ext = (window.P8ExtraTools || []).find((x) => x.id === b.dataset.value);

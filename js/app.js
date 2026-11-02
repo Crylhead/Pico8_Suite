@@ -23,6 +23,7 @@
     theme: 'p8pal.theme',
     indices: 'p8pal.showIndices',
     workspace: 'p8pal.workspace',
+    lastTool: 'p8pal.lastTool',   // last workspace other than Home (Home's "Continue", #68)
   };
   const MAX_RECENT = 5;
   const LONG_PRESS_MS = 500;
@@ -1542,7 +1543,8 @@
   // Help                                                               //
   // ------------------------------------------------------------------ //
 
-  function showDocs() {
+  /** Long-form reference (#docsTemplate); `anchor` scrolls to a section, e.g. 'doc-code'. */
+  function showDocs(anchor) {
     const content = $('#docsTemplate').content.cloneNode(true);
     const wrap = el('div', {}, content);
     wrap.addEventListener('click', (e) => {
@@ -1551,7 +1553,210 @@
       e.preventDefault();
       wrap.querySelector(a.getAttribute('href'))?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
     });
-    modal({ title: 'Documentation', body: wrap, wide: true, buttons: [{ label: 'Close', value: null, primary: true }] });
+    modal({
+      title: 'Full documentation', body: wrap, wide: true,
+      actions: [{ label: 'Search Help', onClick: () => { document.querySelector('dialog.modal[open] button[aria-label="Close"]')?.click(); setTimeout(() => showHelp(), 0); } }],
+      buttons: [{ label: 'Close', value: null, primary: true }],
+    });
+    if (typeof anchor === 'string') setTimeout(() => wrap.querySelector(`#${CSS.escape(anchor)}`)?.scrollIntoView({ block: 'start' }), 0);
+  }
+
+  // ------------------------------------------------------------------ //
+  // Help (#59, js/help-core.js + js/help-data.js)                      //
+  // ------------------------------------------------------------------ //
+
+  /** F1: the topic of the current workspace with a route to the searchable index and the full documentation. */
+  function showHelp({ topic: startTopic, query = '' } = {}) {
+    const ws = document.body.dataset.workspace;
+    const first = (startTopic && P8Help.topic(startTopic)) || P8Help.forWorkspace(ws);
+    const searchId = `help-search-${++modalSeq}`;
+    const input = el('input', { type: 'search', id: searchId, placeholder: 'Search tools, controls, tasks, shortcuts', value: query, attrs: { 'aria-label': 'Search Help', autocomplete: 'off' } });
+    const view = el('div', { className: 'help-view', attrs: { 'aria-live': 'polite' } });
+    const list = (topics) => el('ul', { className: 'help-list' }, ...topics.map((t) =>
+      el('li', {}, el('a', { href: `#help-${t.id}`, textContent: t.title, dataset: { topic: t.id } }), el('span', { className: 'muted', textContent: ` ${t.summary}` }))));
+    const section = (title, items) => (items.length ? [el('h4', { textContent: title }), ...items] : []);
+    const kb = (keys) => el('kbd', { textContent: keys });
+
+    function showIndex() {
+      const { tools, guides, reference } = P8Help.toc();
+      view.replaceChildren(el('h3', { textContent: 'Help index', attrs: { tabindex: '-1' } }),
+        el('h4', { textContent: 'Tools' }), list(tools), el('h4', { textContent: 'Guides' }), list(guides), el('h4', { textContent: 'Reference' }), list(reference));
+    }
+
+    function showResults(q) {
+      const found = P8Help.search(q);
+      if (!found.length) {
+        view.replaceChildren(el('h3', { textContent: 'No results', attrs: { tabindex: '-1' } }),
+          el('p', { textContent: `Nothing in Help matches “${q}”. Try a tool name (Pixel Studio), a task (count tokens) or a control (tile reduction), or browse the index.` }),
+          el('p', {}, el('a', { href: '#help-index', textContent: 'Browse the Help index' }), document.createTextNode(' · '), el('a', { href: '#help-full', textContent: 'Open the full documentation' })));
+        return;
+      }
+      view.replaceChildren(el('h3', { textContent: `${found.length} result${found.length === 1 ? '' : 's'}`, attrs: { tabindex: '-1' } }), list(found.map((r) => r.topic)));
+    }
+
+    function showTopic(t) {
+      const kids = [
+        el('p', { className: 'muted' }, el('a', { href: '#help-index', textContent: '← Help index' })),
+        el('h3', { textContent: t.title, attrs: { tabindex: '-1' } }),
+        el('p', { textContent: t.summary }),
+      ];
+      if (t.inputs.length) kids.push(el('p', {}, el('b', { textContent: 'Inputs: ' }), document.createTextNode(t.inputs.join(', '))));
+      if (t.outputs.length) kids.push(el('p', {}, el('b', { textContent: 'Outputs: ' }), document.createTextNode(t.outputs.join(', '))));
+      if (t.tasks.length) kids.push(el('p', {}, el('b', { textContent: 'Typical tasks: ' }), document.createTextNode(t.tasks.join('; '))));
+      kids.push(...section('Key actions', [el('ul', {}, ...t.actions.map((a) => el('li', {}, el('b', { textContent: `${a.name}. ` }), document.createTextNode(a.text))))].filter(() => t.actions.length)));
+      kids.push(...section('Controls', [el('ul', {}, ...t.controls.map((c) => el('li', {}, el('b', { textContent: `${c.label}. ` }), document.createTextNode(c.text))))].filter(() => t.controls.length)));
+      kids.push(...section('Shortcuts', [el('table', { className: 'keys' }, ...t.shortcuts.map(([k, d]) => el('tr', {}, el('td', {}, kb(k)), el('td', { textContent: d }))))].filter(() => t.shortcuts.length)));
+      kids.push(...section('Restrictions', [el('ul', {}, ...t.restrictions.map((r) => el('li', { textContent: r })))].filter(() => t.restrictions.length)));
+      const rel = t.related.map((id) => P8Help.topic(id)).filter(Boolean);
+      if (rel.length) {
+        const p = el('p', {}, el('b', { textContent: 'Related: ' }));
+        rel.forEach((r, i) => p.append(i ? document.createTextNode(', ') : '', el('a', { href: `#help-${r.id}`, textContent: r.title, dataset: { topic: r.id } })));
+        kids.push(p);
+      }
+      if (t.legacy) kids.push(el('p', {}, el('a', { href: `#help-full:${t.legacy}`, textContent: 'Detailed reference for this topic (full documentation)' })));
+      view.replaceChildren(...kids);
+    }
+
+    const render = () => { const q = input.value.trim(); if (q) showResults(q); else showIndex(); };
+    function go(href) {
+      if (href === '#help-index') { input.value = ''; showIndex(); } else if (href === '#help-full') { closeAnd(() => showDocs()); return; } else if (href.startsWith('#help-full:')) { closeAnd(() => showDocs(href.slice(11))); return; } else {
+        const t = P8Help.topic(href.slice(6));
+        if (t) showTopic(t);
+      }
+      view.querySelector('h3')?.focus();
+    }
+    const closeAnd = (fn) => { document.querySelector('dialog.modal[open] button[aria-label="Close"]')?.click(); setTimeout(fn, 0); };
+
+    input.addEventListener('input', render);
+    view.addEventListener('click', (e) => {
+      const a = e.target.closest('a[href^="#help-"]');
+      if (!a) return;
+      e.preventDefault();
+      go(a.getAttribute('href'));
+    });
+    const body = el('div', { className: 'help' }, el('label', { className: 'help-search', htmlFor: searchId }, el('span', { textContent: 'Search' }), input), view);
+    if (query.trim()) showResults(query.trim()); else if (first) showTopic(first); else showIndex();
+    modal({
+      title: 'Help', body, wide: true,
+      actions: [{ label: 'Full documentation', onClick: () => closeAnd(() => showDocs(first?.legacy)) }],
+      buttons: [{ label: 'Close', value: null, primary: true }],
+      onOpen: () => input.focus(),
+    });
+  }
+
+  // ------------------------------------------------------------------ //
+  // Diagnostics (#62, js/diagnostics-core.js) and Report a problem (#63) //
+  // ------------------------------------------------------------------ //
+
+  const diagnostics = P8Diag.create({ browser: P8Diag.browserFamily(navigator.userAgent), version: VERSION });
+  diagnostics.install(window);
+  const REPO_NEW_ISSUE = 'https://github.com/Crylhead/Pico8_Suite/issues/new?template=bug_report.yml';
+
+  /** Plain-text summary: the user's description plus sanitized diagnostics. Never contains project content. */
+  function buildReportSummary(fields, bundle) {
+    const f = (k) => (fields[k] || '').trim() || '(not provided)';
+    const lines = [
+      '## Problem', f('what'), '', '## Steps to reproduce', f('steps'), '',
+      '## Expected / actual', `Expected: ${f('expected')}`, `Actual: ${f('actual')}`, '',
+      '## Environment', `Suite version: ${bundle.app.version}`, `Browser: ${bundle.app.browser}`,
+      `Workspace: ${fields.tool || 'unknown'}`, '', `## Diagnostics (${bundle.records.length} record${bundle.records.length === 1 ? '' : 's'})`,
+    ];
+    for (const r of bundle.records.slice(-10)) {
+      lines.push(`- ${r.id} ${r.time} [${r.source}] ${r.code}${r.count > 1 ? ` x${r.count}` : ''}: ${r.message}`);
+    }
+    return lines.join('\n');
+  }
+
+  async function showReportProblem() {
+    const area = (label, ph, rows = 2) => {
+      const ta = el('textarea', { rows, placeholder: ph, maxLength: 1000, className: 'report-field' });
+      return { ta, node: el('label', { className: 'report-row' }, el('span', { textContent: label }), ta) };
+    };
+    const what = area('What went wrong?', 'A short description');
+    const steps = area('Steps to reproduce', '1. ... 2. ...', 3);
+    const expected = area('Expected', 'What you expected');
+    const actual = area('Actual', 'What happened instead');
+    const preview = el('textarea', { rows: 10, className: 'report-preview', attrs: { 'aria-label': 'Report summary preview (editable)' } });
+    const jsonPreview = el('textarea', { rows: 8, className: 'report-preview', value: diagnostics.exportJSON(), attrs: { 'aria-label': 'Diagnostics JSON preview (editable)' } });
+    const note = el('p', { className: 'hint', textContent: 'Nothing is sent automatically. Copy summary copies exactly the summary preview; Download diagnostics downloads exactly the JSON preview. Review and edit each separately. The issue-form link contains no report data; add attachments yourself. Descriptions may contain anything you type. Diagnostics are sanitized summaries; review them for private details. JavaScript hooks cannot recover a crashed tab or process.' });
+    const status = el('p', { className: 'hint', attrs: { role: 'status', 'aria-live': 'polite' } });
+    const refresh = () => {
+      preview.value = buildReportSummary({
+        what: what.ta.value, steps: steps.ta.value, expected: expected.ta.value, actual: actual.ta.value, tool: document.body.dataset.workspace,
+      }, diagnostics.exportBundle());
+    };
+    for (const a of [what, steps, expected, actual]) a.ta.addEventListener('input', refresh);
+    refresh();
+    const body = el('div', { className: 'report-form' }, note, what.node, steps.node, expected.node, actual.node,
+      el('label', { className: 'report-row' }, el('span', { textContent: 'Summary preview' }), preview),
+      el('label', { className: 'report-row' }, el('span', { textContent: 'Diagnostics JSON preview (edit or remove records before downloading)' }), jsonPreview), status);
+    const say = (m) => { status.textContent = m; };
+    await modal({
+      title: 'Report a problem', body, wide: true,
+      actions: [
+        {
+          label: 'Copy summary',
+          onClick: async () => {
+            try { await navigator.clipboard.writeText(preview.value); say('Summary copied to the clipboard.'); } catch { preview.select(); say('Copying is blocked here: the text is selected, press Ctrl+C.'); }
+          },
+        },
+        {
+          label: 'Download diagnostics',
+          onClick: () => {
+            try { JSON.parse(jsonPreview.value); } catch { say('The diagnostics preview must be valid JSON. Fix it before downloading.'); jsonPreview.focus(); return; }
+            download(jsonPreview.value, `pico8-suite-diagnostics-${Date.now()}.json`, 'application/json');
+            say('The reviewed diagnostics JSON was downloaded. Attach it only if you wish.');
+          },
+        },
+        {
+          label: 'Open GitHub issue form',
+          onClick: () => {
+            const w = window.open(REPO_NEW_ISSUE, '_blank', 'noopener');
+            say(w || navigator.onLine
+              ? 'GitHub was opened in a new tab (if your browser allowed it). Paste the summary there and attach the diagnostics file yourself if you wish; nothing was transmitted.'
+              : 'You appear to be offline. Copy the summary and report later.');
+          },
+        },
+        { label: 'Clear diagnostics', onClick: () => { diagnostics.clear(); jsonPreview.value = diagnostics.exportJSON(); refresh(); say('Diagnostics cleared.'); } },
+      ],
+      buttons: [{ label: 'Close', value: null, primary: true }],
+    });
+  }
+
+  // ------------------------------------------------------------------ //
+  // Active project context (#55, js/project-context-core.js)           //
+  // ------------------------------------------------------------------ //
+
+  // Suite.kv is created after this file loads, so it is looked up on use
+  const projectCtx = P8ProjectContext.create({
+    kv: { get: (k) => window.Suite.kv.get(k), set: (k, v) => window.Suite.kv.set(k, v) },
+  });
+  const ACCESS_LABEL = { granted: '', prompt: 'reconnect needed', denied: 'access denied', stale: 'folder unavailable', unsupported: 'name only' };
+
+  /** Shell indicator: names the project and its access state; it never claims anything was saved. */
+  function renderProjectIndicator(p = projectCtx.context.get()) {
+    const node = $('#projectIndicator');
+    if (!node) return;
+    node.hidden = p.access === 'none';
+    if (node.hidden) { node.textContent = ''; node.removeAttribute('title'); return; }
+    const note = ACCESS_LABEL[p.access];
+    node.textContent = `Project: ${p.name}${note ? ` (${note})` : ''}`;
+    node.title = p.message;
+    node.dataset.access = p.access;
+  }
+
+  function bindProjectContext() {
+    projectCtx.context.subscribe((d) => {
+      renderProjectIndicator(d.project);
+      // not 'p8:project': Project Audit already uses that name ({ root }) to hand its scan to Data Carts
+      document.dispatchEvent(new CustomEvent('p8:projectcontext', { detail: d }));
+    });
+    // a remembered reference comes back as "reconnect needed" until permission is verified. Suite.kv exists only
+    // after suite.js has loaded (it loads after this file), so restoring waits for the page to finish loading.
+    const restore = () => Promise.resolve(window.Suite?.assets?.ready).catch(() => {}).then(() => projectCtx.publisher.restore()).catch(() => {});
+    if (document.readyState === 'complete') restore(); else window.addEventListener('load', restore, { once: true });
+    // permission can change while the page is in the background
+    window.addEventListener('focus', () => { projectCtx.context.check().catch(() => {}); });
   }
 
   // ------------------------------------------------------------------ //
@@ -1610,7 +1815,7 @@
     const body = el('div', { className: 'dialog-form settings' },
       section('Theme', theme, 'Same as the theme button in the toolbar.'),
       section('Help detail', help, 'Optional hints and tooltips. Labels, warnings, errors and confirmations are always shown.'),
-      section('Guided tours', check(tours, 'Offer tours automatically'), 'When off, tours never start or offer themselves automatically. (Guided tours are added in a later update; this choice is kept for them.)', tours),
+      section('Guided tours', check(tours, 'Offer tours automatically'), 'When off, tours never offer themselves automatically. Replay them any time from Help → Quick tours.', tours),
       section('Workspace bar', check(compact, 'Compact: icons only'), 'Hides the workspace names in the bar (the active name and, on wide screens, every tab\'s name). Each tab keeps its tooltip and accessible name, and Find tool (Ctrl+K) lists every tool by name.', compact),
       section('Animation', motion, motionDesc),
       note);
@@ -1643,6 +1848,7 @@
       body,
       actions: [{ label: 'Reset to defaults', onClick: () => {
         prefs.reset();
+        window.P8PanelLayout?.resetAll(); // side panel widths and hidden panels (#64)
         store.remove(KEYS.theme);
         applyTheme('system');
         sync();
@@ -1702,8 +1908,10 @@
     'import-ramps': importRampPresets,
     'export-ramps': exportRampPresets,
     'reset-ramps': resetRampPresets,
-    'docs': showDocs,
+    'docs': () => showHelp(),
+    'docs-full': () => showDocs(),
     'settings': showSettings,
+    'report-problem': showReportProblem,
     'about': showAbout,
   };
 
@@ -1859,7 +2067,7 @@
       }
       const own = shortcutHandlers[document.body.dataset.workspace];
       if (own) {
-        if (e.key === 'F1') { e.preventDefault(); showDocs(); return; }
+        if (e.key === 'F1') { e.preventDefault(); showHelp(); return; }
         if (e.key === 'Escape' && document.querySelector('.menu.open')) { closeMenus(); return; }
         // a control focused by keyboard/script keeps Enter/Space for its own activation; one focused by
         // a pointer press does not, so e.g. Space-panning after clicking a tool button still works
@@ -1881,7 +2089,7 @@
         if (key === 's') { run(saveProject, 'tiles-save'); return; }
         if (key === 'i') { run(importFromPng, 'tiles-import'); return; }
       }
-      if (e.key === 'F1') { e.preventDefault(); showDocs(); return; }
+      if (e.key === 'F1') { e.preventDefault(); showHelp(); return; }
       if (e.key === 'Escape') {
         closeMenus();
         if (state.selected != null) { state.selected = null; renderSwatches(); }
@@ -2069,6 +2277,7 @@
     document.title = ws === 'home' || !name ? APP_TITLE : `${name} – ${APP_TITLE}`;
     if (persist) {
       store.set(KEYS.workspace, ws);
+      if (ws !== 'home') store.set(KEYS.lastTool, ws);
       setRoute(ws, sub);
     }
     emit('p8:workspace', { ws, sub });
@@ -2094,6 +2303,8 @@
   function init() {
     applyTheme(store.get(KEYS.theme, 'system'));
     bindPrefs();
+    P8Tips.init({ prefs, help: P8Help });
+    bindProjectContext();
     state.showIndices = store.get(KEYS.indices, true) !== false;
 
     buildSystemPalette();
@@ -2215,6 +2426,15 @@
     modal,
     showMessage,
     showSettings,
+    /** Local error log (#62): report(source, code, error, state), watchWorker(worker, source), read(), clear(), exportJSON() */
+    diagnostics,
+    /**
+     * Active project (#55), read-only for consumers: projectContext.get() / check() / subscribe(fn).
+     * Tools that open a project report it through projectContextPublisher.select({ name, source, handle }) / clear(source).
+     * The context never writes, scans or opens anything; see EXTENDING.md.
+     */
+    projectContext: projectCtx.context,
+    projectContextPublisher: projectCtx.publisher,
     /** UX preferences: get(), set(patch), reset(), status(), subscribe(fn) -> unsubscribe; see EXTENDING.md */
     prefs,
     reducedMotion,
@@ -2227,6 +2447,8 @@
     formField,
     sanitizeFilename,
     store,
+    /** localStorage key names (read-only use by Home: lastTool) */
+    KEYS,
     el,
     $,
   };

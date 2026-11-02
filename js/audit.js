@@ -152,7 +152,38 @@
     }
   }
 
+  /**
+   * Scans a folder handed over by the active project context (#56). Same path as a dropped folder:
+   * on failure the previous scan and handle stay as they were. Returns false if nothing changed.
+   */
+  let adoptingProject = false;
+  async function useHandle(h) {
+    if (au.scanning) { toast('Wait for the current scan to finish.', 'warn'); return false; }
+    const prev = { handle: au.handle, root: au.rootName };
+    try {
+      au.handle = h;
+      au.rootName = h.name;
+      setBusy(true, `Reading ${h.name}…`);
+      const { files, meta } = await readHandle(h);
+      adoptingProject = true;
+      await analyse(files, meta);
+      return true;
+    } catch (err) {
+      au.handle = prev.handle;
+      au.rootName = prev.root;
+      adoptingProject = false;
+      setBusy(false, 'Could not read the project folder; the previous scan is unchanged.');
+      toast(`Could not read “${h.name}”: ${err.message}`, 'warn');
+      return false;
+    }
+  }
+
+  let projectLink = null;
+  let lastAdopted = false; // the current scan came from the active project context (#56)
   async function analyse(files, meta) {
+    lastAdopted = adoptingProject;
+    projectLink?.setMode(adoptingProject ? 'adopted' : 'independent', au.rootName);
+    adoptingProject = false;
     au.files = files;
     au.meta = meta;
     document.dispatchEvent(new CustomEvent('p8:project', { detail: { root: au.rootName } }));
@@ -466,11 +497,18 @@
     get files() { return au.files; },
     get meta() { return au.meta; },
     get root() { return au.rootName; },
+    /** true when the current scan was taken from the active project context (#56) */
+    get adopted() { return lastAdopted; },
     choose: chooseFolder,
     rescan: () => (au.handle ? scan() : chooseFolder()),
+    /** scan a folder handle (the active project, #56); resolves to false when it could not be read */
+    use: useHandle,
   };
+  if (window.P8ProjectAdapter) {
+    projectLink = window.P8ProjectAdapter.mount(document.querySelector('#auStage .au-top'), { tool: 'Project Audit', adopt: (h) => useHandle(h) });
+  }
 
-  S.registerTool({ ws: 'audit', name: 'Project Audit', desc: 'Scan a project folder: tokens and characters per cart (with #include), includes, load/run/reload references, unused carts.', color: '#00e436', tags: ['tokens', 'includes', 'CSV'], category: 'inspect' });
+  S.registerTool({ ws: 'audit', category: 'inspect', name: 'Project Audit', desc: 'Scan a project folder: tokens and characters per cart (with #include), includes, load/run/reload references, unused carts.', tasks: [{ group: 'analyze', label: 'Audit a project', hint: 'Tokens, includes and unused carts' }, { group: 'import', label: 'Open a project folder', hint: 'Read-only scan, nothing is uploaded' }], color: '#00e436', tags: ['tokens', 'includes', 'CSV'] });
 
   bind();
   renderColumns();

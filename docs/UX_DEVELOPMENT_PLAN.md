@@ -191,4 +191,6 @@ Each issue contains precise acceptance checks and explicit exclusions. Assign a 
 
 **Suggested first parallel assignments:** #52 (design tokens), #55 (isolated project-context API), #59 (documentation registry), #62 (diagnostic core), #67 (Terrain Lab performance feedback) — these occupy mostly distinct modules. For #53, #54, #58, #65 and #68 (shared shell), stagger integration and avoid racing edits to `js/app.js`, `js/suite.js`, `index.html` and shared CSS.
 
+Implementation record for #53–#69 (files, behaviour, checks, known gaps): [UX_CHANGELOG.md](UX_CHANGELOG.md).
+
 Progress should be tracked through issue state and linked PRs, not a duplicate manually checked list. If implementation materially changes an issue's acceptance test, review the change explicitly before merging rather than silently lowering the bar.

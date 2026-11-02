@@ -2530,11 +2530,13 @@
     toast(`Saved "${ps.name}" to the library`);
   }
 
+  /** Send-to destination (#57): asks about unsaved work itself, so it returns false when the user cancels */
   async function openAsset(a) {
-    if (!(await confirmDiscard(`Open "${a.name}"?`))) return;
+    if (!(await confirmDiscard(`Open "${a.name}"?`))) return false;
     App.setWorkspace('studio');
     loadDoc(K.docFromAsset(a), { name: a.name, assetId: a.source === 'studio' ? a.id : null, fades: a.meta?.fades || null });
     if (a.source !== 'studio') toast('Opened a copy: Save to Library creates a Pixel Studio image', 'info', 2600);
+    return true;
   }
 
   async function openFromLibrary() {
@@ -2731,12 +2733,18 @@
 
   async function sendToTiles() {
     commitFloating();
-    await S.openIn('tiles-import', currentAsset());
+    await S.openIn('tiles-import', currentAsset(), { saved: false });
+  }
+
+  /** File › Send to…: every destination for the current image, with reasons for the unavailable ones (#57) */
+  async function sendToAny() {
+    commitFloating();
+    await S.sendDialog(currentAsset(), { saved: false });
   }
 
   async function sendToPreview() {
     commitFloating();
-    await S.openIn('palette-preview', currentAsset());
+    await S.openIn('palette-preview', currentAsset(), { saved: false });
   }
 
   async function framesToLibrarySheet() {
@@ -3236,7 +3244,7 @@
   S.registerTool({
     ws: 'studio', name: 'Pixel Studio',
     desc: 'Pixel editor limited to PICO-8: 16 of 32 colors, fill patterns, layers, frames + onion skin, sprite sheet, .p8 and [gfx] clipboard.',
-    color: '#29adff', tags: ['draw', 'sprites', 'animation'], category: 'create',
+    tasks: [{ group: 'create', label: 'Draw pixel art', hint: 'Sprites, sprite sheets, animation' }, { group: 'import', label: 'Import an image', hint: 'PNG, JPG, BMP or GIF into Pixel Studio' }], color: '#29adff', tags: ['draw', 'sprites', 'animation'], category: 'create',
   });
   S.registerConsumer({
     id: 'studio-open', label: 'Pixel Studio', kinds: ['image'],
@@ -3275,6 +3283,7 @@
     'ps-paste': pasteFromMenu,
     'ps-sheet': framesToLibrarySheet,
     'ps-to-tiles': sendToTiles,
+    'ps-send': sendToAny,
     'ps-to-preview': sendToPreview,
     'ps-undo': undo,
     'ps-redo': redo,

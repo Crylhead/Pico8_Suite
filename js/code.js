@@ -880,8 +880,19 @@
     if (!window.showDirectoryPicker) { showMessage('Open Folder', 'This browser cannot open folders. Use Chrome or Edge.'); return; }
     let h;
     try { h = await window.showDirectoryPicker({ id: 'p8-code-folder', mode: 'readwrite' }); } catch { return; }
+    await useFolder(h, false);
+    projectLink?.setMode('independent', h.name);
+  }
+
+  /**
+   * Makes `h` the editor's folder. The open document (text, undo history, unsaved changes, its own
+   * file handle) is not touched. `resetRel`: the document's path inside the previous folder is
+   * meaningless in a different one, so it is recomputed (used when adopting the active project, #56).
+   */
+  async function useFolder(h, resetRel) {
     ed.folder = h;
     ed.folderReady = true;
+    if (resetRel) ed.rel = null;
     await listFolder();
     // the open file may live in this folder
     if (ed.handle && !ed.rel) {
@@ -892,6 +903,17 @@
     renderStructure();
     saveSession();
     toast(`Folder ${h.name}: ${ed.files.size} carts and .lua files`);
+  }
+
+  /** the "use the active project" strip above the file list (#56); null if the adapter is missing */
+  let projectLink = null;
+  function mountProjectLink() {
+    const host = dom.files?.parentElement;
+    if (!host || !window.P8ProjectAdapter) return;
+    projectLink = window.P8ProjectAdapter.mount(host, {
+      tool: 'Code Editor',
+      adopt: async (h) => { await useFolder(h, true); return true; },
+    });
   }
 
   async function reconnectFolder() {
@@ -1382,7 +1404,7 @@
   S.registerTool({
     ws: 'code', name: 'Code Editor',
     desc: 'PICO-8 Lua with PICO-8 syntax highlighting, API completion and hints, code tabs, functions list, live token count; saves straight back into the .p8.',
-    color: '#ff77a8', tags: ['code', 'tokens', '.p8'], category: 'develop',
+    tasks: [{ group: 'edit', label: 'Edit code', hint: 'Lua with tokens, #include and Run' }], color: '#ff77a8', tags: ['code', 'tokens', '.p8'], category: 'develop',
   });
   App.registerShortcuts('code', onKey);
   const exec = (cmd) => () => { dom.ta.focus(); document.execCommand(cmd); };
@@ -1425,6 +1447,7 @@
 
   applyFont();
   bind();
+  mountProjectLink();
   S.assets.ready.then(restoreSession);
 })();
 

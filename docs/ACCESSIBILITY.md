@@ -22,10 +22,19 @@ Status of the shared shell (issue #65). These are measured improvements, not a c
 - **Fixed:** white text on `.btn-danger` was 3.9:1 on `#ff004d`; the button now uses `#e0003f` (4.95:1; 3.5:1 against the dark surface).
 - **Status icons:** the save-status contract (#58) pairs every state with an icon and text.
 
-## Known findings outside the shell (follow-up)
+## Second pass (UX roadmap batch, 2026-11-02)
 
-- `--danger` (#ff004d) used as **text** (`.au-warn`, `.ex-info.ex-error`, `.tl-status.error`) reaches 3.3–4.8:1, below 4.5:1 on some surfaces. These rules belong to the tool modules and the design system (#52).
-- In the light theme, `--ok`, `--warn` and `--bad` reach 4.2–4.4:1 on `--bg`/`--surface-3` (≥4.8:1 on `--surface`, where panels show them). Re-check with the #52 token set.
+Fixed in this pass:
+
+- **Text contrast:** a new token `--danger-text` (`#ff6b8e` dark, `#c0002f` light, ≥5.1:1 on every shell surface) is used for error *text* (`.au-warn`, `.tl-status.error`); `--danger` stays for fills, borders and icons. Light-theme `--ok` `#0f6b31`, `--warn` `#9a4507`, `--bad` `#c81e1e` now reach ≥4.8:1 on `--bg`, `--surface`, `--surface-2` and `--surface-3` (computed from the tokens; not a scanner result).
+- **Missing name:** the Palette & Fades fade slider (`#fadeSlider`) had no accessible name; it is now "Fade position". A DOM scan of every button, radio, menu item, input, select and separator found no other unnamed visible control (hidden file inputs and unused buttons excluded).
+- **New surfaces follow the shared contract:** the *Go to tool* quick switch and *Send to…* dialogs are `P8App.modal` dialogs (title, focus trap, focus return, Esc); the quick tour card is a non-modal `role="dialog"` that never blocks the page and ends with Esc; tooltips (`role="tooltip"`, `aria-describedby`) appear on keyboard focus as well as hover and never carry the only copy of essential information; unavailable *Send to* destinations stay focusable (`aria-disabled`) with the reason as visible text; the side-panel splitter is a focusable `role="separator"` with `aria-valuenow/min/max` and arrow/Home/End/Enter/0 keys.
+- **Non-hover access:** every tooltip text is also in the F1 help registry; error and disabled-reason texts are visible text, not `title` only.
+
+Still open:
+
+- Full WCAG 2.2 AA conformance is **not** claimed. No axe/scanner run and no screen-reader run were possible in this environment, so announcements (live regions, dialog names) were verified by reading the DOM, not by listening.
+- Contrast of tool-specific canvas overlays and the Terrain Lab/Extra Tools text styles was not re-measured.
 
 ## Canvas and pointer limitations
 
@@ -36,7 +45,7 @@ The pixel, map, tile and terrain canvases are drawing surfaces. Their pixel cont
 3. **Map Editor:** place a tile at a keyboard-chosen cell and select a rectangle without dragging.
 4. **Cart Builder:** move an asset between carts without drag (auto-pack already covers the common case).
 5. **Library:** send an asset to a tool without drag-and-drop (menus and buttons exist; check coverage per asset type).
-6. **Resizable panels (#64):** resize by keyboard.
+6. **Resizable panels (#64):** done: the splitter is keyboard operable (see `js/panels.js`). Remaining: none for panel width.
 
 ## Manual keyboard-only regression script
 
@@ -55,3 +64,7 @@ Run this in a desktop browser (light and dark theme) after changes to `js/app.js
 11. Repeat steps 1–3 at a 360px-wide viewport. Expected: no focus target is hidden behind other content; the first stop is the **Find tool** button (named with the current tool), which lists every tool.
 
 Record the browser, theme, any screen reader used and the results in the PR. If no screen reader is available, say so.
+11. Press `Ctrl+K`. Expected: *Go to tool* opens with focus in the search field; type `tokens`, `↓` moves into the results, `Enter` opens the tool and focus lands on its workspace tab; `Esc` closes the dialog with focus back on the opener.
+12. In Pixel Studio `Tab` to the side-panel splitter ("Resize Pixel Studio side panel"). `←`/`→` change the width, `Home`/`End` jump, `Enter` hides the panel (its controls leave the tab order) and again shows it, `0` resets. Reload: the width is kept.
+13. Open **File › Send to › All destinations…**. Expected: unavailable destinations are reachable with `Tab`, announce their reason, and activating them does nothing; an available one asks "Replace unsaved work?" only if the destination holds unsaved changes.
+14. Open **Help › Quick tours…**, start a tour with the keyboard, move with `Next`, leave with `Esc`. Expected: the page stays usable throughout, focus returns to the opener.

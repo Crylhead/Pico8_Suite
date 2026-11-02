@@ -7,9 +7,11 @@
 //                                                                   writes reject on failure, see P8Storage)
 //   Suite.kv.get(key) / set(key, value)                             tool sessions (same contract)
 //   Suite.reportStorageError(title, err) / autosaveFailed(label)    standard failure messages
-//   Suite.registerConsumer({...})                                   "Open in <tool>" entries
+//   Suite.registerConsumer({...})                                   "Send to… / Open in…" destinations
+//   Suite.destinationsFor(asset) / sendDialog(asset, {saved}) / openIn(id, asset, {saved})   (#57, js/transfer-core.js)
 //   Suite.pickAsset({...})                                          library picker dialog
-//   Suite.registerTool({...})                                       Home card, workspace bar group, Find tool (Ctrl+K)
+//   Suite.registerTool({ ws, name, desc, tags, category, tasks })     Home card, task shortcuts (#68), navigation (#53)
+//   Suite.tools()                                                   registered tool metadata
 //   document 'p8:assets' event                                      library changed (also from other tabs)
 
 'use strict';
@@ -424,11 +426,17 @@ if (typeof module !== 'undefined') module.exports = P8Storage;
   const paletteSource = (id) => { const s = paletteSources.find((x) => x.id === id); try { return s ? s.get() : null; } catch { return null; } };
 
   /**
-   * { id, label, kinds:['image'|'palette'], accepts?(asset) -> true | 'reason why not', open(asset) }
+   * Destination for "Send to… / Open in…" (#57, js/transfer-core.js):
+   * { id, label, kinds:['image'|'palette'|'map'], accepts?(asset) -> true | 'reason why not',
+   *   unsaved?() -> false | 'description' (central Replace / Cancel prompt; omit if open() asks itself),
+   *   open(asset) -> Promise<boolean|void> (return false when the user cancelled, true when it opened) }
    */
   function registerConsumer(c) {
     consumers.push(c);
   }
+
+  /** every registered destination for an asset, available first, each unavailable one with its exact reason */
+  const destinationsFor = (a) => P8Transfer.destinations(consumers, a);
 
   function consumersFor(a) {
     return consumers
@@ -436,13 +444,53 @@ if (typeof module !== 'undefined') module.exports = P8Storage;
       .map((c) => ({ c, ok: c.accepts ? c.accepts(a) : true }));
   }
 
-  async function openIn(consumerId, a) {
+  /**
+   * Sends an asset to a destination (#57). `saved`: the asset is a Library entry (true) or a temporary
+   * copy of what a tool currently shows (false); the success message says which. Cancel and failure
+   * never report success and leave source and destination as they were.
+   */
+  async function openIn(consumerId, a, { saved = true } = {}) {
     const c = consumers.find((x) => x.id === consumerId);
-    if (!c) return;
-    const ok = c.accepts ? c.accepts(a) : true;
-    if (ok !== true) { showMessage(c.label, ok); return; }
-    closeLibrary();
-    await c.open(a);
+    const r = await P8Transfer.send(c, a, { confirm: (m) => confirmDialog('Replace unsaved work?', m, 'Replace') });
+    if (r.status === 'done') {
+      closeLibrary();
+      if (r.confirmed) toast(P8Transfer.doneMessage(c, a, { saved }), 'info', 5200);
+    } else if (r.status === 'cancelled') toast(r.message);
+    else showMessage(c ? c.label : 'Send to…', r.message);
+    return r.status === 'done';
+  }
+
+  /**
+   * One list of destinations for an asset: buttons for the available ones, and for the others a button that
+   * stays focusable (aria-disabled) with its reason as visible text, so keyboard and touch users can read it.
+   */
+  function destinationList(a, onPick) {
+    const rows = destinationsFor(a);
+    const list = el('ul', { className: 'send-list' });
+    for (const d of rows) {
+      const b = el('button', { type: 'button', className: 'btn', textContent: d.label });
+      const li = el('li', {}, b);
+      if (d.ok) b.addEventListener('click', () => onPick(d.id));
+      else {
+        const why = el('span', { className: 'send-reason muted', id: `send-why-${d.id}`, textContent: d.reason });
+        b.setAttribute('aria-disabled', 'true');
+        b.setAttribute('aria-describedby', why.id);
+        b.classList.add('is-unavailable');
+        b.addEventListener('click', (e) => e.preventDefault());
+        li.append(why);
+      }
+      list.append(li);
+    }
+    return list;
+  }
+
+  /** "Send to…" for any asset or temporary copy (Pixel Studio's File menu uses it) */
+  async function sendDialog(a, { saved = true } = {}) {
+    let close = () => {};
+    const body = el('div', { className: 'send-dialog' },
+      el('p', { className: 'muted', textContent: saved ? `“${a.name}” stays in the Library; the destination gets a copy.` : `“${a.name}” is what the tool shows now. The destination gets a temporary copy that is not saved to the Library.` }),
+      destinationList(a, (id) => { close(); setTimeout(() => openIn(id, a, { saved }), 0); }));
+    await modal({ title: 'Send to…', body, buttons: [{ label: 'Cancel', value: null, primary: true }], onOpen: (dlg) => { close = () => dlg.querySelector('button[aria-label="Close"]')?.click(); } });
   }
 
   // ------------------------------------------------------------------ //
@@ -581,17 +629,11 @@ if (typeof module !== 'undefined') module.exports = P8Storage;
     const info = el('p', { className: 'muted', textContent: `${sizeText(a)} · ${SOURCE_NAMES[a.source] || a.source || ''} · modified ${ago(a.modified)}` });
     if (a.kind === 'image' && a.doc) info.textContent += ` · ${a.doc.layers.length} layer(s), ${a.doc.frames.length} frame(s)`;
 
-    const openRow = el('div', { className: 'asset-open' });
-    for (const { c, ok } of consumersFor(a)) {
-      const b = el('button', { type: 'button', className: 'btn', textContent: c.label });
-      if (ok !== true) { b.disabled = true; b.title = ok; }
-      b.addEventListener('click', () => {
-        rename();
-        dlgRef?.finish(true);
-        openIn(c.id, assets.get(a.id) || a);
-      });
-      openRow.append(b);
-    }
+    const openRow = destinationList(a, (id) => {
+      rename();
+      dlgRef?.finish(true);
+      openIn(id, assets.get(a.id) || a);
+    });
     let dlgRef = null;
 
     const body = el('div', { className: 'asset-detail' },
@@ -599,7 +641,7 @@ if (typeof module !== 'undefined') module.exports = P8Storage;
       el('div', { className: 'asset-detail-side' },
         formField('Name', nameInput),
         info,
-        el('h3', { textContent: 'Open in' }),
+        el('h3', { textContent: 'Send to / Open in' }),
         openRow));
 
     let deleted = false;
@@ -778,7 +820,7 @@ This cannot be undone.`, 'Delete')) {
   const tools = [];
 
   /**
-   * { ws, name, desc, color, tags:[], category, sub? }. category: 'create' | 'develop' | 'inspect' |
+   * { ws, name, desc, color, tags:[], category, sub?, tasks? }. category: 'create' | 'develop' | 'inspect' |
    * 'utilities' (P8Nav.CATEGORIES; anything else is listed under Utilities). Without `sub` the tool
    * is a workspace: a card on Home and a group in the workspace bar. With `sub` it is a part of
    * workspace `ws` (an Extra Tools tab) that Find tool lists and opens through #ws/sub.
@@ -787,6 +829,7 @@ This cannot be undone.`, 'Delete')) {
     tools.push(t);
     orderWorkspaceTabs();
     renderHome();
+    document.dispatchEvent(new CustomEvent('p8:tool', { detail: { ws: t.ws } }));
   }
 
   // ------------------------------------------------------------------ //
@@ -980,7 +1023,42 @@ This cannot be undone.`, 'Delete')) {
     { name: 'Filename Optimizer', dir: 'Demotools/filename_optimizer', desc: 'External historical tool; not included here. Batch-renames carts and updates code references.' },
   ];
 
+  /**
+   * Home (#68): "Continue" (last tool, active project), task shortcuts grouped from the registry and the
+   * storage notice. Nothing here opens a folder or changes another tool's work: a shortcut only switches
+   * to the tool (and, for a tab inside a tool, selects that tab).
+   */
+  function renderHomeLaunch() {
+    const cont = $('#homeContinue');
+    if (!cont) return;
+    const rows = [];
+    const last = P8Home.continueEntry(App.store.get(App.KEYS.lastTool, null), tools);
+    if (last) rows.push(el('button', { type: 'button', className: 'btn btn-primary', textContent: `Continue in ${last.name}`, dataset: { ws: last.ws } }));
+    const wsIds = tools.map((t) => t.ws);
+    const p = P8Home.projectEntry(App.projectContext.get(), wsIds);
+    if (p.action) {
+      rows.push(el('button', { type: 'button', className: 'btn', textContent: p.label, dataset: { project: p.action, ws: p.ws || '' }, disabled: p.action === 'open' && !p.ws }));
+    }
+    rows.push(el('p', { className: `home-note${p.kind === 'blocked' || p.kind === 'missing' ? ' home-note-warn' : ''}`, textContent: p.text }));
+    if (!last) rows.unshift(el('p', { className: 'muted', textContent: 'Pick a task below to start. Your last tool will be offered here next time.' }));
+    cont.replaceChildren(...rows);
+
+    const note = P8Home.storageNotice(assets.mode(), assets.list().length > 0);
+    const sn = $('#homeStorage');
+    sn.textContent = note.text;
+    sn.classList.toggle('home-note-warn', note.tone === 'warn');
+    if (note.tone === 'warn') sn.setAttribute('role', 'alert'); else sn.removeAttribute('role');
+
+    const box = $('#homeTasks');
+    box.replaceChildren(...P8Home.taskGroups(tools).map((g) => el('section', { className: 'home-task-group', attrs: { 'aria-label': g.label } },
+      el('h4', { textContent: g.label }),
+      ...g.tasks.map((k) => el('button', { type: 'button', className: 'home-task', dataset: { ws: k.ws, ...(k.open?.click ? { click: k.open.click } : {}) } },
+        el('strong', { textContent: k.label }),
+        el('span', { className: 'muted', textContent: ` ${k.tool}${k.hint ? ` · ${k.hint}` : ''}` }))))));
+  }
+
   function renderHome() {
+    renderHomeLaunch();
     const grid = $('#homeTools');
     if (!grid) return;
     const card = (t) => el('button', { type: 'button', className: 'tool-card', dataset: { ws: t.ws }, style: `--tool:${t.color}` },
@@ -1003,6 +1081,31 @@ This cannot be undone.`, 'Delete')) {
   }
 
   function bindHome() {
+    $('#homeTasks').addEventListener('click', (e) => {
+      const b = e.target.closest('.home-task');
+      if (!b) return;
+      App.setWorkspace(b.dataset.ws);
+      if (b.dataset.click) setTimeout(() => document.querySelector(b.dataset.click)?.click(), 0);
+    });
+    $('#homeContinue').addEventListener('click', async (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.project === 'open') {
+        const r = await App.projectContext.check();
+        renderHomeLaunch();
+        if (r.access !== 'granted') { toast(r.message, 'warn'); return; }
+      }
+      if (b.dataset.project === 'reconnect') {
+        // the click is the permission request; the project is only used if the browser grants it
+        const r = await App.projectContextPublisher.reconnect();
+        renderHomeLaunch();
+        if (r.access !== 'granted') { toast(r.message, 'warn'); return; }
+      }
+      if (b.dataset.ws) App.setWorkspace(b.dataset.ws);
+    });
+    document.addEventListener('p8:projectcontext', renderHomeLaunch);
+    document.addEventListener('p8:assets', renderHomeLaunch);
+    document.addEventListener('p8:workspace', () => { if (document.body.dataset.workspace === 'home') renderHomeLaunch(); });
     $('#homeTools').addEventListener('click', (e) => {
       const card = e.target.closest('.tool-card');
       if (card) App.setWorkspace(card.dataset.ws);
@@ -1148,12 +1251,16 @@ This cannot be undone.`, 'Delete')) {
     paletteSource,
     hasOwnPalette,
     consumersFor,
+    destinationsFor,
+    sendDialog,
     openIn,
     pickAsset,
     showAsset,
     importImageFiles,
     bindAssetDrop,
     registerTool,
+    /** registered tool metadata { ws, name, desc, tags, category } in registration order */
+    tools: () => tools.slice(),
     openLibrary,
     closeLibrary,
     toJson,
@@ -1163,8 +1270,8 @@ This cannot be undone.`, 'Delete')) {
   bindLibrary();
   bindHome();
   bindNavigation();
-  registerTool({ ws: 'palette', name: 'Palette & Fades', desc: '16-color custom palettes from all 32 PICO-8 colors, dark/bright fade tables, greyscale conversion.', color: '#ff004d', tags: ['palette', 'fades', 'Lua'], category: 'create' });
-  registerTool({ ws: 'tiles', name: 'Tile Maker', desc: 'Packs images into 8×8 tiles + map, VRAM viewport heatmap, tile editor, .p8 carts.', color: '#00e436', tags: ['tiles', 'map', '.p8'], category: 'create' });
+  registerTool({ ws: 'palette', category: 'create', name: 'Palette & Fades', desc: '16-color custom palettes from all 32 PICO-8 colors, dark/bright fade tables, greyscale conversion.', tasks: [{ group: 'create', label: 'Make a palette', hint: '16 of the 32 PICO-8 colors, with fade tables' }], color: '#ff004d', tags: ['palette', 'fades', 'Lua'] });
+  registerTool({ ws: 'tiles', category: 'create', name: 'Tile Maker', desc: 'Packs images into 8×8 tiles + map, VRAM viewport heatmap, tile editor, .p8 carts.', tasks: [{ group: 'create', label: 'Turn an image into tiles', hint: 'Tile sheet and map from any picture' }], color: '#00e436', tags: ['tiles', 'map', '.p8'] });
   assets.ready = loadAll();
 })();
 

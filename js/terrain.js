@@ -105,6 +105,10 @@
   let rev = 0, finalRev = -1, bitmapsVer = 0, importsVer = 0;
   let finalResult = null, shown = null, lastPicoPal = null;
   let finalTimer = 0, painting = false, lastFinalMs = 200, lastShadeMs = 30;
+  // #67: what the status badge reports (js/render-status-core.js describes it; nothing here changes what is rendered)
+  let finalWait = false;     // the final render is scheduled but not started
+  let renderError = '';      // last failure text (with Error ID), cleared by the next edit, result or Retry
+  const ackSamples = [];     // input-to-next-frame times of edits in ms, local only, for manual measurement
   // sliders and brushes wait for a pause before the full-resolution render (about one render long);
   // one-off actions (buttons, menus, clicks on the map) start it right away
   const autoDelay = (shadeOnly = false) => (shadeOnly ? Math.min(200, Math.max(40, lastShadeMs * 1.5)) : Math.min(400, Math.max(120, lastFinalMs)));
@@ -119,7 +123,30 @@
       onResult(which, e.data);
       if (ch.pending) { const job = ch.pending; ch.pending = null; send(which, job); }
     };
-    ch.worker.onerror = (e) => { ch.busy = false; setStatus('Worker error', 'error'); console.error(e.message); };
+    // a worker failure is reported with its Error ID and a Retry; the error also goes to the local diagnostics (#62)
+    ch.worker.onerror = () => { ch.busy = false; ch.pending = null; if (!diag) failed(which, ''); };
+    let diag = false;
+    if (window.P8App?.diagnostics) {
+      diag = true;
+      window.P8App.diagnostics.watchWorker(ch.worker, 'worker:terrain', (rec) => failed(which, rec.id));
+    }
+  }
+  function failed(which, id) {
+    const ch = channels[which];
+    // a worker that raised an error may be dead: replace it so the next edit (or Retry) is not posted to nothing
+    try { ch.worker?.terminate(); } catch { /* already gone */ }
+    Object.assign(ch, { worker: null, busy: false, pending: null, sentB: -1, sentI: -1 });
+    renderError = P8RenderStatus.errorText(which === 'final' ? 'final' : 'preview', id);
+    updateStatus();
+  }
+  /** Retry: replaces both workers (a crashed one cannot be reused) and renders the latest edit again */
+  function retryRender() {
+    for (const ch of Object.values(channels)) {
+      try { ch.worker?.terminate(); } catch { /* already gone */ }
+      Object.assign(ch, { worker: null, busy: false, pending: null, sentB: -1, sentI: -1 });
+    }
+    renderError = '';
+    changed();
   }
   function send(which, job) {
     const ch = channels[which];
@@ -134,6 +161,7 @@
       ch.sentB = bitmapsVer; ch.sentI = importsVer;
     }
     ch.busy = true;
+    if (which === 'final') finalWait = false;
     ch.worker.postMessage(job);
   }
   function job(preview) {
@@ -141,10 +169,17 @@
     return { type: 'build', id: rev, preview, n, scene: { params: { ...st.params }, stamps: st.stamps, passes: st.passes.filter((p) => !p.off), strokeStarts: st.strokeStarts.slice(-8) } };
   }
   function onResult(which, r) {
-    if (r.error) { console.error(`terrain ${which}: ${r.error}`); setStatus('Error (see console)', 'error'); return; }
+    if (r.error && r.id !== rev) return; // an obsolete job cannot fail the current revision
+    if (r.error) {
+      // an error inside the render: Error ID + Retry instead of "see console"
+      const rec = window.P8App?.diagnostics?.report('terrain', 'E_TERRAIN_RENDER', new Error(r.error), `${which} render`);
+      failed(which, rec ? rec.id : '');
+      return;
+    }
     r.rev = r.id;
     if (which === 'final') {
       if (r.id !== rev) return; // stale: a newer final is pending
+      renderError = '';
       finalResult = r; finalRev = r.id; lastFinalMs = r.ms; lastShadeMs = r.stages.shade;
       showResult(r);
     } else if (finalRev !== rev && (!shown || r.id >= shown.rev)) {
@@ -153,15 +188,25 @@
     }
   }
   function changed({ finalDelay = 0 } = {}) {
+    const t0 = performance.now();
     rev++;
+    renderError = '';
+    finalWait = true;
+    updateStatus(); // acknowledge the edit first: "Queued", the shown image becomes "stale"
     send('preview', job(true));
     scheduleFinal(finalDelay);
-    updateStatus();
     persistSoon();
+    requestAnimationFrame(() => { ackSamples.push(performance.now() - t0); if (ackSamples.length > 200) ackSamples.shift(); });
   }
+  // state access for manual measurement and tests, like P8StudioDebug (#67); nothing is sent anywhere
+  window.P8TerrainDebug = {
+    state: () => st, changed, retry: retryRender, ackSamples, channels: () => channels,
+    ackSummary: () => P8RenderStatus.summarize(ackSamples),
+  };
   function scheduleFinal(ms = autoDelay()) {
     clearTimeout(finalTimer);
-    finalTimer = setTimeout(() => { if (painting) { scheduleFinal(300); return; } if (finalRev !== rev) send('final', job(false)); }, ms);
+    finalWait = finalRev !== rev;
+    finalTimer = setTimeout(() => { if (painting) { scheduleFinal(300); return; } if (finalRev !== rev) send('final', job(false)); else finalWait = false; }, ms);
   }
   const sliding = (shadeOnly = false) => changed({ finalDelay: autoDelay(shadeOnly) });
   const assetsChanged = (what = 'both') => { if (what !== 'imports') bitmapsVer++; if (what !== 'bitmaps') importsVer++; };
@@ -689,7 +734,7 @@
   async function openColorIn(consumer) {
     if (!needFinal()) return;
     if (shown !== finalResult) showResult(finalResult);
-    await S.openIn(consumer, colorAsset(pico8()));
+    await S.openIn(consumer, colorAsset(pico8()), { saved: false }); // a temporary copy, not a Library asset
   }
 
   /** .p8: color map in the sprite sheet, 4-bit heights at 0x2000 (copied to 0x8000), scrolling viewer */
@@ -813,7 +858,7 @@
   }
 
   // ------------------------------------------------------------------ status
-  const status = el('span', { className: 'badge tl-status' });
+  const status = el('span', { className: 'badge tl-status', attrs: { role: 'status' } });
   const stats = el('span', { className: 'tl-sb-stats' });
   const sbAction = el('span', { className: 'tl-sb-action' });
   const sbPos = el('span', { className: 'tl-sb-pos', textContent: '—' });
@@ -846,17 +891,27 @@
   }
   function setStatus(text, cls = '') { status.textContent = text; status.className = `badge tl-status ${cls}`; }
   function updateStatus() {
-    if (finalRev === rev && finalResult) {
-      setStatus('Final', 'tl-final');
+    const d = P8RenderStatus.describe({
+      rev, shownRev: shown ? shown.rev : -1, finalRev: finalResult ? finalRev : -1,
+      previewRunning: channels.preview.busy || !!channels.preview.pending, finalRunning: channels.final.busy,
+      finalScheduled: finalWait, error: renderError,
+    });
+    canvas.dataset.render = d.state;
+    canvas.toggleAttribute('data-stale', d.stale);
+    if (ui.retry) ui.retry.hidden = !(d.state === 'error' || d.state === 'stale');
+    if (finalRev === rev && finalResult && !renderError) {
+      setStatus(d.label, 'tl-final');
+      status.title = d.detail;
       const s = finalResult.stages;
       stats.textContent = `${finalResult.n}×${finalResult.n} in ${finalResult.ms} ms`;
       stats.title = `terrain ${s.base + s.sculpt} ms, erosion ${s.weather} ms, shading ${s.shade} ms · ${st.stamps.length} edits · ${st.passes.length} erosion pass${st.passes.length === 1 ? '' : 'es'}`;
     } else {
-      setStatus('Preview', 'tl-busy');
-      stats.textContent = shown ? `${shown.n}×${shown.n} preview in ${shown.ms} ms` : 'Computing…';
-      stats.title = `The final ${st.params.resolution}×${st.params.resolution} render follows when you pause`;
+      setStatus(d.label, d.tone === 'error' ? 'error' : d.tone === 'warn' ? 'warn' : 'tl-busy');
+      status.title = d.detail;
+      stats.textContent = renderError || (shown ? `${shown.n}×${shown.n} ${d.stale ? 'stale ' : ''}preview in ${shown.ms} ms` : 'Computing…');
+      stats.title = `${d.detail} The final ${st.params.resolution}×${st.params.resolution} render is what exports use.`;
     }
-    ui.exports?.forEach((b) => { b.disabled = !(finalResult && finalRev === rev); });
+    ui.exports?.forEach((b) => { b.disabled = !d.exportable; });
   }
 
   // ------------------------------------------------------------------ UI
@@ -892,9 +947,11 @@
     ui.undoBtn = btn('Undo', undo, { title: 'Ctrl+Z' });
     ui.redoBtn = btn('Redo', redo, { title: 'Ctrl+Y' });
     ui.clearBtn = btn('Clear edits', async () => { if (st.stamps.length && !(await confirmDialog('Remove all brush, text and image edits?'))) return; pushUndo(); st.stamps = []; st.strokeStarts = []; renderOps(); changed(); setAction('All edits removed'); });
+    ui.retry = btn('Retry', retryRender, { primary: true, title: 'Render your latest edit again. Your edits are not lost.' });
+    ui.retry.hidden = true;
     ui.historyBtn = btn('History', openHistory, { title: 'List of all edits: hide, show or delete single strokes' });
     const stage = el('section', { className: 'card ex-stage tl-stage' },
-      el('div', { className: 'ex-row tl-bar' }, ui.view, ui.tile, ui.preview, el('span', { className: 'tl-spacer' }), status),
+      el('div', { className: 'ex-row tl-bar' }, ui.view, ui.tile, ui.preview, el('span', { className: 'tl-spacer' }), status, ui.retry),
       canvas,
       ui.tools,
       el('div', { className: 'ex-row tl-brush' }, ui.brushSize, ui.brushPower, ui.rim, ui.preserve, el('span', { className: 'tl-spacer' }), ui.undoBtn, ui.redoBtn, ui.historyBtn, ui.clearBtn),
