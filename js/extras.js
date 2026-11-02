@@ -1091,6 +1091,8 @@
     dom.tabs.append(el('button', { textContent: ext.label, title: `Alt+${n}`, dataset: { value: ext.id }, attrs: { role: 'radio', 'aria-checked': 'false' } }));
   }
   if (!TOOLS[tab]) tab = 'lut';
+  const routed = P8Nav.parseRoute(location.hash); // deep link #extras/<tab> (#53)
+  if (routed.ws === 'extras' && TOOLS[routed.sub]) tab = routed.sub;
   for (const [k, t] of Object.entries(tools)) { t.panel.dataset.ex = k; dom.body.append(t.panel); }
 
   function setTab(t) {
@@ -1099,6 +1101,7 @@
     for (const b of dom.tabs.querySelectorAll('[data-value]')) b.setAttribute('aria-checked', String(b.dataset.value === t));
     for (const [k, tool] of Object.entries(tools)) tool.panel.hidden = k !== t;
     dom.desc.textContent = TOOLS[t];
+    App.setRoute('extras', t);
     requestAnimationFrame(() => tools[t].draw());
   }
 
@@ -1118,7 +1121,7 @@
   requestAnimationFrame(loop);
 
   new ResizeObserver(() => { if (active()) tools[tab].draw(); }).observe(dom.body);
-  document.addEventListener('p8:workspace', () => { if (active()) setTab(tab); });
+  document.addEventListener('p8:workspace', (e) => { if (active()) setTab(TOOLS[e.detail?.sub] ? e.detail.sub : tab); });
 
   App.registerShortcuts('extras', (e, typing) => {
     if (typing || e.type === 'keyup') return;
@@ -1127,7 +1130,12 @@
     if (e.altKey && /^[1-9]$/.test(e.key) && order[Number(e.key) - 1]) { e.preventDefault(); setTab(order[Number(e.key) - 1]); }
   });
 
-  S.registerTool({ ws: 'extras', name: 'Extra Tools', desc: 'LUT Creator (motion paths, 3D ball formations), Wave Designer (scope waveforms → data cart), Line Tool (vector lines → Lua) and Terrain Lab (seamless terrain → 128×128 color + height maps).', color: '#ff77a8', tags: ['LUT', 'waves', 'lines', 'terrain'] });
+  S.registerTool({ ws: 'extras', name: 'Extra Tools', desc: 'LUT Creator (motion paths, 3D ball formations), Wave Designer (scope waveforms → data cart), Line Tool (vector lines → Lua) and Terrain Lab (seamless terrain → 128×128 color + height maps).', color: '#ff77a8', tags: ['LUT', 'waves', 'lines', 'terrain'], category: 'utilities' });
+  // each tab is also listed (and deep-linked as #extras/<id>) on its own in Find tool (#53)
+  for (const b of dom.tabs.querySelectorAll('[data-value]')) {
+    const ext = (window.P8ExtraTools || []).find((x) => x.id === b.dataset.value);
+    S.registerTool({ ws: 'extras', sub: b.dataset.value, name: b.textContent, desc: TOOLS[b.dataset.value], color: '#ff77a8', tags: ext?.tags || [], category: ext?.category || 'utilities' });
+  }
 
   setTab(tab);
 })();

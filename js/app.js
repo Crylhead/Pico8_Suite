@@ -352,8 +352,8 @@
   }
 
   /** Notifies other workspaces (Tile Maker) about palette / fade changes. */
-  function emit(name) {
-    document.dispatchEvent(new CustomEvent(name));
+  function emit(name, detail) {
+    document.dispatchEvent(new CustomEvent(name, detail === undefined ? undefined : { detail }));
   }
 
   function drawGradient() {
@@ -1611,7 +1611,7 @@
       section('Theme', theme, 'Same as the theme button in the toolbar.'),
       section('Help detail', help, 'Optional hints and tooltips. Labels, warnings, errors and confirmations are always shown.'),
       section('Guided tours', check(tours, 'Offer tours automatically'), 'When off, tours never start or offer themselves automatically. (Guided tours are added in a later update; this choice is kept for them.)', tours),
-      section('Workspace bar', check(compact, 'Compact: icons only'), 'Hides the active workspace name; every tab keeps its tooltip and accessible name.', compact),
+      section('Workspace bar', check(compact, 'Compact: icons only'), 'Hides the workspace names in the bar (the active name and, on wide screens, every tab\'s name). Each tab keeps its tooltip and accessible name, and Find tool (Ctrl+K) lists every tool by name.', compact),
       section('Animation', motion, motionDesc),
       note);
 
@@ -1850,6 +1850,13 @@
         }
         return;
       }
+      // Find tool (#53, js/suite.js) in every workspace, also while typing: the text stays as it is
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k' && actions['find-tool']) {
+        e.preventDefault();
+        closeMenus();
+        actions['find-tool']();
+        return;
+      }
       const own = shortcutHandlers[document.body.dataset.workspace];
       if (own) {
         if (e.key === 'F1') { e.preventDefault(); showDocs(); return; }
@@ -2038,9 +2045,14 @@
   // entries, app bar buttons) are only visible in the listed workspaces.
   const workspaces = () => [...document.querySelectorAll('main[data-ws]')].map((m) => m.dataset.ws);
   const shortcutHandlers = {};
+  const APP_TITLE = document.title;
 
-  function setWorkspace(ws, { persist = true } = {}) {
-    if (!workspaces().includes(ws)) ws = 'home';
+  /**
+   * Shows workspace `ws`. `sub` names a part of it (an Extra Tools tab): it is passed on in the
+   * `p8:workspace` event detail {ws, sub} and the address becomes #ws/sub (see js/nav-core.js).
+   */
+  function setWorkspace(ws, { persist = true, sub = null } = {}) {
+    if (!workspaces().includes(ws)) { ws = 'home'; sub = null; }
     const focused = document.activeElement;
     document.body.dataset.workspace = ws;
     for (const main of document.querySelectorAll('main[data-ws]')) main.hidden = main.dataset.ws !== ws;
@@ -2053,11 +2065,26 @@
     if (focused && focused !== document.body && !focused.getClientRects().length) {
       document.querySelector(`#wsTabs [data-value="${ws}"]`)?.focus({ preventScroll: true });
     }
+    const name = document.querySelector(`#wsTabs [data-value="${ws}"]`)?.getAttribute('aria-label');
+    document.title = ws === 'home' || !name ? APP_TITLE : `${name} – ${APP_TITLE}`;
     if (persist) {
       store.set(KEYS.workspace, ws);
-      if (location.hash !== `#${ws}`) history.replaceState(null, '', `#${ws}`);
+      setRoute(ws, sub);
     }
-    emit('p8:workspace');
+    emit('p8:workspace', { ws, sub });
+  }
+
+  /** the address for a deep link to the current view; only while `ws` is the open workspace */
+  function setRoute(ws, sub = null) {
+    if (document.body.dataset.workspace !== ws) return;
+    const hash = P8Nav.formatRoute(ws, sub);
+    if (location.hash !== hash) history.replaceState(null, '', hash);
+  }
+
+  function openRoute(hash, fallback) {
+    const r = P8Nav.parseRoute(hash);
+    if (r.ws) setWorkspace(r.ws, { sub: r.sub });
+    else setWorkspace(fallback);
   }
 
   // ------------------------------------------------------------------ //
@@ -2078,16 +2105,18 @@
     bindControls();
     renderRecent();
 
-    // the title frame holds every tab's name (stacked), so it is always as wide as the longest one
+    // the title frame holds every tab's name (stacked), so it is always as wide as the longest one;
+    // each tab also gets its name as a label, shown on wide screens (css/suite.css)
     $('#wsTitle').replaceChildren(...[...document.querySelectorAll('#wsTabs [data-value]')].map((tab) => {
+      if (!tab.querySelector('.ws-tab-label')) tab.append(el('span', { className: 'ws-tab-label', textContent: tab.getAttribute('aria-label') }));
       const name = document.createElement('span');
       name.dataset.ws = tab.dataset.value;
       name.textContent = tab.getAttribute('aria-label');
       return name;
     }));
     bindSeg($('#wsTabs'), (ws) => setWorkspace(ws));
-    window.addEventListener('hashchange', () => setWorkspace(location.hash.slice(1)));
-    setWorkspace(location.hash.slice(1) || store.get(KEYS.workspace, 'home'));
+    window.addEventListener('hashchange', () => openRoute(location.hash, 'home'));
+    openRoute(location.hash, store.get(KEYS.workspace, 'home'));
 
     restoreSession();
     renderAll();
@@ -2172,6 +2201,7 @@
     activePalette,
     setSlider,
     setWorkspace,
+    setRoute,
     setCustomPalette,
     loadPreviewImageData,
     adoptImagePalette,

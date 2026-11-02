@@ -1365,7 +1365,12 @@
       if (document.body.dataset.workspace !== 'code') return;
       applyFont();
       requestRender();
-      requestAnimationFrame(() => ta.focus({ preventScroll: true }));
+      requestAnimationFrame(() => {
+        // arrowing through the workspace tabs keeps focus there instead of stopping at the editor
+        const a = document.activeElement;
+        if (a?.closest?.('#wsTabs') && a.matches(':focus-visible')) return;
+        ta.focus({ preventScroll: true });
+      });
     });
     window.addEventListener('beforeunload', (e) => { if (dirty()) { e.preventDefault(); e.returnValue = ''; } });
   }
@@ -1377,7 +1382,7 @@
   S.registerTool({
     ws: 'code', name: 'Code Editor',
     desc: 'PICO-8 Lua with PICO-8 syntax highlighting, API completion and hints, code tabs, functions list, live token count; saves straight back into the .p8.',
-    color: '#ff77a8', tags: ['code', 'tokens', '.p8'],
+    color: '#ff77a8', tags: ['code', 'tokens', '.p8'], category: 'develop',
   });
   App.registerShortcuts('code', onKey);
   const exec = (cmd) => () => { dom.ta.focus(); document.execCommand(cmd); };

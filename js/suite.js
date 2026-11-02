@@ -9,6 +9,7 @@
 //   Suite.reportStorageError(title, err) / autosaveFailed(label)    standard failure messages
 //   Suite.registerConsumer({...})                                   "Open in <tool>" entries
 //   Suite.pickAsset({...})                                          library picker dialog
+//   Suite.registerTool({...})                                       Home card, workspace bar group, Find tool (Ctrl+K)
 //   document 'p8:assets' event                                      library changed (also from other tabs)
 
 'use strict';
@@ -776,10 +777,202 @@ This cannot be undone.`, 'Delete')) {
 
   const tools = [];
 
-  /** { ws, name, desc, color, tags:[] } — shown as a card on the Home page. */
+  /**
+   * { ws, name, desc, color, tags:[], category, sub? }. category: 'create' | 'develop' | 'inspect' |
+   * 'utilities' (P8Nav.CATEGORIES; anything else is listed under Utilities). Without `sub` the tool
+   * is a workspace: a card on Home and a group in the workspace bar. With `sub` it is a part of
+   * workspace `ws` (an Extra Tools tab) that Find tool lists and opens through #ws/sub.
+   */
   function registerTool(t) {
     tools.push(t);
+    orderWorkspaceTabs();
     renderHome();
+  }
+
+  // ------------------------------------------------------------------ //
+  // Workspace navigation (#53): grouped bar, Find tool (Ctrl+K)        //
+  // ------------------------------------------------------------------ //
+
+  const wsTabs = () => [...document.querySelectorAll('#wsTabs [role=radio][data-value]')];
+  const barOrder = () => wsTabs().map((b) => b.dataset.value);
+  const workspaceTools = () => tools.filter((t) => !t.sub);
+
+  /** Sorts the workspace tabs by category (unregistered tabs such as Home first) and separates the groups. */
+  let markupOrder = null; // tie-break: the tabs' order in index.html, stable while tools register
+  function orderWorkspaceTabs() {
+    const bar = $('#wsTabs');
+    if (!bar) return;
+    const byWs = new Map(workspaceTools().map((t) => [t.ws, t]));
+    const tabs = wsTabs();
+    markupOrder ||= new Map(tabs.map((b, i) => [b, i]));
+    const rank = new Map(P8Nav.CATEGORIES.map((c, i) => [c.id, i]));
+    const key = (b) => (byWs.has(b.dataset.value) ? rank.get(P8Nav.categoryOf(byWs.get(b.dataset.value))) : -1);
+    const sorted = tabs.map((b) => ({ b, i: markupOrder.get(b) ?? 1e9, k: key(b) })).sort((x, y) => x.k - y.k || x.i - y.i);
+    const focused = bar.contains(document.activeElement) ? document.activeElement : null;
+    bar.querySelectorAll('.ws-sep').forEach((s) => s.remove());
+    let prev = null;
+    for (const { b, k } of sorted) {
+      if (prev !== null && k !== prev) bar.append(el('span', { className: 'ws-sep', attrs: { 'aria-hidden': 'true' } }));
+      bar.append(b);
+      const cat = byWs.has(b.dataset.value) ? P8Nav.category(P8Nav.categoryOf(byWs.get(b.dataset.value))).label : '';
+      b.title = cat ? `${b.getAttribute('aria-label')} · ${cat}` : b.getAttribute('aria-label');
+      prev = k;
+    }
+    focused?.focus({ preventScroll: true });
+  }
+
+  /** a copy of a workspace tab's icon, with its internal ids (masks) made unique */
+  let iconSeq = 0;
+  function tabIcon(ws) {
+    const svg = document.querySelector(`#wsTabs [data-value="${ws}"] svg`);
+    if (!svg) return el('span', { className: 'ws-icon-blank', attrs: { 'aria-hidden': 'true' } });
+    const copy = svg.cloneNode(true);
+    const n = ++iconSeq;
+    for (const node of copy.querySelectorAll('[id]')) {
+      const old = node.id;
+      node.id = `${old}-c${n}`;
+      for (const user of copy.querySelectorAll(`[mask="url(#${old})"], [clip-path="url(#${old})"]`)) {
+        for (const a of ['mask', 'clip-path']) if (user.getAttribute(a) === `url(#${old})`) user.setAttribute(a, `url(#${node.id})`);
+      }
+    }
+    return copy;
+  }
+
+  function currentView() {
+    return { ws: document.body.dataset.workspace || 'home', sub: P8Nav.parseRoute(location.hash).sub };
+  }
+
+  /** the workspace bar's Find tool button: on phones it also names the open workspace */
+  function updateFindButton() {
+    const btn = $('#wsFind');
+    if (!btn) return;
+    const { ws } = currentView();
+    const name = document.querySelector(`#wsTabs [data-value="${ws}"]`)?.getAttribute('aria-label') || 'Home';
+    btn.setAttribute('aria-label', `Find tool (current: ${name})`);
+    const label = btn.querySelector('.ws-find-current');
+    label.replaceChildren(tabIcon(ws), el('span', { textContent: name }));
+  }
+
+  const HOME_ENTRY = { ws: 'home', name: 'Home', desc: 'Start page: every tool, recent library assets and how the tools work together.', tags: ['start'] };
+
+  /** Ctrl+K / the magnifier button: search every workspace and Extra Tools tool, open the chosen one. */
+  let findOpen = false;
+  async function findTool() {
+    if (findOpen) return;
+    findOpen = true;
+    const order = barOrder();
+    const entries = tools.slice();
+    const now = currentView();
+    const id = `wsfind-${Date.now().toString(36)}`;
+    const input = el('input', {
+      type: 'text', id: `${id}-q`, className: 'ws-find-input', autocomplete: 'off', spellcheck: false,
+      placeholder: 'Tool name or task, e.g. map, tokens, fade',
+      attrs: { role: 'combobox', 'aria-expanded': 'true', 'aria-controls': `${id}-list`, 'aria-autocomplete': 'list', 'aria-describedby': `${id}-help` },
+    });
+    const list = el('div', { id: `${id}-list`, className: 'ws-find-list', attrs: { role: 'listbox', 'aria-label': 'Tools' } });
+    const status = el('p', { className: 'ws-find-status', attrs: { role: 'status' } });
+    const body = el('div', { className: 'ws-find-dialog' },
+      el('label', { className: 'ws-find-label', htmlFor: input.id, textContent: 'Search tools' }),
+      input,
+      el('p', { id: `${id}-help`, className: 'hint', textContent: '↑ ↓ choose · Enter opens · Esc closes. Searches names and descriptions.' }),
+      status,
+      list);
+
+    let shown = [];
+    let active = 0;
+    const isCurrent = (e) => e.ws === now.ws && (!e.sub || e.sub === now.sub);
+    const optionId = (i) => `${id}-o${i}`;
+
+    function option(e, i, flat = true) {
+      const parent = e.sub ? workspaceTools().find((t) => t.ws === e.ws)?.name : null;
+      const where = flat && e.ws !== 'home' ? [P8Nav.category(P8Nav.categoryOf(e)).label] : [];
+      if (parent) where.push(`in ${parent}`);
+      return el('div', { id: optionId(i), className: 'ws-find-option', dataset: { i: String(i) }, attrs: { role: 'option', 'aria-selected': 'false' } },
+        tabIcon(e.ws),
+        el('span', { className: 'ws-find-text' },
+          el('span', { className: 'ws-find-name' }, e.name,
+            where.length ? el('span', { className: 'ws-find-where', textContent: ` · ${where.join(' · ')}` }) : null,
+            isCurrent(e) ? el('span', { className: 'badge ws-find-now', textContent: 'Open now' }) : null),
+          el('span', { className: 'ws-find-desc', textContent: e.desc || '' })));
+    }
+
+    function setActive(i) {
+      if (!shown.length) { input.removeAttribute('aria-activedescendant'); return; }
+      active = (i + shown.length) % shown.length;
+      for (const o of list.querySelectorAll('[role=option]')) o.setAttribute('aria-selected', String(o.dataset.i === String(active)));
+      input.setAttribute('aria-activedescendant', optionId(active));
+      list.querySelector(`#${optionId(active)}`)?.scrollIntoView({ block: 'nearest' });
+    }
+
+    function render() {
+      const q = input.value.trim();
+      const found = P8Nav.search(entries, q, order);
+      if (q) {
+        shown = (P8Nav.search([HOME_ENTRY], q).length ? [HOME_ENTRY] : []).concat(found);
+        list.replaceChildren(...shown.map((e, i) => option(e, i)));
+      } else {
+        const groups = P8Nav.group(found, order);
+        shown = [HOME_ENTRY].concat(...groups.map((g) => g.entries));
+        let i = 1;
+        list.replaceChildren(option(HOME_ENTRY, 0, false), ...groups.map((g, gi) => el('div', { className: 'ws-find-group', attrs: { role: 'group', 'aria-labelledby': `${id}-g${gi}` } },
+          el('div', { id: `${id}-g${gi}`, className: 'ws-find-heading', textContent: g.category.label }),
+          ...g.entries.map((e) => option(e, i++, false)))));
+      }
+      list.hidden = !shown.length;
+      input.setAttribute('aria-expanded', String(shown.length > 0));
+      status.classList.toggle('ws-find-empty', !shown.length);
+      status.textContent = !shown.length
+        ? `No tool matches “${q}”. Try another word, or clear the search to list every tool.`
+        : q ? `${shown.length} of ${entries.length + 1} tools match.` : `${shown.length} tools.`;
+      // without a query the open tool (its Extra Tools tab if one is open) is preselected
+      const exact = shown.findIndex((e) => e.ws === now.ws && e.sub && e.sub === now.sub);
+      setActive(q ? 0 : exact >= 0 ? exact : Math.max(0, shown.findIndex((e) => e.ws === now.ws && !e.sub)));
+    }
+
+    let dialog = null;
+    const choose = (i) => { if (shown[i]) dialog?.finish(shown[i]); };
+    input.addEventListener('input', render);
+    input.addEventListener('keydown', (e) => {
+      const step = { ArrowDown: 1, ArrowUp: -1, PageDown: 5, PageUp: -5 }[e.key];
+      if (step && shown.length) {
+        e.preventDefault();
+        setActive(Math.abs(step) > 1 ? Math.max(0, Math.min(shown.length - 1, active + step)) : active + step);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        choose(active);
+      }
+    });
+    list.addEventListener('mousedown', (e) => e.preventDefault()); // keep focus (and the typed text) in the search field
+    list.addEventListener('click', (e) => {
+      const o = e.target.closest('[role=option]');
+      if (o) choose(Number(o.dataset.i));
+    });
+    render();
+
+    const picked = await App.modal({
+      title: 'Find tool',
+      body,
+      buttons: [{ label: 'Cancel', value: null }],
+      onOpen: (dlg) => { dialog = dlg; dlg.classList.add('ws-find-modal'); input.focus(); },
+    });
+    findOpen = false;
+    if (!picked || isCurrent(picked)) return;
+    App.setWorkspace(picked.ws, { sub: picked.sub || null });
+    // focus that was on <body> or in the hidden workspace goes to the new workspace's tab
+    const f = document.activeElement;
+    if (!f || f === document.body || !f.getClientRects().length) {
+      const tab = document.querySelector(`#wsTabs [data-value="${picked.ws}"]`);
+      (tab?.getClientRects().length ? tab : $('#wsFind'))?.focus({ preventScroll: true });
+    }
+  }
+
+  function bindNavigation() {
+    $('#wsFind')?.addEventListener('click', findTool);
+    App.registerActions({ 'find-tool': findTool });
+    document.addEventListener('p8:workspace', updateFindButton);
+    window.addEventListener('hashchange', updateFindButton);
+    updateFindButton();
   }
 
   // Historical Demotools desktop tools; not bundled in this standalone repository.
@@ -790,11 +983,14 @@ This cannot be undone.`, 'Delete')) {
   function renderHome() {
     const grid = $('#homeTools');
     if (!grid) return;
-    grid.replaceChildren(...tools.map((t) => el('button', { type: 'button', className: 'tool-card', dataset: { ws: t.ws }, style: `--tool:${t.color}` },
+    const card = (t) => el('button', { type: 'button', className: 'tool-card', dataset: { ws: t.ws }, style: `--tool:${t.color}` },
       el('span', { className: 'tool-dot', attrs: { 'aria-hidden': 'true' } }),
       el('strong', { textContent: t.name }),
       el('span', { className: 'tool-desc', textContent: t.desc }),
-      el('span', { className: 'tool-tags' }, ...(t.tags || []).map((x) => el('span', { className: 'badge', textContent: x }))))));
+      el('span', { className: 'tool-tags' }, ...(t.tags || []).map((x) => el('span', { className: 'badge', textContent: x }))));
+    grid.replaceChildren(...P8Nav.group(workspaceTools(), barOrder()).map((g) => el('section', { className: 'tool-group', attrs: { 'aria-labelledby': `home-cat-${g.category.id}` } },
+      el('h4', { id: `home-cat-${g.category.id}` }, g.category.label, el('span', { className: 'muted', textContent: ` · ${g.category.desc}` })),
+      el('div', { className: 'tool-grid' }, ...g.entries.map(card)))));
 
     const recent = $('#homeRecent');
     const list = assets.list().slice(0, 12);
@@ -966,8 +1162,9 @@ This cannot be undone.`, 'Delete')) {
 
   bindLibrary();
   bindHome();
-  registerTool({ ws: 'palette', name: 'Palette & Fades', desc: '16-color custom palettes from all 32 PICO-8 colors, dark/bright fade tables, greyscale conversion.', color: '#ff004d', tags: ['palette', 'fades', 'Lua'] });
-  registerTool({ ws: 'tiles', name: 'Tile Maker', desc: 'Packs images into 8×8 tiles + map, VRAM viewport heatmap, tile editor, .p8 carts.', color: '#00e436', tags: ['tiles', 'map', '.p8'] });
+  bindNavigation();
+  registerTool({ ws: 'palette', name: 'Palette & Fades', desc: '16-color custom palettes from all 32 PICO-8 colors, dark/bright fade tables, greyscale conversion.', color: '#ff004d', tags: ['palette', 'fades', 'Lua'], category: 'create' });
+  registerTool({ ws: 'tiles', name: 'Tile Maker', desc: 'Packs images into 8×8 tiles + map, VRAM viewport heatmap, tile editor, .p8 carts.', color: '#00e436', tags: ['tiles', 'map', '.p8'], category: 'create' });
   assets.ready = loadAll();
 })();
 

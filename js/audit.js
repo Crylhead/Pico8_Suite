@@ -470,7 +470,7 @@
     rescan: () => (au.handle ? scan() : chooseFolder()),
   };
 
-  S.registerTool({ ws: 'audit', name: 'Project Audit', desc: 'Scan a project folder: tokens and characters per cart (with #include), includes, load/run/reload references, unused carts.', color: '#00e436', tags: ['tokens', 'includes', 'CSV'] });
+  S.registerTool({ ws: 'audit', name: 'Project Audit', desc: 'Scan a project folder: tokens and characters per cart (with #include), includes, load/run/reload references, unused carts.', color: '#00e436', tags: ['tokens', 'includes', 'CSV'], category: 'inspect' });
 
   bind();
   renderColumns();

@@ -1210,7 +1210,7 @@
 
   // ------------------------------------------------------------------ register with Extra Tools
   (window.P8ExtraTools ||= []).push({
-    id: 'terrain', label: 'Terrain Lab',
+    id: 'terrain', label: 'Terrain Lab', category: 'create', tags: ['terrain', 'heightmap', 'noise'],
     desc: 'Seamless terrain for PICO-8: noise or imported heightmaps, brushes, text and image stamps, erosion, baked light → 128×128 color + height maps (port of terrain_lab_v0_4).',
     create(helpers) {
       const panel = build(helpers);

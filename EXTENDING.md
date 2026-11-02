@@ -5,8 +5,8 @@ A tool is a workspace (`<main data-ws="...">`) plus a script that registers itse
 ## 1. Markup (`index.html`)
 
 ```html
-<!-- tab (in #wsTabs): a 20×20 icon; the name shows only while the tab is active -->
-<button role="radio" data-value="mytool" aria-checked="false" title="My Tool" aria-label="My Tool"><svg viewBox="0 0 20 20" aria-hidden="true">…</svg><span>My Tool</span></button>
+<!-- tab (in #wsTabs): a 20×20 icon; the shell adds the visible name on wide screens. Place it near the tools of its category; registerTool re-sorts the bar by category. -->
+<button role="radio" data-value="mytool" aria-checked="false" title="My Tool" aria-label="My Tool"><svg viewBox="0 0 20 20" aria-hidden="true">…</svg></button>
 
 <!-- workspace -->
 <main class="layout-mytool" data-ws="mytool" hidden> … </main>
@@ -42,7 +42,7 @@ The shell provides keyboard behavior for standard markup; use it instead of cust
     if (asset) load(asset);
   }
 
-  S.registerTool({ ws: 'mytool', name: 'My Tool', desc: 'What it does.', color: '#ff77a8', tags: ['image'] });
+  S.registerTool({ ws: 'mytool', name: 'My Tool', desc: 'What it does.', color: '#ff77a8', tags: ['image'], category: 'create' });
   App.registerActions({ 'mytool-export': exportSomething, 'mytool-pick': pickImage });
   App.registerShortcuts('mytool', (e, typing) => { /* Ignore typing unless handling an editor shortcut. */ });
 
@@ -59,6 +59,14 @@ The shell provides keyboard behavior for standard markup; use it instead of cust
   document.addEventListener('p8:assets', (e) => { /* e.detail: {type, id, remote} */ });
 })();
 ```
+
+### Navigation metadata
+
+`registerTool` feeds the workspace bar, Home and **Find tool** (<kbd>Ctrl</kbd>+<kbd>K</kbd>), via `js/nav-core.js` (`P8Nav`):
+
+- `name` and `desc` are what users search; write `desc` as a task ("count tokens", "pack data carts"). `tags` are extra search words and appear on the Home card.
+- `category` is `'create'`, `'develop'`, `'inspect'` or `'utilities'`. It only groups the tool (bar order, Home section, Find tool heading); IDs, deep links and shortcuts do not depend on it. A missing or unknown category falls back to **Utilities**, so the tool is always listed.
+- A part of a workspace can register too: `S.registerTool({ ws: 'mytool', sub: 'part', name, desc, category })` lists it in Find tool (not on Home) and opens it with `App.setWorkspace('mytool', { sub: 'part' })`; the `p8:workspace` event carries `{ ws, sub }`. Call `App.setRoute('mytool', 'part')` when the user switches parts, so the address `#mytool/part` stays a working deep link. Extra Tools does this for its tabs.
 
 Publish an indexed image with `await S.assets.put(S.imageAsset({ name, w, h, pixels, pal, transparent: 0, source: 'mytool' }))`, or a palette with `S.paletteAsset({ name, colors })`, inside an async action. Await `S.assets.ready` before reading startup Library data. Consumers must guard unsaved target work themselves; the registry does not do this automatically.
 
@@ -162,5 +170,5 @@ A small tool that does not need its own workspace can go into Extra Tools. Eithe
 });
 ```
 
-For registered plug-ins, Extra Tools adds the tab (with the next <kbd>Alt</kbd>+number), shows the panel and calls `draw()` when the tab opens or resizes, `tick(dt)` every frame while it is visible and `key(e)` for key presses (return `true` when handled).
+For registered plug-ins, Extra Tools adds the tab (with the next <kbd>Alt</kbd>+number), shows the panel and calls `draw()` when the tab opens or resizes, `tick(dt)` every frame while it is visible and `key(e)` for key presses (return `true` when handled). Optional `category` and `tags` (as in `registerTool`) place the plug-in in Find tool; without them it is listed under Utilities. Each Extra Tools tab gets the address `#extras/<id>`.
 
