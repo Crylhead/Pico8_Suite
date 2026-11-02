@@ -97,7 +97,7 @@ No browser executable, PICO-8 runtime, real folder-permission dialog, screen rea
 
 ### Issue disposition
 
-The automated evidence completes #55 (read-only project-context API), #63 (reviewed report actions) and #69 (offline documentation/tour guards and release checklist). These may be closed against the linked PR under the maintainer's instruction; the code remains on the PR branch until merge.
+The automated evidence completes #55 (read-only project-context API) and #69 (offline documentation/tour guards and release checklist). These may be closed against the linked PR under the maintainer's instruction; the code remains on the PR branch until merge.
 
 Keep these issues open rather than treating a green model test as full acceptance:
 
@@ -109,6 +109,7 @@ Keep these issues open rather than treating a green model test as full acceptanc
 | #60 | Browser hover/focus/Escape, touch and narrow-viewport checks. |
 | #61 | Browser welcome/replay/keyboard/missing-target smoke; asynchronous engine cancellation and help-text lookup are covered by regressions. |
 | #62 | Arbitrary error-text privacy guarantee remains unmet; regex scrubbing is best effort. No logs are uploaded automatically. |
+| #63 | Reviewed export actions are regression-tested, but the generated report inherits #62’s incomplete arbitrary-error privacy guarantee; actual offline/browser dialog validation also remains. |
 | #64 | Actual 320/768/1280 layouts, 200% zoom, theme and pointer/touch checks. |
 | #65 | Shared-shell browser keyboard/focus/contrast walkthrough; screen-reader check where available. |
 | #66 | Disposable folder happy path, cancellation, permission denial and preflight-to-actual-write comparison. |
