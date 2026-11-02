@@ -351,12 +351,11 @@
     const finalTexts = new Map([...pj.texts, ...Object.entries(texts), ...rewrites.map((r) => [r.name, r.text])]);
     const files = [...finalTexts].map(([name, text]) => ({ name, text }));
     for await (const [name, h] of pj.demo.entries()) if (h.kind === 'file' && /\.lua$/i.test(name)) files.push({ name, text: await (await h.getFile()).text() });
-    const analysis = P.retirement(candidates, files);
-    const { kept, unresolved } = analysis;
-    // a cart this write rewrites is not also moved (one write, one original per file)
-    const rewritten = new Set(rewrites.map((r) => r.name.toLowerCase()));
-    const retire = analysis.retire.filter((n) => !rewritten.has(n.toLowerCase()));
-    for (const n of analysis.retire) if (rewritten.has(n.toLowerCase())) kept.push({ cart: n, by: 'its anchors are rewritten by this write' });
+    // a cart this write rewrites is not also moved (one write, one original per file); it stays as a source,
+    // so the carts it references stay as well
+    const rewritten = new Map(rewrites.map((r) => [r.name, 'its anchors are rewritten by this write']));
+    const analysis = P.retirement(candidates, files, rewritten);
+    const { kept, unresolved, retire } = analysis;
     const unusedDir = inDemo('unused/');
     const keptNote = kept.length ? `\n\nStays in place because it is still referenced:\n${kept.map((k) => `${k.cart} (${k.by})`).join('\n')}` : '';
     const unresolvedNote = unresolved.length ? `\n\nReferences that cannot be resolved, so no cart is moved:\n${unresolved.map((u) => `${u.file}:${u.line} ${u.call} (${u.why})`).join('\n')}` : '';
