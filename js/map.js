@@ -42,7 +42,8 @@
     hover: null,              // {x, y} cell
     undo: [],
     redo: [],
-    dirty: false,
+    libBase: null,            // `modified` of the library map this document last matched
+    libSeen: null,            // external library version already reported as a conflict
     grid: true,
     screens: true,
     numbers: false,
@@ -54,6 +55,7 @@
     canvas: $('#meCanvas'),
     tools: $('#meTools'),
     name: $('#meName'),
+    docStatus: $('#meDocStatus'),
     fit: $('#meFit'),
     grid: $('#meGrid'),
     screens: $('#meScreens'),
@@ -72,6 +74,9 @@
   };
 
   const sheetRows = () => me.sheet.length / M.SHEET;
+
+  // saved / unsaved / downloaded / failed state of the open map (shared contract, #58)
+  const status = P8DocStatus.create({ storage: () => S.assets.mode() });
 
   // ------------------------------------------------------------------ //
   // Offscreen images: the sheet in its palette, the whole map at 1:1    //
@@ -373,7 +378,7 @@
   }
 
   function changed({ resized = false } = {}) {
-    me.dirty = true;
+    status.edit();
     if (resized) rebuildMapCanvas();
     renderInfo();
     requestRender();
@@ -625,18 +630,20 @@
   // ------------------------------------------------------------------ //
 
   async function confirmDiscard(what) {
-    if (!me.dirty) return true;
+    if (!status.dirty()) return true;
     return confirmDialog('Unsaved Changes', `${what}\n\nThe current map has changes that are not saved to the library.`, 'Discard changes');
   }
 
-  function loadMap(m, { name = me.name, assetId = null, dirty = false } = {}) {
+  function loadMap(m, { name = me.name, assetId = null, dirty = false, libModified = null } = {}) {
     me.map = m;
     me.name = name;
     me.assetId = assetId;
+    me.libBase = assetId ? libModified : null;
+    me.libSeen = null;
     me.sel = null;
     me.undo.length = 0;
     me.redo.length = 0;
-    me.dirty = dirty;
+    status.open({ name, target: assetId ? 'library' : null, dirty });
     rebuildMapCanvas();
     zoomFit();
     renderAll();
@@ -650,6 +657,15 @@
     me.sheetName = name;
     if (me.sheetSel && (me.sheetSel.y + me.sheetSel.h) * T > sheetRows()) { me.sheetSel = { x: 1, y: 0, w: 1, h: 1 }; me.stamp = M.sheetStamp(1); }
     rebuildAll();
+    status.edit();
+    scheduleSave();
+  }
+
+  /** the tileset palette is part of the saved map */
+  function setPal(pal) {
+    me.pal = S.normPal(pal);
+    rebuildAll();
+    status.edit();
     scheduleSave();
   }
 
@@ -743,16 +759,69 @@
     };
   }
 
+  /** the library copy changed since this map last matched it (another tab, Library rename) */
+  const libChanged = (a) => Boolean(a && me.libBase != null && a.modified !== me.libBase);
+
+  /**
+   * Only a committed write of THIS document marks it saved: edits made meanwhile stay unsaved, a
+   * failure keeps a Retry in the status, and a result for a map closed meanwhile changes nothing.
+   */
   async function saveToLibrary({ asNew = false } = {}) {
-    const old = !asNew && mapAsset();
-    const a = await S.assets.put({ ...currentAsset(), ...(old ? { id: old.id, created: old.created } : {}), name: asNew && old ? `${me.name} copy` : me.name }).catch((e) => S.reportStorageError('Save Map to Library', e));
-    if (!a) return;
+    if (status.pending()) { toast('The map is still being saved…', 'warn'); return false; }
+    const doc = status.doc();
+    const old = mapAsset();
+    if (!asNew && libChanged(old)) {
+      const choice = await modal({
+        title: 'Library Map Changed',
+        body: `"${old.name}" in the Library was changed or renamed elsewhere (another tab or the Library panel) after this map was opened or saved.\n\nOverwrite replaces that Library version with this map. Save as New keeps both.`,
+        buttons: [{ label: 'Cancel', value: null }, { label: 'Save as New Map', value: 'new' }, { label: 'Overwrite Library Map', value: 'overwrite', danger: true }],
+      });
+      if (status.doc() !== doc) return false;
+      if (!choice) {
+        me.libSeen = old.modified;
+        status.conflict(`"${old.name}" was changed in the Library after this map was opened or saved, so this map was not saved`);
+        return false;
+      }
+      asNew = choice === 'new';
+    }
+    const ticket = status.begin('library', { intent: { asNew }, name: me.name });
+    const a = await S.assets.put({ ...currentAsset(), ...(!asNew && old ? { id: old.id, created: old.created } : {}) }).catch((e) => {
+      status.reject(ticket, { message: e?.message || String(e) });
+      S.reportStorageError('Save Map to Library', e);
+      return null;
+    });
+    if (!a) return false;
+    if (!status.isCurrent(ticket)) {
+      toast(`Saved the previous map "${a.name}" to the library (the open map is unchanged)`);
+      return false;
+    }
     me.assetId = a.id;
-    me.name = a.name;
-    me.dirty = false;
+    me.libBase = a.modified;
+    me.libSeen = null;
+    status.resolve(ticket, { name: a.name });
     renderInfo();
     scheduleSave();
-    toast(`Saved map "${a.name}" to the library`);
+    toast(`Saved map "${a.name}" to the library${status.dirty() ? ' (newer edits are not saved yet)' : ''}`);
+    return true;
+  }
+
+  // absence from the Library cache only means "deleted" once the Library loaded without error
+  let libraryLoaded = false;
+  Promise.resolve(S.assets.ready).then(() => { libraryLoaded = !S.assets.loadError?.(); checkLibrary(); }, () => {});
+
+  /** Reports a library copy that was deleted or changed elsewhere while this map is open. */
+  function checkLibrary() {
+    if (!me.assetId || status.pending()) return;
+    const a = mapAsset();
+    if (!a) {
+      if (libraryLoaded) status.lost(`"${me.name}" is no longer in the Library (deleted in the Library or another tab). Save to add it again`);
+      return;
+    }
+    if (me.libBase == null) { me.libBase = a.modified; return; }
+    if (libChanged(a) && me.libSeen !== a.modified) {
+      me.libSeen = a.modified;
+      status.conflict(`"${a.name}" was changed in the Library (another tab or the Library panel) after this map was opened or saved. Saving asks whether to overwrite it or save a new map`);
+    }
   }
 
   function openAsset(a) {
@@ -763,7 +832,7 @@
     me.sheetId = a.sheetId || null;
     me.sheetName = a.sheetName || '';
     buildSheetCanvas();
-    loadMap(m, { name: a.name, assetId: a.id || null, dirty: !a.id });
+    loadMap(m, { name: a.name, assetId: a.id || null, dirty: !a.id, libModified: a.modified ?? null });
   }
 
   async function openFromLibrary() {
@@ -852,9 +921,7 @@
   async function paletteFromLibrary() {
     const a = await S.pickAsset({ title: 'Palette for the Tileset', kind: 'palette', allowImport: false });
     if (!a) return;
-    me.pal = S.normPal(a.colors.map((c, i) => c ?? i));
-    rebuildAll();
-    scheduleSave();
+    setPal(a.colors.map((c, i) => c ?? i));
     toast(`Palette: ${a.name}`);
   }
 
@@ -862,7 +929,16 @@
   let saveTimer = 0;
   function scheduleSave() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => S.kv.set(SESSION_KEY, { ...currentAsset(), assetId: me.assetId, dirty: me.dirty }).catch(S.autosaveFailed('Map Editor session')), 600);
+    saveTimer = setTimeout(saveSession, 600);
+  }
+
+  /** browser-only working copy (not a save); a failure shows the map as memory-only */
+  function saveSession() {
+    clearTimeout(saveTimer);
+    saveTimer = 0;
+    const tk = status.snapshot();
+    return S.kv.set(SESSION_KEY, { ...currentAsset(), assetId: me.assetId, libModified: me.libBase, dirty: status.dirty() })
+      .then(() => status.session(tk, true), (e) => { status.session(tk, false); S.autosaveFailed('Map Editor session')(e); });
   }
 
   async function restoreSession() {
@@ -873,7 +949,8 @@
     me.sheetId = s.sheetId || null;
     me.sheetName = s.sheetName || '';
     buildSheetCanvas();
-    loadMap({ w: s.w, h: s.h, cells: s.cells }, { name: s.name || 'map', assetId: s.assetId || null, dirty: Boolean(s.dirty) });
+    loadMap({ w: s.w, h: s.h, cells: s.cells }, { name: s.name || 'map', assetId: s.assetId || null, dirty: Boolean(s.dirty), libModified: s.libModified ?? null });
+    checkLibrary();
   }
 
   // ------------------------------------------------------------------ //
@@ -900,6 +977,7 @@
     if (notCartSized('New .p8 Cart') || !(await okToShare('New .p8 Cart'))) return;
     const text = M.buildCart({ m: me.map, sheet: me.sheet, pal: me.pal, name: me.name });
     download(text, `${fileBase()}.p8`);
+    status.downloaded(`${fileBase()}.p8`);
     toast(`Downloaded ${fileBase()}.p8 (map, sprites and a viewer: arrow keys scroll)`);
   }
 
@@ -919,12 +997,15 @@
     });
     if (!res || !(await okToShare('Write into .p8'))) return;
     download(M.writeIntoCart(text, me.map, { sheet: res.sheet ? me.sheet : null }), file.name);
+    status.downloaded(file.name);
     const palNote = me.pal.some((c, i) => c !== i) ? `\n\nThe tileset uses a custom screen palette. Add to your _init():\n${M.palCode(me.pal, '').join('\n')}` : '';
     showMessage('Write into .p8', `Downloaded ${file.name} with the map${res.sheet ? ' and tileset' : ''}. Replace the original cart with it.${palNote}`);
   }
 
   function exportBin() {
-    download(new Blob([M.mapBytes(me.map)], { type: 'application/octet-stream' }), `${fileBase()}_${me.map.w}x${me.map.h}.bin`);
+    const bin = `${fileBase()}_${me.map.w}x${me.map.h}.bin`;
+    download(new Blob([M.mapBytes(me.map)], { type: 'application/octet-stream' }), bin);
+    status.downloaded(bin);
     toast(`${me.map.cells.length} bytes, row-major, one byte per cell`);
   }
 
@@ -951,7 +1032,9 @@
         for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) idx[(cy * T + y) * w + cx * T + x] = me.sheet[(sy + y) * M.SHEET + sx + x];
       }
     }
-    download(await encodeIndexedPng(w, h, idx, S.paletteRgb(me.pal)), `${fileBase()}.png`);
+    const png = await encodeIndexedPng(w, h, idx, S.paletteRgb(me.pal));
+    download(png, `${fileBase()}.png`);
+    status.downloaded(`${fileBase()}.png`);
   }
 
   // ------------------------------------------------------------------ //
@@ -1009,7 +1092,7 @@
     });
     dom.name.addEventListener('change', () => {
       me.name = dom.name.value.trim() || 'map';
-      me.dirty = true;
+      status.edit();
       scheduleSave();
     });
     for (const [box, key] of [[dom.grid, 'grid'], [dom.screens, 'screens'], [dom.numbers, 'numbers']]) {
@@ -1023,11 +1106,21 @@
     bindSheet();
     S.bindAssetDrop(dom.stage, (a) => {
       if (a.kind === 'map') openAsset(a);
-      else if (a.kind === 'palette') { me.pal = S.normPal(a.colors.map((c, i) => c ?? i)); rebuildAll(); }
+      else if (a.kind === 'palette') setPal(a.colors.map((c, i) => c ?? i));
       else useImageAsTileset(a);
     });
     document.addEventListener('p8:workspace', () => { if (document.body.dataset.workspace === 'map') { if (!fitted) { fitted = true; zoomFit(); } renderAll(); } });
-    document.addEventListener('p8:assets', () => renderSheet());
+    document.addEventListener('p8:assets', (e) => {
+      renderSheet();
+      const id = e.detail?.id;
+      if (!id || id === me.assetId) checkLibrary();
+      status.refresh();
+    });
+    P8DocStatus.mount(dom.docStatus, status, { onRetry: (intent) => saveToLibrary(intent || {}), title: 'Map save status' });
+    window.addEventListener('beforeunload', (e) => {
+      if (saveTimer) saveSession();
+      if (status.atRisk()) { e.preventDefault(); e.returnValue = ''; }
+    });
   }
   let fitted = false;
 

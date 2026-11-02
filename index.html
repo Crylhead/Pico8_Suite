@@ -654,6 +654,7 @@
     <section class="card ps-main">
       <header class="ps-options">
         <input class="ps-name" id="meName" value="map" spellcheck="false" aria-label="Map name">
+        <span id="meDocStatus"></span>
         <span class="badge" id="meFit" title="Where this map fits in a PICO-8 cart"></span>
         <button class="btn btn-sm" data-action="map-resize">Size…</button>
         <span class="ps-sep"></span>
@@ -1325,7 +1326,8 @@
           <li><b>Tools</b>: draw (B), rectangle fill (U), flood fill (G), pick (I, or right-click; drag picks a block of cells as the brush), select (M: Ctrl+C copies the cells as the brush, Ctrl+X cuts, Del clears), pan (H, Space or middle mouse). <kbd>[</kbd> / <kbd>]</kbd> step through the tiles, the wheel zooms, <kbd>0</kbd> fits. Blocks repeat in their pattern when you drag or fill.</li>
           <li><b>Sizes</b>: 128×32 is the cart map (<code>__map__</code>). 128×64 also uses the lower half of the sprite sheet (sprites 128–255) for rows 32–63, as PICO-8 does; an orange line marks where that starts. Other sizes up to 256×256 can be edited and exported as bytes (one per cell, row-major). <i>Cart Builder → Add Map from Library</i> creates a <code>tiles</code> asset with <code>.gfx</code> and <code>.map</code> parts, but rejects maps larger than 17,152 cells; automatic splitting is not implemented. Tile 0 is empty, as with <code>map()</code>.</li>
           <li><b>.p8</b>: <i>Import Map + Sprites</i> reads <code>__map__</code> and the sprite sheet (and asks whether the lower sheet half is map rows 32–63). <i>New .p8 Cart</i> writes map, sprites and a scroll viewer; <i>Write into Existing .p8</i> replaces only the map (and the sprites, if you want), keeping code, sound and music.</li>
-          <li><b>Library</b>: maps are saved with their tileset and palette, so they open as they were. The library's <i>Maps</i> filter lists them.</li>
+          <li><b>Library</b>: maps are saved with their tileset and palette, so they open as they were (changing the tileset or palette is an unsaved change too). The library's <i>Maps</i> filter lists them.</li>
+          <li><b>Save status</b> (next to the map name; click it for details): <i>Not saved</i> (new map), <i>Unsaved changes</i> (the working copy is kept in this browser's session only, not a backup), <i>Saving…</i>, <i>Saved to Library</i> (only after the browser confirmed the write; edits made while saving stay unsaved), <i>Downloaded copy</i> (a .p8/.bin/.png download was started for this version: a copy, not a save), <i>Unsaved · memory only</i> / <i>In Library · memory only</i> (browser storage failed or is unavailable: closing the tab loses the work, so the page asks before closing). <i>Save failed</i> and <i>Conflict</i> stay visible with <b>Retry</b> / <b>Resolve…</b> and ✕ (dismiss) after the message is closed. A conflict means the Library copy was renamed, changed or deleted in another tab or the Library panel; saving then asks whether to overwrite it or save a new map. Every state shows an icon and text, not only a color.</li>
         </ul>
 
         <h3 id="doc-code">Code Editor</h3>
@@ -1548,6 +1550,7 @@
   <script src="js/core.js"></script>
   <script src="js/app.js"></script>
   <script src="js/suite.js"></script>
+  <script src="js/doc-status-core.js"></script>
   <script src="js/tiles-core.js"></script>
   <script src="js/tiles.js"></script>
   <script src="js/studio-core.js"></script>

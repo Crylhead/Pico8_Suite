@@ -66,6 +66,36 @@ Background session saves use `S.kv.set(key, value).catch(S.autosaveFailed('My To
 
 When IndexedDB cannot be opened at startup the suite runs an explicit **memory-only session**: writes succeed in memory, `S.assets.persistent()` is `false` and `S.assets.mode()` is `'memory'`; the suite shows a warning and the Library labels it. A write that fails while IndexedDB is open never falls back to memory.
 
+### Document save status
+
+`js/doc-status-core.js` (`P8DocStatus`) is the shared save/operation state contract (#58). It tracks one open document and shows a badge with an icon and text for each state: not saved, unsaved, saving, saved (Library/file/project), downloaded copy, memory-only, failed, conflict. Use it instead of a plain `dirty` flag. The Map Editor (`js/map.js`) is the reference adapter.
+
+```js
+const status = P8DocStatus.create({ storage: () => S.assets.mode() });
+status.open({ name, target: assetId ? 'library' : null });         // new or opened document (dirty: true for a restored unsaved copy)
+// on every edit: status.edit();   confirm discard with: status.dirty()
+
+async function save() {
+  if (status.pending()) return false;                               // re-entry guard
+  const doc = status.doc(), ticket = status.begin('library', { name }); // take ticket and snapshot together
+  const asset = buildAsset();
+  try { await S.assets.put(asset); }
+  catch (e) { status.reject(ticket, { message: e.message }); S.reportStorageError('Save to Library', e); return false; }
+  if (status.doc() !== doc) return false;                           // another document was opened meanwhile
+  status.resolve(ticket, { name: asset.name });                     // edits made during the save stay unsaved
+  return true;
+}
+
+status.downloaded(fileName);                // a download is a copy, never a save
+const tk = status.snapshot();               // background session write: not a save
+S.kv.set(KEY, data).then(() => status.session(tk, true), (e) => status.session(tk, false));
+status.conflict(message); status.lost(message); // Library copy changed / deleted elsewhere
+P8DocStatus.mount(hostEl, status, { title: 'Map save status', onRetry: save });
+addEventListener('beforeunload', (e) => { if (status.atRisk()) e.preventDefault(); });
+```
+
+Results for an older document or an older save ticket are ignored, and an error stays visible until a later save succeeds or the user dismisses it. Tests: `tests/doc-status.test.js`.
+
 ## Live palettes between tools
 
 Besides the library, tools can offer what is open right now. `S.registerPaletteSource({ id, label, get })` publishes a palette; `get()` returns `{ pal, fades, name }` or `null`. Here `pal` holds 16 PICO-8 colors and `fades` is `{ dark, bright }`, each fade table in the Palette & Fades format or `null`. `S.paletteSources()` lists the sources and `S.paletteSource(id)` reads one. Palette & Fades (`palette`) and Pixel Studio (`studio`) register theirs, and Terrain Lab uses them for its PICO-8 view.
