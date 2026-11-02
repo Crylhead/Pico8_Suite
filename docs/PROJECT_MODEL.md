@@ -60,7 +60,9 @@ The decoder expects a complete LZ stream. For an LZ-packed part, a ranged anchor
 
 Write Carts rewrites the source address, stored length and cart name, leaving the destination expression unchanged. The builder owns those three arguments, so an anchored line must use a literal source, length and (for a single part) a literal cart name. A computed one is reported and nothing is written, rather than being replaced by a fixed value. Anchors are comments and add no Lua tokens. Current validation checks the anchor syntax, missing refs, computed anchored arguments, unused-part warnings, raw/LZ call consistency and cart-set offsets; it is not a complete static verifier of arbitrary Lua.
 
-**Anchor syntax.** A line is anchored when it contains the marker `--@data` anywhere (not followed by a letter, digit or `_`). The whole payload after the marker is parsed:
+**Where anchors are found.** Anchors are discovered through the shared Lua lexer (the Code Editor's), consistently by Write Carts, the check, Adopt and asset renames. The marker `--@data` (not followed by a letter, digit or `_`) counts only inside a real `--` line comment of the cart's Lua. The same text inside a quoted string (including escaped quotes), a long string `[[…]]`/`[=[…]=]` of any level or a long comment `--[[…]]` is data, never an anchor, and is never rewritten. The anchored call is the single executable `reload()` on the comment's line; a `reload` inside a string or comment is not a call. A line with more than one executable `reload()`, or an anchored `reload()` spread over several lines, is rejected with its line and a reason instead of guessing which call is meant; nothing is written.
+
+**Anchor syntax.** The whole payload after the marker is parsed:
 
 ```
 --@data <asset>.<part>                  whole part
@@ -79,6 +81,15 @@ reload(0,0,0x4300,cartnames[i]) --@data skull_cartnames[]
 ```
 
 The builder rewrites the literal list and reload source/length. Auto-pack places each set part at offset zero in its own cart; other parts may fill remaining space. Manual layouts must keep set parts at a common offset.
+
+The anchored call's cart argument must be `name[index]`, and `name` must be proven to hold a literal list in the executable code (comments and strings never count as a binding):
+
+- exactly one assignment `name={…}` or `local name={…}`, whose table literal is the whole value (not `{…}..x`, not part of a longer expression);
+- every entry a plain quoted or long-bracket string without escapes, separated by `,` or `;` (comments between entries are allowed). `{"old.p8",other}`, `{"old.p8"..suffix}`, `{f()}`, keyed entries and an empty list are rejected;
+- every other use of `name` only reads it: `name[i]` (never assigned), `#name`, `all(name)`, `ipairs(name)`, `pairs(name)`, `count(name)`. Any other use (`name[1]="x"`, `add(name,…)`, `del(…)`, passing it to a function, a second assignment) is rejected;
+- a global `name` is rejected when the code uses `_ENV`/`_G` or has an `#include` that could change it; a local must be declared before the anchored call.
+
+A rejected list is reported with the file, the line and the reason; the list, the call and every cart it names stay unchanged and in place. When the list keeps its entry count, each entry string is replaced in place, keeping separators and comments; a list with comments whose length must change is rejected rather than rebuilt. Two set anchors that would rewrite the same list are rejected. Adopt applies the same rules.
 
 ### Segments and editing
 
@@ -102,14 +113,12 @@ Retirement candidates are carts the project wrote before, or adopted, that the n
 - References counted are the cart argument of `reload()` and `cstore()` (4th) and `load()` (1st), plus `#include` lines. The Lua is read with the shared lexer (the Code Editor's, also used by Project Audit), so comments, string contents and `#include` text inside strings or comments of any long-bracket level are not references, and calls may span lines. `run()` takes a parameter string, not a cart, so it is not counted. A name without an extension also matches `<name>.p8`.
 - Lua's call forms with a single string argument count like the parenthesized call: `load"old.p8"`, `load'old.p8'`, `load [[old.p8]]` and `load[==[old.p8]==]` keep `old.p8` as `load("old.p8")` does (and `load"old"` keeps `old.p8`). A long-bracket literal inside parentheses, `load([[old.p8]])`, is read as a literal too. `reload"x"`, `cstore{…}` and the like pass one argument, so they name no other cart.
 - Member calls (`obj.load"x"`, `obj:load("x")`) and definitions (`function load(…)`, `local load=…`, `load=…`) are not the PICO-8 function and are not counted.
-- Names are resolved as in adoption: literals, a variable assigned once to a literal, `"m"..i..".p8"` patterns and `list[i]` with a literal list.
+- A name counts as resolved only when the executable code proves it: a literal string, a variable with exactly one assignment whose value is itself resolved (no other write, no `_ENV`/`_G` or `#include` that could change a global), a concatenation `..` whose every fragment is resolved (a fragment of unknown value, such as `"m"..i..".p8"` or `name..".p8"` with `name` assigned twice, is **not** assumed to be a number), and `list[i]` with a proven literal list (see *Cart sets*: a list that is mutated, reassigned, passed to a function or has computed entries is not proven). Data Carts' palette/segment previews still use the approximate preview resolver and mark those reads *inferred*; it is never used for retirement or adoption.
 - A reference that cannot be resolved keeps **every** candidate in place and is listed. This covers a computed name, a variable assigned more than once, a string with escapes, `load{…}` (a table instead of a name), any other use of `load`, `reload` or `cstore` that is not a call (`local f=load`, `pcall(load,"x.p8")`: the cart it is later called with cannot be traced), and an `#include` that is neither a demo cart nor a top-level `.lua` file.
 - The Write confirmation lists the carts that will move, the carts that stay with the line that references them, and any unresolved references.
 - Carts that stay are no longer owned by the project afterwards. Their names are reserved, and later writes never overwrite or retire them.
 
-Partial adoption does not grant permission to retire a cart: a source cart is retired only when this check passes at write time. The scan is lexical, not a Lua evaluator: a local name that shadows `load` may still be treated as the PICO-8 function (conservatively retaining carts); member calls are excluded as described above. **Known gap [#41](https://github.com/Crylhead/Pico8_Suite/issues/41):** the shared preview resolver guesses that unknown concatenation fragments are numeric and treats initial literal tables as exhaustive even after mutation. Some computed names are therefore incorrectly classified as resolved and their actual targets can retire. The unresolved-reference policy above does not yet cover those cases.
-
-**Mutation parsing limits:** [#42](https://github.com/Crylhead/Pico8_Suite/issues/42) records cart-set list parsing that accepts computed elements or selects a commented-out binding; [#43](https://github.com/Crylhead/Pico8_Suite/issues/43) records line-based anchor discovery inside string/comment bodies. Whole anchor suffix validation is implemented, but does not close these lexical/binding gaps.
+Partial adoption does not grant permission to retire a cart: a source cart is retired only when this check passes at write time. The scan is lexical, not a Lua evaluator: a local name that shadows `load` may still be treated as the PICO-8 function (conservatively retaining carts); member calls are excluded as described above. Uncertainty never permits a move: a computed cart name with an unknown fragment keeps every candidate in place, even when the intended carts are obvious to a reader (for example `load("m"..i..".p8")`). Write such names as a literal list (`local ms={"m1.p8","m2.p8"} load(ms[i])`) to let unreferenced carts retire. Adoption traces the cart an unanchored line reads with the same rules; an unresolved one records no source cart as adopted.
 
 ### Recoverable writes
 
