@@ -38,6 +38,7 @@
 .ws-title { display: grid; align-items: center; margin-right: 4px; padding: 0 12px; background: var(--surface-3); border-radius: 6px; font-weight: 600; white-space: nowrap; }
 .ws-title span { grid-area: 1 / 1; visibility: hidden; }
 .ws-title span.on { visibility: visible; }
+:root[data-compact-nav] .ws-title { display: none; } /* Settings > Workspace bar: compact (#54) */
 .ws-tabs { max-width: 100%; overflow-x: auto; }
 .ws-tabs button { display: inline-flex; align-items: center; padding: 5px 8px; }
 .ws-tabs svg { width: 20px; height: 20px; flex: none; }
@@ -512,6 +513,9 @@ body[data-workspace="studio"] { height: 100vh; height: 100dvh; display: flex; fl
 .anchor-cell[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
 .dialog-form h3 { font-size: 13px; color: var(--muted); margin: 6px 0 4px; }
 .dialog-form .select { max-width: 100%; }
+.settings { min-width: min(420px, 100%); }
+.settings-row .hint { margin-top: 4px; }
+.settings-row .seg { flex-wrap: wrap; }
 
 @media (max-width: 1100px) {
   .layout-studio { grid-template-columns: 52px minmax(0, 1fr) 232px; }

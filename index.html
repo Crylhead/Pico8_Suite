@@ -321,6 +321,7 @@
         <button class="menu-btn" aria-haspopup="menu" aria-expanded="false">Help</button>
         <div class="menu-pop" role="menu">
           <button role="menuitem" data-action="docs">Documentation<kbd>F1</kbd></button>
+          <button role="menuitem" data-action="settings">Settings…</button>
           <hr>
           <button role="menuitem" data-action="about">About</button>
         </div>
@@ -348,7 +349,7 @@
           <div class="sys-grid" id="hiddenGrid"></div>
         </figure>
       </div>
-      <p class="hint">Drag a color onto a slot, or tap it to fill the selected (or next empty) slot.</p>
+      <p class="hint help-optional">Drag a color onto a slot, or tap it to fill the selected (or next empty) slot.</p>
     </section>
 
     <!-- Custom palette -->
@@ -398,7 +399,7 @@
       <div class="fade-body">
         <div class="ramp-wrap">
           <div class="ramp-editor" id="rampEditor" aria-label="Ramp editor: one row per palette color, 15 fade stops each"></div>
-          <p class="hint">Each row fades its base color through the stops toward the “Fade to” color. Drop palette colors onto stops; drag stops to swap them.</p>
+          <p class="hint help-optional">Each row fades its base color through the stops toward the “Fade to” color. Drop palette colors onto stops; drag stops to swap them.</p>
         </div>
 
         <div class="previews">
@@ -556,7 +557,7 @@
         <span><i style="background:#ff8800"></i>High (90–100%)</span>
         <span><i style="background:#ff0000"></i>Over (&gt;100%)</span>
       </p>
-      <p class="hint">Wheel or pinch to zoom, drag to pan (both views stay in sync). Click or right-click a tile to select it.</p>
+      <p class="hint help-optional">Wheel or pinch to zoom, drag to pan (both views stay in sync). Click or right-click a tile to select it.</p>
     </section>
 
     <section class="card tm-stats" aria-labelledby="tmStatsTitle">
@@ -1215,7 +1216,7 @@
       <button class="btn btn-sm" id="libraryExport" title="Download all assets as one JSON file">Backup</button>
       <button class="btn btn-sm" id="libraryRestore" title="Import a backup">Restore</button>
     </footer>
-    <p class="hint library-hint">Click an asset to open it in a tool. Drag it onto a canvas. Drop image files here to import.</p>
+    <p class="hint help-optional library-hint">Click an asset to open it in a tool. Drag it onto a canvas. Drop image files here to import.</p>
   </aside>
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
@@ -1251,6 +1252,7 @@
         <a href="#doc-tiles-export">Tile Maker exports</a>
         <a href="#doc-keys">Keyboard shortcuts</a>
         <a href="#doc-formats">File formats</a>
+        <a href="#doc-settings">Settings</a>
         <a href="#doc-web">Web version notes</a>
       </nav>
       <div class="docs-body">
@@ -1545,6 +1547,17 @@
           <li><code>config.json</code>: ramp presets, same format as the desktop app.</li>
         </ul>
 
+        <h3 id="doc-settings">Settings</h3>
+        <p><b>Help › Settings…</b> changes how the Suite looks and helps you. Changes apply immediately and are kept in this browser only (no account, identifiers or usage data). <b>Reset to defaults</b> restores everything, including the theme.</p>
+        <ul>
+          <li><b>Theme</b>: System, Light or Dark (same as the toolbar theme button).</li>
+          <li><b>Help detail</b>: <i>Off</i> hides optional explanatory hints, <i>Concise</i> (default) shows them, <i>Detailed</i> adds extra explanations where available. Labels, warnings, errors and confirmations are always shown.</li>
+          <li><b>Guided tours</b>: whether tours may offer themselves automatically (tours arrive in a later update).</li>
+          <li><b>Workspace bar</b>: <i>Compact</i> hides the active workspace name next to the tabs; each tab keeps its tooltip and accessible name.</li>
+          <li><b>Animation</b>: <i>Reduce</i> turns off interface transitions and pulsing indicators. A reduced-motion setting in your operating system is always respected.</li>
+        </ul>
+        <p>If the browser blocks storage (e.g. some private modes), Settings says so: your choices then apply until the page is reloaded.</p>
+
         <h3 id="doc-web">Web version notes</h3>
         <ul>
           <li>Everything runs locally in your browser; no files are uploaded.</li>
@@ -1556,6 +1569,7 @@
   </template>
 
   <script src="js/core.js"></script>
+  <script src="js/ux-prefs-core.js"></script>
   <script src="js/app.js"></script>
   <script src="js/suite.js"></script>
   <script src="js/doc-status-core.js"></script>

@@ -90,6 +90,8 @@ References: [MDN window error](https://developer.mozilla.org/en-US/docs/Web/API/
 
 **Shell baseline (#65):** [docs/ACCESSIBILITY.md](ACCESSIBILITY.md) documents the implemented radio-group, menu, dialog, toast and Enter/Space contract, the measured contrast and target sizes, canvas limitations with proposed non-drag follow-up issues, and the manual keyboard regression script.
 
+**Preferences (#54):** `js/ux-prefs-core.js` and **Help › Settings…** provide the versioned preference record (help detail, tour auto-offer, compact workspace bar, reduced motion) and the `.help-optional` / `.help-detailed` hooks that #60 tooltips and #61 tours must honour; see EXTENDING.md “UX preferences”.
+
 ## Performance and perceived smoothness
 
 Aim for **visible acknowledgement on the next animation frame** for normal controls and drags. As a reference threshold, web.dev calls INP <=200 ms good (field metric at p75; this does not imply every terrain rebuild must finish within 200 ms). Track sampled input-to-paint responsiveness and frame pacing locally during UX profiling, not via default remote telemetry. For sustained drag/brush/zoom interactions, minimize skipped frames at 60 Hz on an agreed test machine; define measured baselines before declaring a regression. Work in Workers for terrain/data transformations when possible, coalesce superseded jobs and expose “Preview” vs “Final” and stale state clearly. No fabricated progress percentages. See [web.dev INP](https://web.dev/articles/inp) and [optimize INP](https://web.dev/articles/optimize-inp/).
