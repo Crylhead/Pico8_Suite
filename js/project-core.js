@@ -110,7 +110,7 @@ const P8Project = (() => {
    * Lexical view of one cart's Lua: every token (toks) and the significant ones (sig, no whitespace,
    * comments or #include lines) with, per significant token, the bracket depth, the innermost
    * enclosing bracket or block (top: '(' '[' '{' or 'block'), the innermost block (block: sig index of
-   * its function/do/then/repeat, -1 at the top level; blockEnd(i): sig index of its end/until), whether
+   * its function/do/repeat or if branch (then/elseif/else), -1 at the top level; blockEnd(i): sig index of its end/until), whether
    * it is in a declaration list (local a,b / for a,b) or a function's parameter list. PICO-8's
    * shorthand `if (c) x` / `while (c) x` (no then/do on its line) is `if c then x end`: a block that
    * ends with its line (or, if a bracket opened on the line is still open, once that closes).
@@ -155,8 +155,12 @@ const P8Project = (() => {
         if ('([{'.includes(s)) { stack.push({ kind: s, k }); depth++; } else close(false, k);
       }
       if (tk.t === 'keyword') {
-        if (s === 'elseif') elseif = true;
-        else if (s === 'then') { if (!elseif) stack.push({ kind: 'block', k }); elseif = false; }
+        if (s === 'elseif' || s === 'else') {
+          // every branch is its own scope: close the branch before it and open the next one here
+          const top = stack[stack.length - 1];
+          if (top && top.kind === 'block') { stack.pop(); ends.set(top.k, k); stack.push({ kind: 'block', k, line: top.line }); }
+          if (s === 'elseif') elseif = true;
+        } else if (s === 'then') { if (!elseif) stack.push({ kind: 'block', k }); elseif = false; }
         else if (['function', 'do', 'repeat'].includes(s)) stack.push({ kind: 'block', k });
         else if (s === 'end' || s === 'until') close(true, k);
         else if ((s === 'if' || s === 'while') && src(sig[k + 1]) === '(') {

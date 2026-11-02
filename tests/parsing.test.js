@@ -247,3 +247,20 @@ t('#41 targets that start with a call or parentheses, and locals of shorthand if
     assert.deepStrictEqual([r.retire, r.unresolved], [['b.p8'], []], lua);
   }
 });
+
+t('#41 a local of one if branch does not prove a use in its else/elseif branch', () => {
+  const lib = { name: 'lib.lua', text: 'c="b.p8"\ncs={"b.p8"}\n' };
+  const run = (lua) => P.retirement(['a.p8', 'b.p8'], [{ name: 'fx.p8', text: `__lua__\n#include lib.lua\n${lua}\n` }, lib]);
+  for (const lua of ['if x then\n local c="a.p8"\nelse\n reload(0,0,0x100,c)\nend', 'if x then\n local c="a.p8"\nelseif y then\n reload(0,0,0x100,c)\nend',
+    'if x then local c="a.p8" else reload(0,0,0x100,c) end', 'if x then\n local cs={"a.p8"}\nelse\n reload(0,0,0x100,cs[1])\nend',
+    'if (x) local c="a.p8" else reload(0,0,0x100,c)']) {
+    const r = run(lua);
+    assert.deepStrictEqual(r.retire, [], lua);
+    assert.match(r.unresolved[0].why, /outside the block/, lua);
+  }
+  const ok = (lua) => P.retirement(['a.p8', 'b.p8'], [{ name: 'fx.p8', text: `__lua__\n${lua}\n` }]);
+  for (const lua of ['if x then\n y=1\nelseif z then\n local c="a.p8"\n reload(0,0,0x100,c)\nelse\n w=1\nend', 'local c="a.p8"\nif x then y=1 else z=1 end\nreload(0,0,0x100,c)']) {
+    const r = ok(lua);
+    assert.deepStrictEqual([r.retire, r.unresolved], [['b.p8'], []], lua);
+  }
+});
