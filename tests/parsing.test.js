@@ -240,6 +240,7 @@ t('#41 targets that start with a call or parentheses, and locals of shorthand if
   keep('_ENV.c="b.p8"\nwhile (false) local c="a.p8"\nreload(0,0,0x100,c)', /outside the block/);
   keep('#include lib.lua\nif (true) local cs={"a.p8"}\nreload(0,0,0x100,cs[1])', /outside the block/);
   keep('#include lib.lua\nfunction f() if (x) y=1 end local c="a.p8" end\nreload(0,0,0x100,c)', /block is unclear/);
+  keep('add(objs,function() local cs={"a.p8","b.p8"} reload(0,0,0x10,cs[i]) end)', /inside a function within a table or call/);
 
   for (const lua of ['if (x) local c="a.p8" reload(0,0,0x100,c)', 'local c="a.p8"\nx,y=c,f().z\nreload(0,0,0x100,c)',
     'function f() if (x) return end end\nlocal c="a.p8"\nif (x) then\n y=1\nend\nreload(0,0,0x100,c)']) {
