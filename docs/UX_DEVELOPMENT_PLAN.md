@@ -55,6 +55,8 @@ Adopt exact language across workspaces:
 - **Conflict / failed / recovery required:** persistent actionable state, including a route to resolve; never a success toast.
 - **Analyzing / preview / finalizing:** provisional results may be shown without claiming they are final.
 
+**Shared contract (#58):** `js/doc-status-core.js` (`P8DocStatus`) implements these states with document identity, revision-bound save tickets and persistent errors; the Map Editor is the pilot adapter. Adapter guidance for other tools is in [EXTENDING.md](../EXTENDING.md#document-save-status).
+
 Modal confirmations must specify the affected files/assets and consequences, avoid vague “OK” on destructive actions, and handle cancel/permission failure/retries without losing dirty state.
 
 ## Documentation, tooltips and onboarding contract

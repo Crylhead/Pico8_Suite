@@ -58,6 +58,7 @@ The app can be hosted on a static server for the browser tools. A remote host do
 - `js/map-core.js`, `js/map.js`: Map Editor (pure logic / UI)
 - `js/code-core.js`, `js/code.js`: Code Editor (pure logic / UI)
 - `js/datatools.js`: Data Tools
+- `js/doc-status-core.js`: shared save / operation status contract and status badge (`P8DocStatus`; Map Editor uses it, see EXTENDING.md)
 - `js/audit-core.js`, `js/audit.js`: Project Audit (pure logic / UI)
 - `js/extras-core.js`, `js/extras.js`: Extra Tools (pure logic / UI)
 - `js/terrain-core.js`, `js/terrain.js`: Terrain Lab engine (runs in two Web Workers and in Node) / UI, a tab of Extra Tools
