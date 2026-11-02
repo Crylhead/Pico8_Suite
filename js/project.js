@@ -161,13 +161,14 @@
     const r = await P.recover(projectDirs(), {
       confirmRollback: ({ reason, files }) => confirmDialog('Interrupted write', reason === 'mixed'
         ? `An earlier write was recorded as finished (${j}), but these files now hold neither its new contents nor their originals:\n${files.join('\n')}\n\nRestore every file that write changed (and the carts it moved to unused/) to the state before it? Otherwise the files stay as they are and Cart Builder writes nothing.`
-        : `An earlier write did not finish (${j}). Restore the files it changed to their state before that write? Until then Cart Builder writes nothing.`, 'Restore'),
+        : `An earlier write did not finish (${j}). Restore the files it changed, and the carts it moved to unused/, to their state before that write? Until then Cart Builder writes nothing.`, 'Restore'),
     });
     if (!r) return;
     if (r.outcome === 'busy') { pj.journalPending = true; showMessage('Interrupted write', `${j} is there, but ${r.problems[0]} Reopen the project when it has finished.`); return; }
     if (r.outcome === 'declined') { pj.journalPending = true; return; }
     if (r.problems.length) { pj.journalPending = true; showMessage('Interrupted write', `Could not finish the recovery; ${j} stays and keeps the original contents:\n${r.problems.join('\n')}`); return; }
-    toast(r.outcome === 'new' ? `Finished an earlier write (${r.retired.length} carts moved to unused/).` : 'Restored the files of an interrupted write.', 'info', 4000);
+    if (r.notes.length) showMessage('Interrupted write', `Finished an earlier write. Some old carts stay where they are:\n${r.notes.join('\n')}`);
+    else toast(r.outcome === 'new' ? `Finished an earlier write (${r.retired.length} carts moved to unused/).` : 'Restored the files and carts of an interrupted write.', 'info', 4000);
   }
 
   // ------------------------------------------------------------------ //
@@ -350,7 +351,12 @@
     const finalTexts = new Map([...pj.texts, ...Object.entries(texts), ...rewrites.map((r) => [r.name, r.text])]);
     const files = [...finalTexts].map(([name, text]) => ({ name, text }));
     for await (const [name, h] of pj.demo.entries()) if (h.kind === 'file' && /\.lua$/i.test(name)) files.push({ name, text: await (await h.getFile()).text() });
-    const { retire, kept, unresolved } = P.retirement(candidates, files);
+    const analysis = P.retirement(candidates, files);
+    const { kept, unresolved } = analysis;
+    // a cart this write rewrites is not also moved (one write, one original per file)
+    const rewritten = new Set(rewrites.map((r) => r.name.toLowerCase()));
+    const retire = analysis.retire.filter((n) => !rewritten.has(n.toLowerCase()));
+    for (const n of analysis.retire) if (rewritten.has(n.toLowerCase())) kept.push({ cart: n, by: 'its anchors are rewritten by this write' });
     const unusedDir = inDemo('unused/');
     const keptNote = kept.length ? `\n\nStays in place because it is still referenced:\n${kept.map((k) => `${k.cart} (${k.by})`).join('\n')}` : '';
     const unresolvedNote = unresolved.length ? `\n\nReferences that cannot be resolved, so no cart is moved:\n${unresolved.map((u) => `${u.file}:${u.line} ${u.call} (${u.why})`).join('\n')}` : '';
