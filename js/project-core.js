@@ -108,8 +108,11 @@ const P8Project = (() => {
 
   /**
    * Lexical view of one cart's Lua: every token (toks) and the significant ones (sig, no whitespace,
-   * comments or #include lines) with, per significant token, the bracket depth, whether it is in a
-   * declaration list (local a,b / for a,b) or a function's parameter list.
+   * comments or #include lines) with, per significant token, the bracket depth, the innermost
+   * enclosing bracket or block (top: '(' '[' '{' or 'block'), the innermost block (block: sig index of
+   * its function/do/then/repeat, -1 at the top level; blockEnd(i): sig index of its end/until), whether
+   * it is in a declaration list (local a,b / for a,b) or a function's parameter list. PICO-8's
+   * shorthand `if (c) x` / `while (c) x` opens no block (no then/do).
    */
   function luaContext(text) {
     const { code, at, firstLine } = luaOf(text);
@@ -124,14 +127,34 @@ const P8Project = (() => {
     /** code offset -> 0-based line of the whole text */
     const lineOf = (off) => { let lo = 0; let hi = nl.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (nl[mid] < off) lo = mid + 1; else hi = mid; } return firstLine + lo; };
     const info = [];
-    const stack = [];
+    const stack = []; // {kind: '(' '[' '{' | 'block', k}
+    const ends = new Map();
+    let depth = 0;
     let decl = false;
     let paramEnd = -1;
+    let elseif = false;
+    const close = (block, k) => {
+      while (stack.length) {
+        const top = stack.pop();
+        if (top.kind === 'block') { if (block) { ends.set(top.k, k); return; } ends.set(top.k, k); } else { depth--; if (!block) return; }
+      }
+    };
     sig.forEach((tk, k) => {
       const s = src(tk);
       if (decl && !(NAME.has(tk.t) || s === ',')) decl = false;
-      info.push({ depth: stack.length, top: stack[stack.length - 1] || null, decl, param: tk.s < paramEnd });
-      if (tk.t === 'bracket') { if ('([{'.includes(s)) stack.push(s); else stack.pop(); }
+      const top = stack[stack.length - 1];
+      let block = -1;
+      for (let i = stack.length - 1; i >= 0; i--) if (stack[i].kind === 'block') { block = stack[i].k; break; }
+      info.push({ depth, top: top ? top.kind : null, block, decl, param: tk.s < paramEnd });
+      if (tk.t === 'bracket') {
+        if ('([{'.includes(s)) { stack.push({ kind: s, k }); depth++; } else close(false, k);
+      }
+      if (tk.t === 'keyword') {
+        if (s === 'elseif') elseif = true;
+        else if (s === 'then') { if (!elseif) stack.push({ kind: 'block', k }); elseif = false; }
+        else if (['function', 'do', 'repeat'].includes(s)) stack.push({ kind: 'block', k });
+        else if (s === 'end' || s === 'until') close(true, k);
+      }
       if (tk.t === 'keyword' && (s === 'local' || s === 'for')) decl = src(sig[k + 1]) !== 'function';
       if (tk.t === 'keyword' && s === 'function') {
         let j = k + 1;
@@ -140,8 +163,9 @@ const P8Project = (() => {
         if (close >= 0) paramEnd = Math.max(paramEnd, sig[close].s);
       }
     });
+    const blockEnd = (b) => (b < 0 || !ends.has(b) ? sig.length : ends.get(b));
     return {
-      text, code, at, firstLine, toks, sig, src, partner, lineOf, info,
+      text, code, at, firstLine, toks, sig, src, partner, lineOf, info, blockEnd,
       env: sig.some((tk) => NAME.has(tk.t) && (src(tk) === '_ENV' || src(tk) === '_G')),
       includes: toks.filter((tk) => tk.t === 'include'),
     };
@@ -203,13 +227,34 @@ const P8Project = (() => {
     return tk.t === 'op' && s !== ';' && s !== '?';
   }
 
+  /** whether sig[j] (a ",") continues a list of assignment targets: `, a.b, c[i] =` */
+  function targetsFollow(ctx, j) {
+    const { sig, src } = ctx;
+    let i = j;
+    while (src(sig[i]) === ',') {
+      i++;
+      if (!sig[i] || !(NAME.has(sig[i].t) || sig[i].t === 'self')) return false;
+      i++;
+      for (;;) {
+        const s = src(sig[i]);
+        if ((s === '.' || s === ':') && sig[i + 1] && NAME.has(sig[i + 1].t)) i += 2;
+        else if (s === '[' && ctx.partner(i) > i) i = ctx.partner(i) + 1;
+        else break;
+      }
+    }
+    return src(sig[i]) === '=';
+  }
+
   /**
    * The one binding of `name` that the executable code allows to be trusted, or why there is none.
    * Every token `name` that is not a field (a.name), a table key ({name=...}) or the binding itself
    * must be a read: a second assignment, a compound assignment, a declaration (parameter, loop
    * variable, local without the value), a multiple assignment, an #include the binding is visible to
-   * or _ENV/_G for a global make it unprovable. kind 'list' also allows only cs[...] (never assigned),
-   * #cs and all/ipairs/pairs/count(cs): any other use may hand the table to code that changes it.
+   * or _ENV/_G for a global make it unprovable; a local proves only uses inside its own block, after it.
+   * A name followed by "," outside brackets may be a target of a multiple assignment (also inside a
+   * function body that sits in a table or call). kind 'list' also allows only cs[...] (never assigned,
+   * also not as `cs[i],x=`), #cs and all/ipairs/pairs/count(cs): any other use may hand the table to
+   * code that changes it.
    * -> {k (sig index of the name), rhs (sig index after "="), local} | {why}
    */
   function bindingOf(ctx, name, kind, useAt) {
@@ -226,17 +271,20 @@ const P8Project = (() => {
       const local = prev === 'local' && next === '=';
       if (info[k].param || prev === 'function' || (info[k].decl && !local)) { other.push([k, 'is declared again (parameter, loop variable or local without a value)']); continue; }
       if (next === '=') {
-        if (prev === ',' || info[k].depth > 0) other.push([k, 'is assigned in a multiple assignment']);
+        if (prev === ',') other.push([k, 'is assigned in a multiple assignment']);
+        else if (info[k].depth > 0) other.push([k, 'is assigned inside a function within a table or call']);
         else defs.push({ k, local, rhs: k + 2 });
         continue;
       }
+      const inBrackets = ['(', '[', '{'].includes(info[k].top);
       if (isAssign(next)) { other.push([k, `is changed with ${next}`]); continue; }
-      if (next === ',' && info[k].depth === 0) { other.push([k, 'may be assigned in a multiple assignment']); continue; }
+      if (next === ',' && !inBrackets && targetsFollow(ctx, k + 1)) { other.push([k, 'is assigned in a multiple assignment']); continue; }
       if (kind !== 'list') continue; // a string cannot be changed through a read
       if (next === '[') {
         const close = ctx.partner(k + 1);
         if (close < 0) other.push([k, 'is indexed without a closing ]']);
         else if (isAssign(src(sig[close + 1]))) other.push([k, `has an entry replaced (${ctx.code.slice(tk.s, sig[close + 1].e)})`]);
+        else if (src(sig[close + 1]) === ',' && !inBrackets && targetsFollow(ctx, close + 1)) other.push([k, `has an entry replaced in a multiple assignment (${ctx.code.slice(tk.s, sig[close + 1].e)})`]);
         continue;
       }
       if (prev === '#') continue;
@@ -253,6 +301,7 @@ const P8Project = (() => {
     const inc = ctx.includes.find((i) => !d.local || i.s > sig[d.k].s);
     if (inc) return { why: `#include at line ${ctx.lineOf(inc.s) + 1} brings code that may change ${name}` };
     if (d.local && useAt != null && useAt < sig[d.k].s) return { why: `${name} is used before its local declaration (${at(d.k)})` };
+    if (d.local && useAt != null && sig[ctx.blockEnd(info[d.k].block)] && useAt >= sig[ctx.blockEnd(info[d.k].block)].s) return { why: `${name} is used outside the block of its local declaration (${at(d.k)}), where another ${name} applies` };
     return d;
   }
 
@@ -933,12 +982,23 @@ const P8Project = (() => {
   function cartCalls(ctx) {
     const { sig, src, code } = ctx;
     const out = [];
+    const member = (k) => ['.', ':'].includes(src(sig[k - 1]));
+    const globals = (k) => NAME.has(sig[k]?.t) && ['_ENV', '_G'].includes(src(sig[k])) && !member(k);
     sig.forEach((tk, k) => {
       const name = src(tk);
+      // the globals table itself: indexed or handed on, it can reach load/reload/cstore by any name
+      if (globals(k)) {
+        const next = src(sig[k + 1]);
+        const keyed = next === '[' && ctx.partner(k + 1) === k + 3 && sig[k + 2].t === 'string' && !(plainString(src(sig[k + 2])) in CART_ARG) && plainString(src(sig[k + 2])) != null;
+        if (next === '.' || keyed || (next === '=' && !['(', '[', '{'].includes(ctx.info[k].top) && !['.', ','].includes(src(sig[k - 1])))) return;
+        out.push({ at: tk.s, text: code.slice(tk.s, (sig[k + 1] || tk).e), why: `${name} (the globals table) is ${next === '[' ? 'indexed' : 'used as a value'} here, so load/reload/cstore may be called through it` });
+        return;
+      }
       if (!(name in CART_ARG) || !['api', 'ident'].includes(tk.t)) return;
       const prev = src(sig[k - 1]);
       const next = sig[k + 1];
-      if (prev === '.' || prev === ':' || prev === 'function' || prev === 'local' || src(next) === '=') return;
+      // _ENV.load / _G.reload are the PICO-8 functions; other members are not
+      if ((prev === '.' && !globals(k - 2)) || prev === ':' || prev === 'function' || prev === 'local' || src(next) === '=') return;
       const ref = (end, more) => out.push({ at: tk.s, text: code.slice(tk.s, end).replace(/\s+/g, ' '), ...more });
       if (src(next) === '(') {
         const call = callAt(ctx, k);
