@@ -45,7 +45,7 @@ t('#34 rewrite and check reject malformed anchors line by line; valid lines in t
   assert.match(out[6], /^reload\(0,0x0100,0x000a,"d0\.p8"\)/);
   assert.match(out[7], /^reload\(0,0x015a,0x000a,"d0\.p8"\)/);
   assert.match(out[8], /^reload\(0,0x0110,0x000a,"d0\.p8"\) --@data x\.bin\+0x10 -- slice$/);
-  assert.strictEqual(out[9], 'local cs={"d1.p8", "d2.p8"}');
+  assert.strictEqual(out[9], 'local cs={"d1.p8","d2.p8"}', 'entries are replaced in place (#42)');
   assert.match(out[10], /^reload\(0,0x0000,0x4300,cs\[i\]\)/);
   const parts = [{ ref: 'x.bin', bytes: new Uint8Array(100), lz: false }];
   const chk = P.checkAnchors([{ name: 'fx.p8', text: [...bad, ...good.slice(0, 4)].join('\n') }], parts);
