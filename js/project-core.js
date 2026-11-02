@@ -739,7 +739,8 @@ const P8Project = (() => {
   // ------------------------------------------------------------------ //
 
   const JOURNAL = 'suite.journal.json';
-  const JOURNAL_FORMAT = 2;
+  // 3: retire entries record what both locations held before the write (#40)
+  const JOURNAL_FORMAT = 3;
   const LOCK_NAME = 'pico8-suite.cartbuilder.write';
 
   class WriteError extends Error {
@@ -840,7 +841,9 @@ const P8Project = (() => {
   /**
    * Writes several files so that a failure part-way leaves the folder as it was.
    *   writes: [{dir, name, text | null (remove), stage}] in order; the last one (the manifest) commits
-   *   retire: [{from, to, name}] moved only after the commit: copied, read back, then removed
+   *   retire: [{from, to, name}] moved only after the commit: copied, read back, then removed. What both
+   *           locations hold is read in the preflight and kept in the journal, so a rollback (also a
+   *           repeated or interrupted one) can put each cart back and recovery can verify it (#40)
    *   checks: [{dir, name, expect}] files the result depends on; with writes[].expect they must still read
    *           as expected (null: absent), otherwise nothing is written (WriteError stage 'conflict')
    * The whole call holds the project lock (createLock); a second writer or a recovery meanwhile gets
@@ -863,19 +866,34 @@ const P8Project = (() => {
     const jdir = await dir(journalDir);
     const jlabel = `${journalDir}/${JOURNAL}`;
     const before = [];
+    const retireBefore = [];
     const conflicts = [];
+    let reading = { dir: journalDir, name: JOURNAL };
     try {
       if ((await readOrNull(jdir, JOURNAL)) !== null) throw new Error(`an earlier write left ${JOURNAL}; reopen the project to recover it first`);
       for (const w of writes) {
+        reading = w;
         before.push(await readOrNull(await dir(w.dir), w.name));
         if ('expect' in w && before[before.length - 1] !== w.expect) conflicts.push(label(w));
       }
-      for (const c of checks) if ((await readOrNull(await dir(c.dir), c.name)) !== c.expect) conflicts.push(label(c));
+      for (const c of checks) { reading = c; if ((await readOrNull(await dir(c.dir), c.name)) !== c.expect) conflicts.push(label(c)); }
+      for (const r of retire) {
+        reading = { dir: r.from, name: r.name };
+        // a cart that is written and retired would have two originals: never planned by Cart Builder
+        if (writes.some((w) => (w.dir === r.from || w.dir === r.to) && w.name === r.name)) throw new Error(`${r.from}/${r.name} is both written and retired`);
+        const b = await readOrNull(await dir(r.from), r.name);
+        reading = { dir: r.to, name: r.name };
+        retireBefore.push({ before: b, toBefore: await readOrNull(await dir(r.to), r.name) });
+      }
     } catch (e) {
-      throw new WriteError(`Preflight failed, nothing was written: ${e.message}`, { stage: 'preflight', file: label(writes[before.length] || { dir: journalDir, name: JOURNAL }), restored: true, journalKept: false, cause: e });
+      throw new WriteError(`Preflight failed, nothing was written: ${e.message}`, { stage: 'preflight', file: label(reading), restored: true, journalKept: false, cause: e });
     }
     if (conflicts.length) throw new WriteError(`Changed on disk since the project was read: ${conflicts.join(', ')}. Nothing was written.`, { stage: 'conflict', file: conflicts[0], conflicts, restored: true, journalKept: false });
-    const journal = { format: JOURNAL_FORMAT, id, started: now(), state: 'writing', writes: writes.map((w, i) => ({ dir: w.dir, name: w.name, before: before[i], after: digest(w.text) })), retire };
+    const journal = {
+      format: JOURNAL_FORMAT, id, started: now(), state: 'writing',
+      writes: writes.map((w, i) => ({ dir: w.dir, name: w.name, before: before[i], after: digest(w.text) })),
+      retire: retire.map((r, i) => ({ from: r.from, to: r.to, name: r.name, ...retireBefore[i] })),
+    };
     const mine = new Set(); // every journal text this transaction wrote or tried to write
     const putJournal = (state) => { const text = JSON.stringify({ ...journal, state }); mine.add(text); return put(jdir, JOURNAL, text); };
     const lostMsg = `${jlabel} is no longer this write's journal (another tab removed or took it over, e.g. to recover it)`;
@@ -945,52 +963,124 @@ const P8Project = (() => {
       }
       throw await rollback(e, { dir: journalDir, name: JOURNAL, stage: 'commit' }, writes.length);
     }
-    const { retired, errors: retireErrors } = await retireAll(dir, retire);
-    return { retired, retireErrors, journalKept: await dropJournal(jdir, mine) };
+    // without Web Locks another tab may have taken the journal over: then no cart moves any more
+    const guard = async () => { if (!(await journalOwner(jdir, mine)).ours) throw new Error(lostMsg); };
+    const { retired, errors, kept } = await retireAll(dir, journal.retire, guard);
+    return { retired, retireErrors: [...errors, ...kept], journalKept: await dropJournal(jdir, mine) };
   }
 
-  async function restore(dir, entries) {
+  /** puts files back to their originals (those that already hold them are left alone) -> problems */
+  async function restore(dir, entries, guard = async () => {}) {
     const problems = [];
     for (const w of entries.slice().reverse()) {
-      try { await put(await dir(w.dir, w.before !== null), w.name, w.before); } catch (e) {
-        if (w.before === null && !(await dir(w.dir))) continue; // the directory never existed
+      try {
+        if ((await readOrNull(await dir(w.dir), w.name)) === w.before) continue;
+        await guard();
+        await put(await dir(w.dir, w.before !== null), w.name, w.before);
+      } catch (e) {
+        if (w.before === null && !(await dir(w.dir).catch(() => true))) continue; // the directory never existed
         problems.push(`${w.dir}/${w.name}: ${e.message}`);
       }
     }
     return problems;
   }
 
-  /** after the commit: copy, read back, remove the original. A failure leaves the original in place. */
-  async function retireAll(dir, retire) {
-    const retired = [];
-    const errors = [];
+  /**
+   * Where one retired cart stands, judged against what the journal recorded before the write
+   * (r.before: the cart in r.from, null = there was none; r.toBefore: what r.to held). An empty file
+   * where the original had contents is the residue of a create that never closed.
+   * -> {state, ours}; ours: r.to holds this write's copy (or its residue) instead of r.toBefore
+   *   'none'    no cart was there to retire           'old'     the cart in r.from, r.to as it was
+   *   'copied'  the cart in r.from and its copy in r.to 'moved'   only the copy in r.to
+   *   'lost'    in neither place (the journal keeps it) 'changed' r.from holds other contents
+   */
+  async function retireState(dir, r) {
+    const from = await readOrNull(await dir(r.from), r.name);
+    const to = await readOrNull(await dir(r.to), r.name);
+    if (r.before === null) return { state: 'none', ours: false };
+    const ours = to !== r.toBefore && (to === r.before || (to === '' && r.toBefore === null));
+    // an empty residue in r.to is not a copy yet: the cart is still only 'old' (with ours set)
+    if (from === r.before) return { state: ours && to === r.before ? 'copied' : 'old', ours };
+    if (from === null || from === '') return { state: to === r.before ? 'moved' : 'lost', ours };
+    return { state: 'changed', ours };
+  }
+  const retireOld = (s) => s.state === 'none' || (s.state === 'old' && !s.ours);
+
+  /**
+   * Journals written before format 3 do not record what the retire locations held. Their obligation is
+   * reconstructed from the folder: a cart found only in r.to is taken as moved by that write.
+   */
+  async function upgradeRetire(dir, retire) {
+    const out = [];
     for (const r of retire) {
-      try {
-        const from = await dir(r.from);
-        const text = await readOrNull(from, r.name);
-        if (text === null) continue;
-        const to = await dir(r.to, true);
-        if ((await readOrNull(to, r.name)) !== text) await put(to, r.name, text);
-        await from.removeEntry(r.name);
-        retired.push(r.name);
-      } catch (e) { errors.push(`${r.name}: ${e.message}`); }
+      if ('before' in r && 'toBefore' in r) { out.push(r); continue; }
+      const from = await readOrNull(await dir(r.from), r.name);
+      const to = await readOrNull(await dir(r.to), r.name);
+      out.push((from === null || from === '') && to !== null ? { ...r, before: to, toBefore: null } : { ...r, before: from, toBefore: to });
     }
-    return { retired, errors };
+    return out;
   }
 
-  /** undoes retireAll(): a cart that is only in `to` goes back to `from` -> problems */
-  async function unretireAll(dir, retire) {
-    const problems = [];
+  /**
+   * After the commit: copy, read back, remove the original; resumable from any state retireState() names.
+   * guard() runs before every change and throws when the journal is no longer this operation's.
+   * -> {retired, errors (failed: may succeed when retried), kept (left in place on purpose)}
+   */
+  async function retireAll(dir, retire, guard = async () => {}) {
+    const retired = [];
+    const errors = [];
+    const kept = [];
     for (const r of retire) {
+      const at = `${r.from}/${r.name}`;
+      let s;
       try {
-        const to = await dir(r.to);
-        const text = await readOrNull(to, r.name);
-        if (text === null) continue;
-        const from = await dir(r.from, true);
-        const there = await readOrNull(from, r.name);
-        if (there !== null && there !== text) throw new Error(`${r.from}/${r.name} exists with other contents`);
-        if (there === null) await put(from, r.name, text);
-        await put(to, r.name, null);
+        s = await retireState(dir, r);
+        if (s.state === 'none' || s.state === 'moved') continue;
+        if (s.state === 'changed') {
+          kept.push(`${at} changed after the write started; it stays in place`);
+          if (s.ours) { await guard(); await put(await dir(r.to), r.name, r.toBefore); }
+          continue;
+        }
+        if (s.state === 'lost') {
+          // only the journal still has the cart: the new revision keeps it in r.to, never over another file
+          const to = await readOrNull(await dir(r.to), r.name);
+          if (to !== null && !s.ours) throw new Error(`it is gone from ${r.from}/ and ${r.to}/${r.name} holds other contents; ${JOURNAL} keeps the cart`);
+          await guard();
+          await put(await dir(r.to, true), r.name, r.before);
+          retired.push(r.name);
+          continue;
+        }
+        if (s.state === 'old') {
+          const to = await readOrNull(await dir(r.to), r.name);
+          if (to !== null && to !== r.before && !s.ours) { kept.push(`${at} stays in place: ${r.to}/${r.name} already exists with other contents`); continue; }
+          if (to !== r.before) { await guard(); await put(await dir(r.to, true), r.name, r.before); }
+        }
+        await guard();
+        if ((await readOrNull(await dir(r.from), r.name)) !== r.before) throw new Error('changed while it was being moved');
+        await put(await dir(r.from), r.name, null);
+        retired.push(r.name);
+      } catch (e) {
+        errors.push(`${r.name}: ${e.message}; it stays in place`);
+        // best effort: no half-made copy stays next to a cart that did not move
+        try { if ((await readOrNull(await dir(r.from), r.name)) === r.before && (await retireState(dir, r)).ours) { await guard(); await put(await dir(r.to), r.name, r.toBefore); } } catch { /* reported above */ }
+      }
+    }
+    return { retired, errors, kept };
+  }
+
+  /** undoes retireAll(): every cart back in r.from, r.to as it was before the write -> problems */
+  async function unretireAll(dir, retire, guard = async () => {}) {
+    const problems = [];
+    for (const r of retire.slice().reverse()) {
+      try {
+        const s = await retireState(dir, r);
+        if (retireOld(s)) continue;
+        if (s.state === 'changed') {
+          problems.push(`${r.from}/${r.name} now holds other contents than the cart the write moved; it was left as it is${s.ours ? ` and the moved cart stays in ${r.to}/${r.name}` : ''}. ${JOURNAL} keeps the original; move the other file away and reopen the project`);
+          continue;
+        }
+        if (s.state === 'moved' || s.state === 'lost') { await guard(); await put(await dir(r.from, true), r.name, r.before); }
+        if (s.ours) { await guard(); await put(await dir(r.to), r.name, r.toBefore); }
       } catch (e) { problems.push(`${r.from}/${r.name}: ${e.message}`); }
     }
     return problems;
@@ -998,24 +1088,31 @@ const P8Project = (() => {
 
   /**
    * An interrupted transact() left its journal. Holds the same lock as transact() and decides from
-   * what the files hold now, not from the marker alone:
-   *   'committed' and every file holds the new contents -> finish the retirement      (outcome 'new')
-   *   every file holds its original contents              -> nothing to restore/retire (outcome 'old')
-   *   'writing' / 'rolling-back' otherwise                -> restore the originals     (outcome 'old')
-   *   'committed' but neither revision (mixed)            -> touch nothing, report     (outcome 'unresolved')
-   *   an empty journal (created, never closed)            -> no file was touched       (outcome 'old')
-   * Restoring a mixed committed folder (only after confirmRollback) also moves retired carts back.
+   * what the files hold now, not from the marker alone. "Files" are the written files and both
+   * locations of every cart the write retires; the journal records the original of each (#40).
+   *   'committed' and every written file holds its new contents -> finish the retirement (outcome 'new')
+   *   every written file and every retired cart is as before   -> nothing to undo       (outcome 'old')
+   *   'writing' / 'rolling-back' otherwise                      -> restore the originals and move retired
+   *                                                                carts back           (outcome 'old')
+   *   'committed' but neither revision (mixed)                  -> touch nothing, report (outcome 'unresolved')
+   *   an empty journal (created, never closed)                  -> no file was touched   (outcome 'old')
+   * Every step is resumable: a rollback that fails or is interrupted part-way (also while moving carts
+   * back) leaves a 'rolling-back' journal that still holds every original, and the next recovery
+   * finishes it. A file that holds something else than either the original or this write's result
+   * (a different cart where a retired one belongs) is never overwritten: it is reported and the
+   * journal stays.
    * confirmRollback({state, reason: 'rollback' | 'mixed', files}) -> bool is asked before restoring;
    * without it a rollback proceeds and a mixed folder is left alone. Declining -> outcome 'declined'.
-   * The journal is removed only when the folder verifiably holds one revision and the journal is still
-   * the one read here; otherwise it stays with the originals (outcome 'unresolved', problems).
-   * -> null (no journal) | {state, outcome: 'new'|'old'|'declined'|'unresolved'|'busy', problems, retired, mixed}
+   * The journal is removed only after the folder was read back as one complete revision and the
+   * journal is still the one this recovery wrote or read; otherwise it stays (outcome 'unresolved', problems).
+   * `notes` lists carts a finished write left in place on purpose (they are not problems).
+   * -> null (no journal) | {state, outcome: 'new'|'old'|'declined'|'unresolved'|'busy', problems, retired, mixed, notes}
    */
   async function recover(dirs, opts = {}) {
     try {
       return await (opts.lock || pageLock).run(() => recoverLocked(dirs, opts));
     } catch (e) {
-      if (e instanceof WriteError && e.stage === 'busy') return { state: 'busy', outcome: 'busy', problems: [e.message], retired: [], mixed: [] };
+      if (e instanceof WriteError && e.stage === 'busy') return { state: 'busy', outcome: 'busy', problems: [e.message], retired: [], mixed: [], notes: [] };
       throw e;
     }
   }
@@ -1025,7 +1122,7 @@ const P8Project = (() => {
     const jdir = await dir(journalDir);
     let jtext = await readOrNull(jdir, JOURNAL);
     if (jtext === null) return null;
-    const out = (state, outcome, more = {}) => ({ state, outcome, problems: [], retired: [], mixed: [], ...more });
+    const out = (state, outcome, more = {}) => ({ state, outcome, problems: [], retired: [], mixed: [], notes: [], ...more });
     // created but never closed: transact() changes no file before its journal reads back complete
     if (jtext === '') {
       try { await put(jdir, JOURNAL, null); } catch (e) { return out('empty', 'unresolved', { problems: [`${JOURNAL} could not be removed: ${e.message}`] }); }
@@ -1035,21 +1132,46 @@ const P8Project = (() => {
     try { j = JSON.parse(jtext); } catch (e) { return out('unreadable', 'unresolved', { problems: [`${JOURNAL}: ${e.message}`] }); }
     const writes = Array.isArray(j.writes) ? j.writes : [];
     const label = (w) => `${w.dir}/${w.name}`;
-    const current = [];
-    try { for (const w of writes) current.push(await readOrNull(await dir(w.dir), w.name)); } catch (e) {
-      return out(j.state, 'unresolved', { problems: [`${label(writes[current.length])} cannot be read (${e.message}); nothing was changed`] });
-    }
-    const isNew = (w, k) => typeof w.after !== 'undefined' && digest(current[k]) === w.after;
-    const allOld = writes.every((w, k) => current[k] === w.before);
-    const allNew = writes.every(isNew);
-    const mixed = writes.filter((w, k) => current[k] !== w.before && !isNew(w, k)).map(label);
+    const isNew = (w, text) => typeof w.after !== 'undefined' && digest(text) === w.after;
+    let retire;
+    /** what the folder holds now -> {current, carts} */
+    const read = async () => {
+      const current = [];
+      const carts = [];
+      let at = null;
+      try {
+        for (const w of writes) { at = label(w); current.push(await readOrNull(await dir(w.dir), w.name)); }
+        for (const r of retire) { at = `${r.from}/${r.name}`; carts.push(await retireState(dir, r)); }
+      } catch (e) { throw new Error(`${at} cannot be read (${e.message})`); }
+      return { current, carts };
+    };
+    let now;
+    try {
+      retire = await upgradeRetire(dir, Array.isArray(j.retire) ? j.retire : []);
+      now = await read();
+    } catch (e) { return out(j.state, 'unresolved', { problems: [`${e.message}; nothing was changed`] }); }
+    const allOld = (s) => writes.every((w, k) => s.current[k] === w.before) && s.carts.every(retireOld);
+    const allNew = (s) => writes.every((w, k) => isNew(w, s.current[k]));
+    const mixed = writes.filter((w, k) => now.current[k] !== w.before && !isNew(w, now.current[k])).map(label);
+    // a change only happens while the journal is still the one this recovery read or wrote
+    const guard = async () => { if ((await readOrNull(jdir, JOURNAL)) !== jtext) throw new Error(`${JOURNAL} changed during the recovery`); };
     let outcome;
     let problems = [];
     let retired = [];
-    if (j.state === 'committed' && allNew) {
-      ({ retired, errors: problems } = await retireAll(dir, j.retire || []));
+    let notes = [];
+    if (j.state === 'committed' && allNew(now)) {
+      let errors;
+      ({ retired, errors, kept: notes } = await retireAll(dir, retire, guard));
+      problems = errors;
       outcome = 'new';
-    } else if (allOld) {
+      if (!problems.length) {
+        // verify before the journal goes: new contents, and no cart half-moved or only in the journal
+        try {
+          const done = await read();
+          if (!allNew(done) || done.carts.some((c) => c.state === 'copied' || c.state === 'lost' || (c.state === 'old' && c.ours))) problems.push('the folder does not read back as the finished write; nothing more was changed');
+        } catch (e) { problems.push(e.message); }
+      }
+    } else if (allOld(now)) {
       outcome = 'old';
     } else {
       if (!['writing', 'rolling-back', 'committed'].includes(j.state)) return out(String(j.state), 'unresolved', { problems: [`${JOURNAL} has the unknown state “${j.state}”; nothing was changed`], mixed });
@@ -1060,27 +1182,32 @@ const P8Project = (() => {
           ? out(j.state, confirmRollback ? 'declined' : 'unresolved', { problems: confirmRollback ? [] : [`the write was committed, but these files hold neither its new nor their original contents: ${mixed.join(', ')}. Nothing was changed`], mixed })
           : out(j.state, 'declined', { mixed });
       }
-      if (j.state !== 'rolling-back') {
-        // its own id: a writer still running in a tab without Web Locks sees the journal is no longer its own
-        const next = JSON.stringify({ ...j, state: 'rolling-back', recovery: newId() });
+      const upgraded = JSON.stringify(retire) !== JSON.stringify(j.retire || []);
+      if (j.state !== 'rolling-back' || upgraded) {
+        // the rollback decision and every cart obligation go to disk before anything is restored. Its
+        // own id: a writer still running in a tab without Web Locks sees the journal is no longer its own
+        const next = JSON.stringify({ ...j, state: 'rolling-back', recovery: newId(), retire });
         try {
           if ((await readOrNull(jdir, JOURNAL)) !== jtext) throw new Error('it changed during the recovery');
           await put(jdir, JOURNAL, next);
         } catch (e) { return out(j.state, 'unresolved', { problems: [`${JOURNAL} could not record the rollback (${e.message}); nothing was restored`], mixed }); }
         jtext = next;
       }
-      problems = await restore(dir, writes);
-      // a committed write may already have retired carts: the old revision needs them back
-      if (j.state === 'committed') problems.push(...await unretireAll(dir, j.retire || []));
+      problems = await restore(dir, writes, guard);
+      // whatever the marker said when this recovery started, the old revision needs every retired cart back
+      problems.push(...await unretireAll(dir, retire, guard));
+      if (!problems.length) {
+        try { if (!allOld(await read())) problems.push('the folder does not read back as the state before the write; nothing more was changed'); } catch (e) { problems.push(e.message); }
+      }
       outcome = problems.length ? 'unresolved' : 'old';
     }
     if (!problems.length) {
       try {
-        if ((await readOrNull(jdir, JOURNAL)) !== jtext) throw new Error('it changed during the recovery');
+        await guard();
         await put(jdir, JOURNAL, null);
       } catch (e) { problems.push(`${JOURNAL} could not be removed: ${e.message}`); }
     }
-    return out(j.state, outcome, { problems, retired, mixed });
+    return out(j.state, outcome, { problems, retired, mixed, notes });
   }
 
   return {
