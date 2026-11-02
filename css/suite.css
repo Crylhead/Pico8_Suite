@@ -1,10 +1,10 @@
 /* PICO-8 Dev Suite: shell, library, Home, Pixel Studio, Data Tools */
 
-:root { --stage-bg: #0c0c10; --status-ok: #00e436; --status-warn: #ffa300; }
+:root { --stage-bg: #0c0c10; --status-ok: #00e436; --status-warn: #ffa300; --status-error: #ff6b81; }
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) { --stage-bg: #d4d7de; --status-ok: #007a2e; --status-warn: #8f5200; }
+  :root:not([data-theme="dark"]) { --stage-bg: #d4d7de; --status-ok: #007a2e; --status-warn: #8f5200; --status-error: #c0002f; }
 }
-:root[data-theme="light"] { --stage-bg: #d4d7de; --status-ok: #007a2e; --status-warn: #8f5200; }
+:root[data-theme="light"] { --stage-bg: #d4d7de; --status-ok: #007a2e; --status-warn: #8f5200; --status-error: #c0002f; }
 
 /* ------------------------------------------------------------------ */
 /* Shared small controls                                              */
@@ -838,11 +838,9 @@ body[data-workspace="extras"] { height: 100vh; height: 100dvh; display: flex; fl
 .ex-stage canvas { flex: 1 1 auto; min-height: 240px; width: 100%; display: block; touch-action: none; border-radius: var(--radius-sm); background: var(--surface-2); }
 .ex-controls { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
 .ex-controls-body { display: flex; flex-direction: column; gap: 10px; }
-.ex-group { margin: 0; padding: 8px 10px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.ex-group legend { padding: 0 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
+/* .ex-group panels and .ex-info lines use the shared .panel-group/.panel-heading/.status-line primitives */
 .ex-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.ex-info { margin: 0; font-size: 13px; min-height: 1.3em; }
-.ex-info.ex-error { color: var(--danger); }
+.ex-info { min-height: 1.3em; }
 .ex-slider { display: grid; grid-template-columns: 104px minmax(80px, 1fr) 48px; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .ex-row .ex-slider { grid-template-columns: auto minmax(70px, 140px) 40px; }
 .ex-slider input { width: 100%; accent-color: var(--accent); margin: 0; }

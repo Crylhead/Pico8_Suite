@@ -81,7 +81,7 @@ References: [MDN window error](https://developer.mozilla.org/en-US/docs/Web/API/
 
 ## Visual, accessibility and interaction standards
 
-- Document existing CSS colors, spacing, font sizes, control dimensions, panel style and state semantics; centralize repeated primitives without freezing custom workspace design.
+- Document existing CSS colors, spacing, font sizes, control dimensions, panel style and state semantics; centralize repeated primitives without freezing custom workspace design. Implemented in [docs/DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) (#52).
 - Prioritize central canvas, readable status, resizable collapsible side panels, predictable keyboard handling, full light/dark support, and no new horizontal viewport overflow. Preserve layouts on reload with safe defaults.
 - Work toward **WCAG 2.2 AA** for non-canvas UI. Audit keyboard reachability, visible focus, accessible names/roles, modal focus trap and return, screen-reader status updates, pointer size, reflow at 320 CSS px, 200% zoom, reduced motion and color-independent error meanings. Where canvas editing cannot fully meet a criterion, document limitation and offer an alternative interaction for key tasks.
 - Custom tab/radio/toolbars must implement the appropriate APG focus and arrow-navigation pattern. Provide non-drag alternatives for data-part placement and other necessary commands.

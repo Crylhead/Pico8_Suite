@@ -79,7 +79,7 @@
   }
 
   const btn = (label, onClick, { primary = false, title = '' } = {}) => el('button', { type: 'button', className: `btn btn-sm${primary ? ' btn-primary' : ''}`, textContent: label, title, onclick: onClick });
-  const group = (title, ...children) => el('fieldset', { className: 'ex-group' }, el('legend', { textContent: title }), ...children);
+  const group = (title, ...children) => el('fieldset', { className: 'ex-group panel-group' }, el('legend', { className: 'panel-heading', textContent: title }), ...children);
   const row = (...children) => el('div', { className: 'ex-row' }, ...children);
 
   /** Code output dialog with copy / download. */
@@ -134,7 +134,7 @@
       traceAlpha: 0.4,
     };
     const canvas = el('canvas', { className: 'ex-line-canvas', tabIndex: 0, attrs: { 'aria-label': 'Line canvas, 128 by 128 pixels' } });
-    const info = el('p', { className: 'muted ex-info' });
+    const info = el('p', { className: 'status-line ex-info' });
     const palette = el('div', { className: 'ex-palette', role: 'radiogroup', attrs: { 'aria-label': 'Line color' } });
     let view = { s: 4, ox: 0, oy: 0 };
 
@@ -337,7 +337,7 @@
     const timeCv = el('canvas', { className: 'ex-scope', attrs: { 'aria-label': 'Waveform over time' } });
     const xyCv = el('canvas', { className: 'ex-scope', attrs: { 'aria-label': 'XY scope' } });
     const strip = el('div', { className: 'ex-wave-strip', attrs: { 'aria-label': 'All 16 presets' } });
-    const status = el('p', { className: 'muted ex-info' });
+    const status = el('p', { className: 'status-line ex-info' });
     const presetSel = el('select', { className: 'select', attrs: { 'aria-label': 'Preset' } });
     const nameInput = el('input', { type: 'text', spellcheck: false, attrs: { 'aria-label': 'Preset name' }, style: 'width:120px' });
     const controls = {};
@@ -606,7 +606,7 @@
     // ---------------- 2D ---------------- //
 
     const cv2 = el('canvas', { className: 'ex-lut-canvas', attrs: { 'aria-label': 'Motion path preview' } });
-    const info2 = el('p', { className: 'muted ex-info' });
+    const info2 = el('p', { className: 'status-line ex-info' });
     let map2 = { s: 1, ox: 0, oy: 0 };
 
     function regen2d() {
@@ -741,7 +741,7 @@
     // ---------------- 3D ---------------- //
 
     const cv3 = el('canvas', { className: 'ex-lut-canvas', attrs: { 'aria-label': '3D ball formation preview' } });
-    const info3 = el('p', { className: 'muted ex-info' });
+    const info3 = el('p', { className: 'status-line ex-info' });
     const presetBox = el('div', { className: 'ex-preset-params' });
     const slotInfo = el('span', { className: 'muted' });
 
@@ -760,7 +760,8 @@
       const f = st.form;
       if (!f) return;
       info3.textContent = f.error || `${f.preset}: ${f.br0.length} balls${f.info ? ` · ${f.info}` : ''}`;
-      info3.classList.toggle('ex-error', !!f.error);
+      if (f.error) info3.dataset.tone = 'error';
+      else delete info3.dataset.tone;
     }
 
     function computeOverlaps() {

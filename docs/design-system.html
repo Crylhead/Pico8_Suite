@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PICO-8 Dev Suite: UI primitives and states</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/suite.css">
+  <style>
+    /* page layout only; everything inside .demo uses the shared primitives */
+    body { padding: var(--space-7); }
+    .demo { display: grid; gap: var(--space-7); max-width: 980px; }
+    .demo-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6); }
+    .demo-row > .label { width: 90px; }
+  </style>
+</head>
+<body>
+  <main class="demo">
+    <header class="demo-row">
+      <h1>UI primitives and states</h1>
+      <div class="seg" role="radiogroup" aria-label="Theme" id="theme">
+        <button role="radio" aria-checked="true" data-value="dark">Dark</button>
+        <button role="radio" aria-checked="false" data-value="light">Light</button>
+      </div>
+      <p class="muted">Reference for <a href="DESIGN_SYSTEM.md">DESIGN_SYSTEM.md</a>. Tab through to see focus.</p>
+    </header>
+
+    <fieldset class="panel-group">
+      <legend class="panel-heading">Buttons</legend>
+      <div class="demo-row"><span class="label">default</span>
+        <button class="btn">Button</button><button class="btn btn-primary">Primary</button>
+        <button class="btn btn-danger">Delete</button><button class="btn btn-ghost">Ghost</button><button class="btn btn-sm">Small</button></div>
+      <div class="demo-row"><span class="label">selected</span><button class="btn" aria-pressed="true">Pressed</button></div>
+      <div class="demo-row"><span class="label">busy</span><button class="btn" aria-busy="true" aria-disabled="true">Generating</button></div>
+      <div class="demo-row"><span class="label">disabled</span><button class="btn" disabled>Disabled</button><button class="btn btn-primary" disabled>Primary</button></div>
+    </fieldset>
+
+    <fieldset class="panel-group">
+      <legend class="panel-heading">Segmented control (radio group)</legend>
+      <div class="demo-row"><span class="label">default</span>
+        <div class="seg" role="radiogroup" aria-label="Example"><button role="radio" aria-checked="true">One</button><button role="radio" aria-checked="false">Two</button><button role="radio" aria-checked="false" disabled>Disabled</button></div></div>
+    </fieldset>
+
+    <fieldset class="panel-group">
+      <legend class="panel-heading">Fields</legend>
+      <div class="demo-row"><span class="label">default</span><label class="field">Width <input type="number" value="128"></label>
+        <select class="select" aria-label="Example select"><option>Option</option></select></div>
+      <div class="demo-row"><span class="label">disabled</span><label class="field">Width <input type="number" value="128" disabled></label>
+        <select class="select" aria-label="Disabled select" disabled><option>Option</option></select></div>
+      <div class="demo-row"><span class="label">error</span><label class="field">Width <input type="number" value="999" aria-invalid="true" aria-describedby="w-err"></label>
+        <p class="status-line" data-tone="error" id="w-err">Width must be 1–128.</p></div>
+    </fieldset>
+
+    <fieldset class="panel-group">
+      <legend class="panel-heading">Status, notices and progress</legend>
+      <p class="status-line">Neutral status line</p>
+      <p class="status-line" data-tone="ok">Saved</p>
+      <p class="status-line" data-tone="warn">Unsaved changes</p>
+      <p class="status-line" data-tone="error">Could not read the file</p>
+      <p class="notice">Info notice</p>
+      <p class="notice" data-tone="warn">Warning notice</p>
+      <p class="notice" data-tone="error">Error notice</p>
+      <progress class="progress" max="100" value="40" aria-label="Example progress"></progress>
+    </fieldset>
+  </main>
+  <script>
+    document.getElementById('theme').addEventListener('click', (e) => {
+      const b = e.target.closest('[role=radio]');
+      if (!b) return;
+      document.documentElement.dataset.theme = b.dataset.value;
+      for (const r of b.parentElement.children) r.setAttribute('aria-checked', String(r === b));
+    });
+  </script>
+</body>
+</html>

@@ -69,6 +69,25 @@
   color-scheme: light;
 }
 
+/* Theme-independent scales and state tokens; documented in docs/DESIGN_SYSTEM.md. Colours are
+   the theme tokens above plus --status-ok/--status-warn/--status-error (css/suite.css). */
+:root {
+  --space-1: 2px; --space-2: 4px; --space-3: 6px; --space-4: 8px; --space-5: 10px; --space-6: 12px; --space-7: 16px;
+  --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-base: 14px; --fs-lg: 15px;
+  --fw-control: 550; --fw-label: 600; --fw-heading: 650;
+  --radius-xs: 4px; --radius-ctl: 6px;
+  --focus-width: 2px; --focus-color: var(--accent); --focus-offset: 2px;
+  --disabled-opacity: 0.45;
+}
+@media (prefers-contrast: more) {
+  :root { --focus-width: 3px; --focus-color: var(--ring); }
+}
+@media (forced-colors: active) {
+  :root { --focus-color: Highlight; }
+  .seg button[aria-checked="true"], .btn[aria-pressed="true"] { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  .btn:disabled, .seg button:disabled { opacity: 1; color: GrayText; border-color: GrayText; }
+}
+
 * { box-sizing: border-box; }
 
 [hidden] { display: none !important; }
@@ -202,7 +221,7 @@ kbd {
 
 .btn {
   font: inherit;
-  font-weight: 550;
+  font-weight: var(--fw-control);
   color: var(--text);
   background: var(--surface-3);
   border: 1px solid var(--border-strong);
@@ -214,7 +233,7 @@ kbd {
 }
 .btn:hover { border-color: var(--accent); }
 .btn:active { transform: translateY(1px); }
-.btn:focus-visible, .seg button:focus-visible, .menu-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn:focus-visible, .seg button:focus-visible, .menu-btn:focus-visible { outline: var(--focus-width) solid var(--focus-color); outline-offset: var(--focus-offset); }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .btn-primary:hover { filter: brightness(1.08); }
 .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
@@ -244,6 +263,8 @@ kbd {
   cursor: pointer;
 }
 .seg button[aria-checked="true"] { background: var(--surface-3); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); }
+.seg button:hover:not([aria-checked="true"]):not(:disabled) { color: var(--text); }
+.seg button:disabled { opacity: var(--disabled-opacity); cursor: default; }
 
 .field { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
 .field input, .dialog-form input[type="text"], .dialog-form input[type="number"] {
@@ -255,7 +276,7 @@ kbd {
   padding: 5px 6px;
   width: 68px;
 }
-.field input:focus, .dialog-form input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+.field input:focus, .dialog-form input:focus { outline: var(--focus-width) solid var(--focus-color); outline-offset: -1px; border-color: transparent; }
 
 .label { color: var(--muted); font-size: 13px; }
 .badge {
@@ -268,6 +289,33 @@ kbd {
   white-space: nowrap;
 }
 .hint { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+
+/* Shared primitives and states (docs/DESIGN_SYSTEM.md). Existing .btn/.seg/.field/.select keep
+   their selectors; these add the missing busy/invalid/panel/status surfaces. */
+.btn[aria-busy="true"] { cursor: progress; }
+.btn[aria-busy="true"]::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: var(--space-3); border-radius: 50%; background: currentColor; vertical-align: middle; animation: ui-busy 1s infinite; }
+@keyframes ui-busy { 50% { opacity: 0.2; } }
+@media (prefers-reduced-motion: reduce) { .btn[aria-busy="true"]::after { animation: none; } }
+.field input:disabled, .select:disabled, .num:disabled { opacity: var(--disabled-opacity); cursor: default; }
+.field input[aria-invalid="true"], .select[aria-invalid="true"], .num[aria-invalid="true"] { border-color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger); }
+
+.panel-group { margin: 0; padding: var(--space-4) var(--space-5) var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.panel-heading { margin: 0; font-size: var(--fs-md); font-weight: var(--fw-label); color: var(--muted); }
+legend.panel-heading { padding: 0 var(--space-2); }
+
+/* one-line result/status text; tone adds colour and a text symbol, so it is never colour-only */
+.status-line { margin: 0; font-size: var(--fs-md); color: var(--muted); }
+.status-line[data-tone="ok"] { color: var(--status-ok); }
+.status-line[data-tone="warn"] { color: var(--status-warn); }
+.status-line[data-tone="error"] { color: var(--status-error); }
+.status-line[data-tone="ok"]::before { content: "✓ "; content: "✓ " / ""; }
+.status-line[data-tone="warn"]::before, .status-line[data-tone="error"]::before { content: "⚠ "; content: "⚠ " / ""; }
+
+/* block notice inside a panel: info (default), warn or error */
+.notice { margin: 0; padding: var(--space-4) var(--space-6); border-left: 3px solid var(--border-strong); border-radius: var(--radius-xs); background: var(--surface-2); color: var(--text); font-size: var(--fs-md); }
+.notice[data-tone="warn"] { border-left-color: var(--status-warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.notice[data-tone="error"] { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.progress { display: block; width: 100%; height: 6px; accent-color: var(--accent); }
 
 /* ------------------------------------------------------------------ */
 /* Layout                                                             */
@@ -623,7 +671,7 @@ dialog.modal::backdrop { background: rgba(5, 5, 10, 0.6); }
   border-radius: var(--radius-sm);
   padding: 5px 8px;
 }
-.select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.select:focus { outline: var(--focus-width) solid var(--focus-color); outline-offset: 1px; }
 
 .tm-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; }
 .tm-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
@@ -638,7 +686,7 @@ dialog.modal::backdrop { background: rgba(5, 5, 10, 0.6); }
   width: 76px;
 }
 .btn.pending { border-color: var(--warn); box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn) 35%, transparent); }
-.btn:disabled { opacity: 0.45; cursor: default; transform: none; border-color: var(--border-strong); }
+.btn:disabled { opacity: var(--disabled-opacity); cursor: default; transform: none; border-color: var(--border-strong); }
 .tm-notice {
   margin: 12px 0 0;
   padding: 8px 12px;

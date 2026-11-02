@@ -63,6 +63,7 @@ The app can be hosted on a static server for the browser tools. A remote host do
 - `js/extras-core.js`, `js/extras.js`: Extra Tools (pure logic / UI)
 - `js/terrain-core.js`, `js/terrain.js`: Terrain Lab engine (runs in two Web Workers and in Node) / UI, a tab of Extra Tools
 - `docs/COMPRESSION.md`: which data cart compression the suite offers, and the PICO-8 measurements behind it
+- `docs/DESIGN_SYSTEM.md`: shared UI tokens (colour, spacing, type, focus, states) and component primitives, with the live reference page `docs/design-system.html`
 - `js/project-core.js`, `js/project.js`: demo projects, anchors, packing (pure logic) / Cart Builder UI
 - `js/datacarts-core.js`: sections and palettes of data carts, read from the fx code (pure logic)
 - `js/cart-core.js`, `js/datacarts.js`: .p8 data area reader / writer, `reload()` analysis, LZ codec (pure logic) / Data Carts UI
