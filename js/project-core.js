@@ -1037,8 +1037,14 @@ const P8Project = (() => {
         s = await retireState(dir, r);
         if (s.state === 'none' || s.state === 'moved') continue;
         if (s.state === 'changed') {
-          kept.push(`${at} changed after the write started; it stays in place`);
-          if (s.ours) { await guard(); await put(await dir(r.to), r.name, r.toBefore); }
+          // r.to may hold the only copy of the original (moved, then a new file appeared in r.from): it is
+          // never removed; only an empty residue of an unfinished copy is
+          const to = s.ours ? await readOrNull(await dir(r.to), r.name) : null;
+          if (to === r.before) kept.push(`${at} changed after the write started; it stays in place, and the cart the write retired stays in ${r.to}/${r.name}`);
+          else {
+            kept.push(`${at} changed after the write started; it stays in place`);
+            if (s.ours) { await guard(); await put(await dir(r.to), r.name, r.toBefore); }
+          }
           continue;
         }
         if (s.state === 'lost') {
