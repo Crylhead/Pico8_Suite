@@ -819,3 +819,9 @@ dialog.modal::backdrop { background: rgba(5, 5, 10, 0.6); }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+/* Settings > Animation: Reduce (#54) applies the same rule regardless of the OS setting */
+:root[data-motion="reduce"] *, :root[data-motion="reduce"] *::before, :root[data-motion="reduce"] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+
+/* Settings > Help detail (#54): only optional explanatory help is hidden at Off. Never put labels,
+   warnings, errors or status text in these classes. .help-detailed shows only at Detailed. */
+:root[data-help-level="off"] .help-optional, :root:not([data-help-level="detailed"]) .help-detailed { display: none; }

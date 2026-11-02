@@ -1549,9 +1549,107 @@
       const a = e.target.closest('a[href^="#"]');
       if (!a) return;
       e.preventDefault();
-      wrap.querySelector(a.getAttribute('href'))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      wrap.querySelector(a.getAttribute('href'))?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
     });
     modal({ title: 'Documentation', body: wrap, wide: true, buttons: [{ label: 'Close', value: null, primary: true }] });
+  }
+
+  // ------------------------------------------------------------------ //
+  // UX preferences (#54, js/ux-prefs-core.js)                          //
+  // ------------------------------------------------------------------ //
+
+  const prefs = P8Prefs.create({ storage: (() => { try { return window.localStorage; } catch { return null; } })() });
+  const osReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  /** true when the preference or the OS asks for reduced motion */
+  const reducedMotion = () => P8Prefs.reducedMotion(prefs.get(), osReducedMotion?.matches);
+
+  // <html data-help-level="off|concise|detailed" data-motion="system|reduce" data-compact-nav>
+  function applyPrefs(p = prefs.get()) {
+    const root = document.documentElement;
+    root.dataset.helpLevel = p.helpLevel;
+    root.dataset.motion = p.motion;
+    root.toggleAttribute('data-compact-nav', p.compactNav);
+  }
+
+  function bindPrefs() {
+    applyPrefs();
+    prefs.subscribe((detail) => {
+      applyPrefs(detail.prefs);
+      document.dispatchEvent(new CustomEvent('p8:preferences', { detail }));
+    });
+    window.addEventListener('storage', (e) => { if (e.key === P8Prefs.KEY || e.key === null) prefs.reload(); });
+  }
+
+  function prefsStorageNote() {
+    const s = prefs.status();
+    if (!s.persistent) return '⚠ This browser is not storing settings (storage is blocked or full). Changes apply until you reload the page.';
+    if (s.ignored.length) return 'Some stored settings were invalid and use their defaults.';
+    return '';
+  }
+
+  function showSettings() {
+    let n = 0;
+    const section = (title, control, desc, described = control) => {
+      const id = `settings-${++n}`;
+      described.setAttribute('aria-describedby', `${id}-desc`);
+      return el('section', { className: 'settings-row' },
+        el('h3', { textContent: title }), control, el('p', { className: 'hint', id: `${id}-desc`, textContent: desc }));
+    };
+    const seg = (label, options) => el('div', { className: 'seg', attrs: { role: 'radiogroup', 'aria-label': label } },
+      ...options.map(([value, text]) => el('button', { type: 'button', textContent: text, dataset: { value }, attrs: { role: 'radio', 'aria-checked': 'false' } })));
+    const check = (input, text) => el('label', { className: 'check' }, input, el('span', { textContent: text }));
+
+    const theme = seg('Theme', [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']]);
+    const help = seg('Help detail', [['off', 'Off'], ['concise', 'Concise'], ['detailed', 'Detailed']]);
+    const motion = seg('Animation', [['system', 'Follow system'], ['reduce', 'Reduce']]);
+    const tours = el('input', { type: 'checkbox' });
+    const compact = el('input', { type: 'checkbox' });
+    const note = el('p', { className: 'hint settings-note', attrs: { role: 'status' } });
+    const motionDesc = 'Turns off interface transitions and pulsing indicators.';
+
+    const body = el('div', { className: 'dialog-form settings' },
+      section('Theme', theme, 'Same as the theme button in the toolbar.'),
+      section('Help detail', help, 'Optional hints and tooltips. Labels, warnings, errors and confirmations are always shown.'),
+      section('Guided tours', check(tours, 'Offer tours automatically'), 'When off, tours never start or offer themselves automatically. (Guided tours are added in a later update; this choice is kept for them.)', tours),
+      section('Workspace bar', check(compact, 'Compact: icons only'), 'Hides the active workspace name; every tab keeps its tooltip and accessible name.', compact),
+      section('Animation', motion, motionDesc),
+      note);
+
+    const mark = (g, v) => { for (const b of g.querySelectorAll('[role=radio]')) b.setAttribute('aria-checked', String(b.dataset.value === v)); };
+    const sync = () => {
+      const p = prefs.get();
+      mark(theme, store.get(KEYS.theme, 'system'));
+      mark(help, p.helpLevel);
+      mark(motion, p.motion);
+      tours.checked = p.autoOfferTours;
+      compact.checked = p.compactNav;
+      motion.nextElementSibling.textContent = osReducedMotion?.matches ? `${motionDesc} Your system already asks for reduced motion, which is always respected.` : motionDesc;
+      note.textContent = prefsStorageNote();
+      note.classList.toggle('warn', !prefs.status().persistent);
+    };
+    const pick = (g, fn) => g.addEventListener('click', (e) => {
+      const b = e.target.closest('[role=radio]');
+      if (b) { fn(b.dataset.value); sync(); }
+    });
+    pick(theme, (v) => { store.set(KEYS.theme, v); applyTheme(v); });
+    pick(help, (v) => prefs.set({ helpLevel: v }));
+    pick(motion, (v) => prefs.set({ motion: v }));
+    tours.addEventListener('change', () => { prefs.set({ autoOfferTours: tours.checked }); sync(); });
+    compact.addEventListener('change', () => { prefs.set({ compactNav: compact.checked }); sync(); });
+    sync();
+
+    return modal({
+      title: 'Settings',
+      body,
+      actions: [{ label: 'Reset to defaults', onClick: () => {
+        prefs.reset();
+        store.remove(KEYS.theme);
+        applyTheme('system');
+        sync();
+        if (!note.textContent) note.textContent = 'Settings reset to defaults.';
+      } }],
+      buttons: [{ label: 'Done', value: true, primary: true }],
+    });
   }
 
   function showAbout() {
@@ -1605,6 +1703,7 @@
     'export-ramps': exportRampPresets,
     'reset-ramps': resetRampPresets,
     'docs': showDocs,
+    'settings': showSettings,
     'about': showAbout,
   };
 
@@ -1967,6 +2066,7 @@
 
   function init() {
     applyTheme(store.get(KEYS.theme, 'system'));
+    bindPrefs();
     state.showIndices = store.get(KEYS.indices, true) !== false;
 
     buildSystemPalette();
@@ -2084,6 +2184,10 @@
     paintSwatch,
     modal,
     showMessage,
+    showSettings,
+    /** UX preferences: get(), set(patch), reset(), status(), subscribe(fn) -> unsubscribe; see EXTENDING.md */
+    prefs,
+    reducedMotion,
     confirmDialog,
     codeDialog,
     toast,
