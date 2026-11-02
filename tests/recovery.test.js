@@ -190,3 +190,28 @@ t('#40 without Web Locks a writer whose journal was taken over during retirement
   assert.deepStrictEqual([snap['demo/old.p8'], snap['demo/old2.p8'], snap['demo/unused/old2.p8']], ['old', 'old two', undefined], 'no cart left demo/ after the take-over');
   assert.ok(r.retireErrors.length >= 1, r.retireErrors.join(';'));
 });
+
+t('#40 a cart recreated in demo/ after it moved never costs the moved original; nor does a copy-then-edit', async () => {
+  // moved, then PICO-8 saves a new demo/old.p8 before recovery finishes the committed write
+  const fs = await committedWithRetiredCarts();
+  const tree = fs.snapshot();
+  tree['demo/old.p8'] = 'USER EDIT';
+  const fs2 = reopen(tree);
+  const r = await P.recover(dirsOf(fs2), confirm);
+  const snap = fs2.snapshot();
+  assert.strictEqual(snap['demo/unused/old.p8'], 'old', 'the only copy of the original stays in unused/');
+  assert.strictEqual(snap['demo/old.p8'], 'USER EDIT');
+  assert.ok([...(r.notes || []), ...(r.problems || [])].some((n) => /old\.p8/.test(n)), JSON.stringify(r));
+
+  // (a copy whose original was then edited looks the same on disk, so it is kept the same way.)
+  // An empty residue of an unfinished copy next to an edited cart is not the original: it is removed
+  const t5 = (await committedWithRetiredCarts()).snapshot();
+  t5['demo/old.p8'] = 'EDITED';
+  t5['demo/unused/old.p8'] = '';
+  const fs5 = reopen(t5);
+  await P.recover(dirsOf(fs5), confirm);
+  const s5 = fs5.snapshot();
+  assert.strictEqual(s5['demo/old.p8'], 'EDITED');
+  assert.ok(!('demo/unused/old.p8' in s5), 'the empty residue is cleaned up');
+  assert.strictEqual(s5['demo/unused/old2.p8'], 'old two');
+});
