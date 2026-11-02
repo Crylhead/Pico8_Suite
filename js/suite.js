@@ -336,7 +336,7 @@ if (typeof module !== 'undefined') module.exports = P8Storage;
       return;
     }
     console.error(e);
-    showMessage(title, `${why}\n\nNothing was marked as saved and your work is still open. Free browser storage (for example export the Library, then delete unused assets) and try again, or download/export the work instead.`);
+    showMessage(title, `${why}\n\nNothing was marked as saved and your work is still open. Free browser storage (for example export the Library, then delete unused assets) and try again, or download/export the work instead.`, 'error');
   }
   const autosaveFailed = (title) => (e) => reportStorageError(title, e, { autosave: true });
 
