@@ -103,6 +103,20 @@ t('#2 load/cstore/include/multi-line/traceable references keep their carts, also
   assert.deepStrictEqual(inc.retire, [], 'an include that cannot be read keeps every candidate');
   assert.match(inc.unresolved[0].why, /fx\.lua/);
 });
+t('#40 review: a candidate that must stay (rewritten by this write) keeps the carts it references', () => {
+  // adopted fx.p8 is also a candidate; its rewrite keeps it, so its own reference to old.p8 must count
+  const files = [
+    { name: 'fx.p8', text: '__lua__\nreload(0x8000,0,0x100,"d0.p8") --@data a.bin\nreload(0,0,1,"old.p8")\n' },
+    { name: 'old.p8', text: '' }, { name: 'gone.p8', text: '' },
+  ];
+  const r = P.retirement(['fx.p8', 'old.p8', 'gone.p8'], files, new Map([['FX.p8', 'its anchors are rewritten by this write']]));
+  assert.deepStrictEqual(r.retire, ['gone.p8']);
+  assert.deepStrictEqual(r.kept, [
+    { cart: 'fx.p8', by: 'its anchors are rewritten by this write' },
+    { cart: 'old.p8', by: 'fx.p8:3 reload(0,0,1,"old.p8")' },
+  ]);
+  assert.deepStrictEqual(P.retirement(['fx.p8', 'old.p8', 'gone.p8'], files).retire.sort(), ['fx.p8', 'gone.p8', 'old.p8'], 'without stay nothing references the candidates');
+});
 // #3: recoverable multi-file writes over File System Access handles (in-memory fake)
 const { makeFs } = require('./fake-fs.js');
 const original = () => ({ demo: { 'fx.p8': 'fx v1', 'd0.p8': 'd0 v1', 'old.p8': 'old', 'suite.json': '{"v":1}' }, assets: { 'a.json': 'a v1', 'gone.json': 'gone' } });

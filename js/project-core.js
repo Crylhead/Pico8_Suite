@@ -1022,12 +1022,16 @@ const P8Project = (() => {
    * files:      [{name, text}] the final texts of the folder (fx carts after their rewrite, .lua files, ...)
    * Sources are every file that is not a candidate plus every candidate that has to stay. A reference
    * that cannot be resolved (computed name, uncallable use of load, unreadable #include) keeps all candidates.
+   * stay:       optional Map name -> reason for candidates that must stay anyway (e.g. rewritten by this
+   *             write); they are sources from the start, so the carts they reference stay as well.
    * -> {retire: [names], kept: [{cart, by}], unresolved: [{file, line, call, why}]}
    */
-  function retirement(candidates, files) {
-    const cand = new Map(candidates.map((n) => [n.toLowerCase(), n]));
+  function retirement(candidates, files, stay = new Map()) {
+    const staying = new Map([...stay].map(([n, by]) => [n.toLowerCase(), by]));
+    const cand = new Map(candidates.filter((n) => !staying.has(n.toLowerCase())).map((n) => [n.toLowerCase(), n]));
     const byName = new Map(files.map((f) => [baseName(f.name), f]));
     const kept = new Map();
+    for (const n of candidates) if (staying.has(n.toLowerCase())) kept.set(n.toLowerCase(), { cart: n, by: staying.get(n.toLowerCase()) });
     const unresolved = [];
     const scanned = new Set();
     const queue = files.filter((f) => !cand.has(baseName(f.name)));
