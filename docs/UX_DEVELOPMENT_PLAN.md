@@ -156,6 +156,31 @@ Each issue includes **Outcome**, **Current surfaces**, **In scope**, **Out of sc
 - [MDN: window error](https://developer.mozilla.org/en-US/docs/Web/API/Window/error_event), [unhandledrejection](https://developer.mozilla.org/en-US/docs/Web/API/Window/unhandledrejection_event) — diagnostics limitations.
 - [GitHub: configuring issue forms](https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository) — structured user reports.
 
-## Issue index
+## GitHub work-package index (18 independently assignable issues)
 
-See GitHub issues titled **[UX P1]**, **[UX P2]** and **[UX P3]**. The specific issue links are maintained here after creation. Agents should choose a task by its independently scoped acceptance criteria; dependency text is a coordination warning rather than permission to silently implement another issue.
+Each issue contains precise acceptance checks and explicit exclusions. Assign a single issue per agent/PR; **independently assignable does not mean that two PRs may simultaneously overwrite shared shell files**. Rebase and review the combined contract at merge time.
+
+| Issue | Title / owner surface | Wave |
+| --- | --- | --- |
+| [#52](https://github.com/Crylhead/Pico8_Suite/issues/52) | Design tokens, shared visual control states | A |
+| [#53](https://github.com/Crylhead/Pico8_Suite/issues/53) | Discoverable grouped navigation and tool switch | B |
+| [#54](https://github.com/Crylhead/Pico8_Suite/issues/54) | Durable UX preference contract | A |
+| [#55](https://github.com/Crylhead/Pico8_Suite/issues/55) | Optional read-only active project context | A |
+| [#56](https://github.com/Crylhead/Pico8_Suite/issues/56) | Project adapters for Code Editor / Audit / Data Carts | B; after #55 |
+| [#57](https://github.com/Crylhead/Pico8_Suite/issues/57) | Direct asset Send to / Open in with compatibility reasons | B |
+| [#58](https://github.com/Crylhead/Pico8_Suite/issues/58) | Saved/dirty/downloaded/error state semantics | A |
+| [#59](https://github.com/Crylhead/Pico8_Suite/issues/59) | Searchable, contextual F1 and canonical help registry | C foundation |
+| [#60](https://github.com/Crylhead/Pico8_Suite/issues/60) | Optional concise/detailed tooltips | C; after #54 and #59 |
+| [#61](https://github.com/Crylhead/Pico8_Suite/issues/61) | Replayable versioned onboarding tours | C; after #54 and #59 |
+| [#62](https://github.com/Crylhead/Pico8_Suite/issues/62) | Bounded privacy-preserving diagnostics | C foundation |
+| [#63](https://github.com/Crylhead/Pico8_Suite/issues/63) | Report-a-problem UI, preview/export and issue template | C; after #62 |
+| [#64](https://github.com/Crylhead/Pico8_Suite/issues/64) | Resizable and responsive workspace panels | A/B |
+| [#65](https://github.com/Crylhead/Pico8_Suite/issues/65) | Shared keyboard, focus and accessibility audit | A |
+| [#66](https://github.com/Crylhead/Pico8_Suite/issues/66) | Cart Builder transparent staged/preflight UX | B; integrate after #40–#44 |
+| [#67](https://github.com/Crylhead/Pico8_Suite/issues/67) | Terrain Lab perceived latency, state and errors | B |
+| [#68](https://github.com/Crylhead/Pico8_Suite/issues/68) | Home task launcher and safe continuation | B |
+| [#69](https://github.com/Crylhead/Pico8_Suite/issues/69) | Documentation/tour drift checks and UX release checklist | D; after #59 and #61 |
+
+**Suggested first parallel assignments:** #52 (design tokens), #55 (isolated project-context API), #59 (documentation registry), #62 (diagnostic core), #67 (Terrain Lab performance feedback) — these occupy mostly distinct modules. For #53, #54, #58, #65 and #68 (shared shell), stagger integration and avoid racing edits to `js/app.js`, `js/suite.js`, `index.html` and shared CSS.
+
+Progress should be tracked through issue state and linked PRs, not a duplicate manually checked list. If implementation materially changes an issue's acceptance test, review the change explicitly before merging rather than silently lowering the bar.
