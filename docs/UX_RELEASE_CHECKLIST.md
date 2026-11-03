@@ -4,7 +4,7 @@ Use this before a release or a larger UX change (see [UX_DEVELOPMENT_PLAN.md](UX
 
 ## Automated (offline, no browser)
 
-- `node tests/regress.js` once on the final state. It includes `tests/docs-integrity.test.js`, which fails with an actionable message for: a workspace without a help topic, duplicate help/control ids, a `data-help-id` without help text, a tour step whose target no longer exists, is hidden by default or JS-built without `optional`/`conditional`, an unknown `helpId`, or a menu shortcut missing from the help.
+- `node tests/regress.js` once on the final state. It includes `tests/docs-integrity.test.js`, which fails with an actionable message for: a built-in workspace/subtool without exactly one tour, missing declared tour areas without justified exceptions, a workspace without a help topic, duplicate help/control ids, a `data-help-id` without help text, a tour step or before.click whose stable ID/class/data target no longer has markup/builder evidence (even when optional), is hidden by default or JS-built without `optional`/`conditional`, an unknown `helpId`, or a menu shortcut missing from the help.
 - `node tests/check-static.js` when `index.html` ids or script/style references changed.
 - A documentation-only change needs only a diff review, link check and `git diff --check`; do not run the full suite for it.
 
@@ -13,7 +13,7 @@ Use this before a release or a larger UX change (see [UX_DEVELOPMENT_PLAN.md](UX
 1. **Help topic** in `js/help-data.js` (`kind: 'tool'`, `ws` = the workspace id): purpose, inputs, outputs, actions, restrictions, shortcuts, related. Bump `rev`.
 2. **Stable ids** for controls/actions (`tool.control`); mark essential controls with `data-help-id` only if they should have tooltips. A rename needs an `ALIASES` entry.
 3. **Shortcuts:** every shortcut shown in a menu is listed in the topic (or the F1 keyboard section).
-4. **Tour:** required for built-in workspaces and Extra Tools tabs (#103), optional for external plugins. Give each step a stable `id`, a non-brittle `target`, `optional`/`conditional` where it can legitimately be absent, and bump the tour `major` only for a meaningful new capability (offers "What's new"); copy edits keep it.
+4. **Tour:** required for built-in workspaces and Extra Tools tabs (#103/#109), optional for external plugins (`tour: false` explicitly opts out without blocking registration). Use literal ws/sub registration IDs in bundled modules so the audit discovers them. Tag highlighted steps with `areas` covering work, controls, input, output and a safe handoff; document legitimate `areaExceptions` with reasons. Home uses the Suite overview; the Extra Tools overview delegates to subtool tours, and existing Pixel Studio/Terrain expansion gaps are tracked explicitly in #105. Give each step a stable `id`, a non-brittle `target`, `optional`/`conditional` where it can legitimately be absent, and bump the tour `major` only for a meaningful new capability (offers "What's new"); copy edits keep it.
 5. `EXTENDING.md` / `docs/` updated if a contract changed; the long-form F1 section updated or its parity noted.
 
 ## Human test plan (about 20 minutes)
