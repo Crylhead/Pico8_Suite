@@ -403,10 +403,10 @@ const P8Code = (() => {
     if (!m) return { head: null, lua: t, tail: '', crlf, sections: [] };
     const start = m.index + m[0].length + 1;
     const rest = t.slice(start);
-    const next = /^__[a-z0-9_]+__[ \t]*$/m.exec(rest);
+    const next = /^__[a-z0-9_:]+__[ \t]*$/m.exec(rest);
     const lua = next ? rest.slice(0, next.index) : rest;
     const tail = next ? rest.slice(next.index) : '';
-    const sections = [...tail.matchAll(/^__([a-z0-9_]+)__[ \t]*$/gm)].map((x) => x[1]);
+    const sections = [...tail.matchAll(/^__([a-z0-9_:]+)__[ \t]*$/gm)].map((x) => x[1]);
     return { head: t.slice(0, start), lua: lua.replace(/\n$/, ''), tail, crlf, sections };
   }
 

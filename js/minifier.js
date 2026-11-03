@@ -2,7 +2,8 @@
 'use strict';
 const P8Minifier = (() => {
   const Core = typeof P8MinifierCore !== 'undefined' ? P8MinifierCore : require('./minifier-core.js');
-  function mount({ root, adapter, app, media, protocol = globalThis.location?.protocol, editorSource = null }) {
+  const Export = typeof P8MinifierExport !== 'undefined' ? P8MinifierExport : require('./minifier-export-core.js');
+  function mount({ root, adapter, app, media, protocol = globalThis.location?.protocol, editorSource = null, clipboard = globalThis.navigator?.clipboard }) {
     const $ = (id) => root.querySelector('#' + id);
     const radios = (id) => [...$(id).querySelectorAll('[role=radio]')];
     let mode = media.matches ? 'compare' : 'original', explicitMode = false;
@@ -10,6 +11,14 @@ const P8Minifier = (() => {
     let diagnosticFilter = 'all', renderedDiagnostics = null, renderedFilter = null, renderedDiagnosticJob = null;
     let intakeSerial = 0, intakePending = false, disposed = false;
     let editorStale = false;
+    let validationState = null, validationInput = null, validation = null, exportPending = false, exportReport = null;
+    function exportCheck(s = adapter.getState()) {
+      if (validationState !== s || validationInput !== input) {
+        validationState = s; validationInput = input; validation = Export.inspect(s, currentInput(s));
+      }
+      return validation;
+    }
+    function reportExport(text, tone = '') { exportReport = { state: adapter.getState(), text, tone }; render(adapter.getState()); }
     const editorStatus = () => editorSource?.getStatus() || { available: false, reason: 'Open or type nonempty source in Code Editor first.' };
     function invalidateEditor() {
       if (input?.editor && !editorStale && !editorSource?.isCurrent(input.editor.identity)) {
@@ -174,8 +183,14 @@ const P8Minifier = (() => {
       }
       setText($('mnMetricReasons'), reasons.join(' ')); $('mnMetricReasons').hidden = !reasons.length;
       renderDiagnostics(s);
-      // Dedicated output actions await MIN-08 content/preservation validation.
-      $('mnCopy').disabled = true; $('mnDownload').disabled = true;
+      const checked = exportCheck(s), enabled = checked.ok && !editorStale && !intakePending && !exportPending && !disposed;
+      actionButtons('mn-copy', !enabled); actionButtons('mn-download', !enabled);
+      setText($('mnExportValidation'), editorStale ? 'Earlier editor snapshot. Refresh and optimize before exporting.' : checked.ok ? 'Validated build copy. Cartridge exports preserve the original header and non-Lua data; no source file is saved or replaced.' : checked.reason);
+      $('mnExportValidation').dataset.tone = checked.ok && !editorStale ? 'ok' : s.result ? checked.code === 'E_EXPORT_STALE' || editorStale ? 'warn' : 'error' : '';
+      setText($('mnExportWarnings'), checked.ok ? checked.artifacts.warnings.join(' ') : '');
+      $('mnExportWarnings').hidden = !checked.ok || !checked.artifacts.warnings.length;
+      setText($('mnExportStatus'), exportReport?.state === s ? exportReport.text : '');
+      $('mnExportStatus').dataset.tone = exportReport?.state === s ? exportReport.tone : '';
     }
     const provenance = (value) => ['In-memory source', 'Local file', 'Pasted Lua', 'Code Editor', 'Project folder'].includes(value) ? value : 'In-memory source';
     const inputStatus = (text, tone = '') => { $('mnInputStatus').textContent = text; $('mnInputStatus').dataset.tone = tone; };
@@ -251,6 +266,51 @@ const P8Minifier = (() => {
       if (!input?.editor || !editorSource) return;
       app.setWorkspace?.('code'); editorSource.focusCurrent();
     }
+    function exportCapture() {
+      if (invalidateEditor() || editorStale || intakePending || disposed) throw Core.error('E_EXPORT_STALE', 'Source changed or input is pending. Refresh and optimize before exporting.');
+      const state = adapter.getState(), checked = exportCheck(state);
+      if (!checked.ok) throw Core.error(checked.code, checked.reason);
+      return { result: state.result, sourceRevision: state.sourceRevision, optionsRevision: state.optionsRevision, artifacts: checked.artifacts };
+    }
+    function captureCurrent(capture) {
+      invalidateEditor();
+      const now = adapter.getState();
+      return !disposed && !editorStale && !intakePending && Core.canExport(now) && capture.result === now.result && capture.sourceRevision === now.sourceRevision && capture.optionsRevision === now.optionsRevision;
+    }
+    async function copyLua() {
+      if (exportPending) return;
+      let capture;
+      try { capture = exportCapture(); } catch (err) { reportExport(err.message, 'error'); return; }
+      exportPending = true; reportExport('Copying optimized Lua…');
+      try {
+        if (!clipboard?.writeText) throw Core.error('E_CLIPBOARD', 'Clipboard access is unavailable. Select the read-only optimized Lua and copy it with your keyboard.');
+        await clipboard.writeText(capture.artifacts.lua.text);
+        if (disposed) return;
+        const current = captureCurrent(capture);
+        reportExport(current ? 'Copied optimized Lua · build copy. Original source unchanged.' : 'Copied the captured earlier build. Source changed meanwhile; refresh before exporting again.', current ? 'ok' : 'warn');
+      } catch (_) { if (!disposed) reportExport('Copy failed: clipboard access is unavailable or denied. Select the read-only optimized Lua and copy it with your keyboard.', 'error'); }
+      finally { exportPending = false; if (!disposed) render(adapter.getState()); }
+    }
+    async function downloadBuild() {
+      if (exportPending) return;
+      let capture;
+      try { capture = exportCapture(); } catch (err) { reportExport(err.message, 'error'); return; }
+      exportPending = true; reportExport('Choose a build-copy download. Original source unchanged.');
+      try {
+        const { artifacts } = capture;
+        const choice = await app.modal({ title: 'Download optimized build copy',
+          body: `Downloads a separate generated artifact, never a project Save. Keep the original editable source.${artifacts.cart ? ' The .p8 retains the original header and all non-Lua text exactly.' : ' Lua input has no complete source cartridge; only .lua is offered.'}${artifacts.warnings.length ? '\n\n' + artifacts.warnings.join('\n') : ''}`,
+          buttons: [{ label: 'Cancel', value: null }, { label: `Download ${artifacts.lua.filename}`, value: 'lua', primary: !artifacts.cart }, ...(artifacts.cart ? [{ label: `Download ${artifacts.cart.filename}`, value: 'cart', primary: true }] : [])] });
+        if (disposed) return;
+        if (!choice) { reportExport('Download cancelled. Original source unchanged.'); return; }
+        if (!captureCurrent(capture)) throw Core.error('E_EXPORT_STALE', 'Source or result changed while choosing a download. Optimize the current source again; nothing was downloaded.');
+        const artifact = choice === 'lua' ? artifacts.lua : choice === 'cart' ? artifacts.cart : null;
+        if (!artifact) throw Core.error('E_EXPORT_INVALID', 'Choose an available build format.');
+        app.download(artifact.text, artifact.filename, artifact.type);
+        reportExport(`Download requested: ${artifact.filename} · build copy. Browser download controls completion; original source is unchanged.`, 'ok');
+      } catch (err) { if (!disposed) reportExport(err.code ? err.message : 'Download failed. The browser could not start the build-copy download. Original source unchanged.', 'error'); }
+      finally { exportPending = false; if (!disposed) render(adapter.getState()); }
+    }
     function openFile() {
       return replaceFrom(async (live) => {
         const file = await app.pickFile('.p8,.lua');
@@ -282,6 +342,7 @@ const P8Minifier = (() => {
     const actions = {
       'mn-open': openFile, 'mn-paste': pasteLua,
       'mn-use-editor': () => useEditor(), 'mn-return-editor': returnToEditor,
+      'mn-copy': copyLua, 'mn-download': downloadBuild,
       'mn-optimize': () => { if (!invalidateEditor() && !editorStale && !intakePending && Core.describe(adapter.getState()).canOptimize) return swallow(() => adapter.optimize()); },
       'mn-cancel': () => { if (intakePending) cancelIntake(); else adapter.cancel(); },
       'mn-retry': () => { const s = adapter.getState(); if (!intakePending && !Core.describe(s).busy && !needsLocalSetup(s)) return swallow(() => adapter.retry()); },
@@ -339,7 +400,7 @@ if (typeof window !== 'undefined' && window.Suite && window.P8App) (() => {
   const App = window.P8App, S = window.Suite;
   const root = document.querySelector('main[data-ws="minifier"]');
   S.registerTool({ ws: 'minifier', category: 'develop', name: 'Minifier',
-    desc: 'Use the live Code Editor buffer, open .p8 / .lua files or paste Lua, then compare local Shrinko8 output with Minimal profile and Tokens focus. Original files are unchanged; dedicated exports follow separately.',
+    desc: 'Use the live Code Editor buffer, open .p8 / .lua files or paste Lua, then compare local Shrinko8 output with Minimal profile and Tokens focus. Copy validated Lua or download a separate .lua/.p8 build copy. Original files are unchanged.',
     tags: ['minify', 'optimize', 'tokens', 'shrinko8', 'lua', 'cartridge'] });
   const view = P8Minifier.mount({ root, adapter: P8MinifierEngine.create(), app: App, media: matchMedia('(min-width: 1200px)'), editorSource: S.codeSource });
   let attempted = false;

@@ -39,7 +39,7 @@ const P8Cart = (() => {
     const header = [];
     let cur = null;
     for (const raw of text.split(/\r?\n/)) {
-      const m = /^__([a-z0-9_]+)__\s*$/i.exec(raw);
+      const m = /^__([a-z0-9_:]+)__\s*$/i.exec(raw);
       if (m) {
         cur = m[1].toLowerCase();
         sections[cur] = [];
