@@ -1874,31 +1874,15 @@
   }
 
   function showAbout() {
-    const features = [
-      'Shared asset library: images and palettes move between all tools',
-      'Pixel Studio: PICO-8 pixel editor with fill patterns, layers, frames, onion skin, [gfx] clipboard and .p8 in/out',
-      'Data Tools: binary/text/image → PICO-8 string literals, greyscale nibble split',
-      '16-color custom palette editor',
-      'Ramped fade generation with gamma control',
-      'Two-direction fade support (dark/bright)',
-      'PNG palette import',
-      'Lua and GPL export formats',
-      'P8 cartridge export for images (128x128, 128x256, 256x128)',
-      'Image preview with fade effects',
-      'Recent projects with quick access',
-      'PNG image export with applied palette',
-      'Manual greyscale-to-palette mapping with visual assignment dialog',
-      'Greyscale conversion with optional dithering',
-      'Tile Maker: 8×8 tile packing with MAE merging, VRAM viewport heatmap, tile editor',
-      'Tile Maker: .p8 export (standard and large maps, viewer carts), Aseprite, sprite sheet PNG',
-    ];
+    const tools = window.Suite?.tools?.() || [];
     const body = el('div', {},
-      el('p', {}, el('b', { textContent: 'Version: ' }), `${VERSION} (web)`),
+      el('p', {}, el('b', { textContent: 'Web app version: ' }), VERSION),
       el('p', {}, el('b', { textContent: 'Author: ' }), 'Acryl'),
-      el('p', { textContent: 'A development suite for PICO-8 graphics: pixel art, palettes and fades, tiles and maps, data.' }),
-      el('p', { textContent: 'Features:' }),
-      el('ul', { className: 'about-list' }, ...features.map((f) => el('li', { textContent: f }))));
-    modal({ title: 'About PICO-8 Dev Suite', body });
+      el('p', { textContent: 'A browser-based PICO-8 development toolchain for pixel art, palettes, tiles, maps, Lua code, terrain, cartridge building and project inspection. The shared Library connects images, palettes and maps between tools.' }),
+      el('p', { textContent: 'Run in PICO-8 additionally needs the optional local Python bridge and an installed PICO-8. A remotely hosted copy does not connect to the bridge automatically. Folder access depends on browser support.' }),
+      el('p', { textContent: 'Tools in this copy:' }),
+      el('ul', { className: 'about-list' }, ...tools.map((tool) => el('li', { textContent: tool.name }))));
+    modal({ title: 'About PICO-8 Suite', body });
   }
 
   // ------------------------------------------------------------------ //

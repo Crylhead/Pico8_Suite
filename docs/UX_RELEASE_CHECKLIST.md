@@ -27,6 +27,7 @@ Run each on the affected surface and note pass/fail; baseline tasks from the UX 
 | Permission loss | Revoke folder permission for the active project: the app bar shows "reconnect needed" or "access denied", edits stay in memory, no success message. |
 | Onboarding | Clear `p8suite.tours`: the welcome appears once on Home; Start, Skip and "Never auto-offer" behave; Esc ends a tour; Help › Quick tours replays; a renamed/missing target is skipped. |
 | Help / tooltips | F1 opens the current tool's topic; search finds a control name; Off hides tips but not labels, errors or warnings; tips appear on keyboard focus and hide on Esc. |
+| About | Help › About lists the registered workspaces and Extra Tools tabs, labels the web app version and distinguishes the optional local Run bridge. Check offline at 320 CSS px, close with Esc and verify focus returns to the opener. |
 | Report preview | Help › Report a problem: review both the text and JSON previews for private information; remove a JSON record and verify the download omits it; Copy exports only the edited text summary; invalid JSON cannot download; GitHub opens only on click. A synthetic error appears in the summary once. |
 | Keyboard | Tab through the app bar, menus, dialogs and a tool; focus is visible, option groups use arrow keys, dialogs return focus on close. See `docs/ACCESSIBILITY.md`. |
 | Responsive | At 1280, 768 and 320 CSS px and 200% zoom: no lost controls, no horizontal page scroll, dialogs usable. |
