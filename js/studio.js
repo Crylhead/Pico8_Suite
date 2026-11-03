@@ -53,6 +53,9 @@
     name: 'untitled',
     assetId: null,          // library asset this document was opened from / saved to
     dirty: false,
+    docSeq: 0,              // bumped when another document is loaded (#80: a save result belongs to one document)
+    rev: 0,                 // bumped by every edit (#80: a save clears dirty only for the revision it stored)
+    saving: null,           // name of the image a Library save is writing, or null
     frame: 0,
     layer: 0,
     tool: 'pencil',
@@ -2417,6 +2420,7 @@
 
   let sessionTimer = 0;
   function changed() {
+    ps.rev++;
     ps.dirty = true;
     renderTitle();
     clearTimeout(sessionTimer);
@@ -2439,6 +2443,8 @@
 
   function loadDoc(d, { name = 'untitled', assetId = null, dirty = false, fades = null } = {}) {
     setPlaying(false);
+    ps.docSeq++;
+    ps.rev = 0;
     ps.doc = d;
     ps.fades = fades;
     ps.name = name;
@@ -2513,21 +2519,47 @@
     });
   }
 
+  /**
+   * Save to Library (#80). The result is bound to the document and revision it stored: edits made while the
+   * write is pending stay unsaved (discard still asks), and a result for a document that has since been
+   * replaced never gives the new document its asset id or clean state. One save at a time: a second request
+   * while one is pending is refused, so an older snapshot can never land after a newer one.
+   * Resolves true when the image was stored.
+   */
   async function saveToLibrary({ asNew = false } = {}) {
+    if (ps.saving) {
+      toast(`Still saving "${ps.saving}" to the library. Save again when it has finished.`, 'warn');
+      return false;
+    }
     commitFloating();
+    const ticket = { docSeq: ps.docSeq, rev: ps.rev };
     const a = currentAsset();
     if (!asNew && ps.assetId && S.assets.get(ps.assetId)) {
       const old = S.assets.get(ps.assetId);
       a.id = old.id;
       a.created = old.created;
     }
-    const stored = await S.assets.put(a).catch((e) => S.reportStorageError('Save to Library', e));
-    if (!stored) return;
+    ps.saving = a.name;
+    let stored;
+    try {
+      stored = await S.assets.put(a).catch((e) => S.reportStorageError('Save to Library', e));
+    } finally {
+      ps.saving = null;
+    }
+    if (!stored) return false;
+    if (ps.docSeq !== ticket.docSeq) {
+      // another image was opened meanwhile: it keeps its own id, contents and unsaved state
+      toast(`Saved "${a.name}" to the library. The image open now ("${ps.name}") was not saved.`);
+      return true;
+    }
     ps.assetId = stored.id;
-    ps.dirty = false;
+    if (ps.rev === ticket.rev) ps.dirty = false;
     renderTitle();
     saveSession();
-    toast(`Saved "${ps.name}" to the library`);
+    toast(ps.dirty
+      ? `Saved "${a.name}" to the library as it was when you saved. Newer changes are not saved yet.`
+      : `Saved "${ps.name}" to the library`);
+    return true;
   }
 
   /** Send-to destination (#57): asks about unsaved work itself, so it returns false when the user cancels */
