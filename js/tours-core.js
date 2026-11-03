@@ -2,7 +2,7 @@
 // Quick-tour engine without DOM (UX issue #61); runs in Node (tests/tours.test.js). js/tours.js
 // renders it, js/tours-data.js holds the built-in tours.
 //
-// Tour: { id, title, summary, major, rev?, steps: [Step] }
+// Tour: { id, title, summary, major, rev?, ws?, sub?, scope?: 'suite'|'tool', steps: [Step] }
 //   major: bump only for a meaningful new capability; a user who finished an older major is offered
 //          an optional "What's new" (never a forced replay). rev: copy/layout edits, ignored here.
 // Step:  { id, target?, before?, title, text?, helpId? }
@@ -25,6 +25,9 @@ const P8TourCore = (() => {
     const errors = [];
     if (!tour || typeof tour.id !== 'string' || !tour.id) return ['tour needs an id'];
     if (!tour.title) errors.push(`${tour.id}: title`);
+    if (tour.ws != null && (typeof tour.ws !== 'string' || !tour.ws)) errors.push(`${tour.id}: ws must be a nonempty string`);
+    if (tour.sub != null && (!tour.ws || typeof tour.sub !== 'string' || !tour.sub)) errors.push(`${tour.id}: sub needs a workspace and a nonempty string`);
+    if (tour.scope != null && !['suite', 'tool'].includes(tour.scope)) errors.push(`${tour.id}: scope must be suite or tool`);
     if (!Number.isInteger(tour.major) || tour.major < 1) errors.push(`${tour.id}: major must be a positive integer`);
     if (!Array.isArray(tour.steps) || !tour.steps.length) errors.push(`${tour.id}: steps`);
     const seen = new Set();
@@ -157,7 +160,20 @@ const P8TourCore = (() => {
     };
   }
 
-  return { create, validate, normalize, KEY, VERSION };
+  /** Exact subtool matches only: an unrelated workspace overview is not that subtool's tour. */
+  function forContext(tours, { ws, sub = null } = {}) {
+    return ws ? tours.find((t) => t.ws === ws && (t.sub || null) === (sub || null)) || null : null;
+  }
+
+  function search(tours, query = '') {
+    const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    return tours.filter((t) => {
+      const text = [t.title, t.summary, t.ws, t.sub, t.scope].filter(Boolean).join(' ').toLowerCase();
+      return words.every((word) => text.includes(word));
+    });
+  }
+
+  return { create, validate, normalize, forContext, search, KEY, VERSION };
 })();
 
 if (typeof module !== 'undefined') module.exports = P8TourCore;
