@@ -35,6 +35,20 @@ const P8TourData = (() => {
       ],
     },
     {
+      id: 'minifier', title: 'Minifier workspace', major: 1, ws: 'minifier',
+      summary: 'Source, optimization options, code comparison, metrics, diagnostics and separate build exports.',
+      steps: [
+        { id: 'source', before: { ws: 'minifier' }, target: '#mnSourceActions', title: 'Source', text: 'Open a .p8 or .lua file, paste Lua, or capture the current Code Editor buffer. The name and provenance identify this page-only snapshot. Replacing it asks first; nothing is saved or optimized by this tour.' },
+        { id: 'options', target: '#mnProfile', title: 'Optimization options', text: 'This area selects the optimization policy: Minimal + Tokens is the supported default. Minimal keeps names and line breaks, but can change expressions, comments and spacing. Savings are not guaranteed. Optimize runs explicitly; Cancel stops work and Retry reloads the engine.' },
+        { id: 'compare', target: '#mnCompareMode', title: 'Compare', helpId: 'minifier.view' },
+        { id: 'output', target: '#mnOutputPane', optional: true, title: 'Generated output', helpId: 'minifier.output' },
+        { id: 'metrics', target: '#mnMetricsHeading', title: 'Metrics', helpId: 'minifier.metrics' },
+        { id: 'diagnostics', target: '#mnDiagnosticsSummary', title: 'Diagnostics', text: 'Expand this area to read engine messages and filter their severity. Reliable location buttons select a line in the current original snapshot. Unknown or stale locations cannot navigate. Errors and recovery feedback remain visible when optional hints are off.' },
+        { id: 'export', target: '#mnExportActions', title: 'Export', text: 'Copy optimized Lua or download a separate .min.lua / .min.p8 build copy after a successful current result passes validation. Disabled actions explain what is missing below. Original header and non-Lua cartridge data are preserved. Keep the editable project: source-only directives may change or disappear. PNG export is unavailable.' },
+        { id: 'editor', target: '#mnReturn', optional: true, title: 'Code Editor handoff', helpId: 'minifier.editor' },
+      ],
+    },
+    {
       id: 'terrain', title: 'Terrain Lab basics', major: 1, ws: 'extras', sub: 'terrain',
       summary: 'Generate seamless terrain, paint it, and see what will be exported.',
       steps: [
