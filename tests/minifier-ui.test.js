@@ -455,3 +455,57 @@ t('MIN-08 over-budget cart downloads require an informed debugging choice withou
   assert.ok(dialog.buttons.some((b) => b.value === 'cart')); assert.ok(!dialog.buttons.some((b) => b.value === 'png'));
   dialog.finish(null); await pending; f.view.dispose();
 });
+
+// #147: syntax view behind the read-only panes (actual mount/render wiring).
+const runText = (code) => code.children.map((c) => (typeof c === 'string' ? c : c.textContent)).join('');
+
+t('#147 panes get a lossless syntax view of text nodes; markup in source stays text and the textarea stays the control', async () => {
+  const lua = 'local s="<img src=x onerror=alert(1)>" -- ♥ note\r\nprint(s,0x1f)\n-->8\n?"\t"';
+  const f = fixture(); await f.initialize(); f.view.load(source(lua));
+  const area = f.$('mnSourceCode'), code = f.$('mnSourceHl').children[0];
+  assert.strictEqual(f.$('mnSourcePane').dataset.syntax, 'on');
+  assert.strictEqual(area.value, lua.replace(/\r\n/g, '\n'), 'plain textarea text is unchanged');
+  assert.strictEqual(runText(code), area.value, 'highlighted copy matches the textarea exactly');
+  const kinds = new Map(code.children.filter((c) => typeof c !== 'string').map((c) => [c.textContent, c.className]));
+  assert.strictEqual(kinds.get('"<img src=x onerror=alert(1)>"'), 't-string');
+  assert.strictEqual(kinds.get('local'), 't-keyword');
+  assert.strictEqual(kinds.get('-- ♥ note'), 't-comment');
+  assert.strictEqual(kinds.get('-->8'), 't-tabsep');
+  assert.ok(code.children.every((c) => typeof c === 'string' || c.innerHTML === undefined), 'built with textContent only');
+  // Scrolling the textarea moves the copy with it.
+  code.style = {}; area.scrollLeft = 8; area.scrollTop = 40; area.listeners.scroll();
+  assert.strictEqual(code.style.transform, 'translate(-8px, -40px)');
+  // Re-rendering the same text keeps the copy (and the user's selection) rather than rebuilding.
+  area.selectionStart = 3; area.selectionEnd = 9;
+  await f.finish();
+  assert.strictEqual(f.$('mnSourceHl').children[0], code);
+  assert.deepStrictEqual([area.selectionStart, area.selectionEnd], [3, 9]);
+  assert.strictEqual(f.$('mnOutputPane').dataset.syntax, 'on');
+  assert.strictEqual(runText(f.$('mnOutputHl').children[0]), f.$('mnOutputCode').value);
+  // New source: the old output stays visibly stale (dashed state flag) while its copy is kept.
+  f.view.load(source('flip()'));
+  assert.strictEqual(f.$('mnOutputPane').dataset.stale, 'true');
+  assert.strictEqual(runText(f.$('mnSourceHl').children[0]), 'flip()');
+  f.view.dispose();
+});
+
+t('#147 a lexer failure or empty pane falls back to the plain textarea without losing text', async () => {
+  const Lua = require('../js/code-core.js');
+  const lex = Lua.lex;
+  const reports = [];
+  const f = fixture(true, undefined, { diagnostics: { report: (...args) => reports.push(args) } });
+  assert.strictEqual(f.$('mnSourcePane').dataset.syntax, 'off', 'nothing loaded: plain empty pane');
+  Lua.lex = () => { throw new Error('lexer broke'); };
+  try {
+    f.view.load(source('cls()'));
+  } finally {
+    Lua.lex = lex;
+  }
+  assert.strictEqual(f.$('mnSourceCode').value, 'cls()');
+  assert.strictEqual(f.$('mnSourcePane').dataset.syntax, 'off');
+  assert.deepStrictEqual(f.$('mnSourceHl').children, []);
+  assert.strictEqual(reports[0]?.[1], 'E_SYNTAX_VIEW');
+  f.view.load(source('flip()'));
+  assert.strictEqual(f.$('mnSourcePane').dataset.syntax, 'on', 'recovers on the next text');
+  f.view.dispose();
+});

@@ -227,6 +227,22 @@ const P8MinifierCore = (() => {
     // Select the whole line: engine columns count P8SCII, while DOM offsets count UTF-16.
     return freeze({ file: diagnostic.file, reportedLine: diagnostic.line, line, start, end: start + lines[line - 1].length });
   }
-  return { DEFAULTS, FLAGS, STATES, settings, validateSettings, flagsFor, sourceSnapshot, inputKind, decodeText, prepareInput, textInput, normalizeDiagnostics, engineSnapshot, engineKey, sameJob, resultSnapshot, initialState, transition, describe, canExport, metricDelta, metricRows, diagnosticLocation, outputFilename, error };
+  /**
+   * #147: [className, text] runs for a read-only syntax view. Lossless (joined runs equal text);
+   * `lex` is the shared Suite Lua lexer (P8Code.lex). Whitespace and plain names carry no class.
+   * Callers render runs as text nodes, never as markup.
+   */
+  function syntaxRuns(text, lex) {
+    const runs = [];
+    for (const token of lex(text)) {
+      const cls = token.t === 'ws' || token.t === 'ident' ? '' : `t-${token.t}`;
+      const part = text.slice(token.s, token.e);
+      const last = runs[runs.length - 1];
+      if (last && last[0] === cls) last[1] += part; else runs.push([cls, part]);
+    }
+    return runs;
+  }
+
+  return { DEFAULTS, FLAGS, STATES, settings, validateSettings, flagsFor, sourceSnapshot, inputKind, decodeText, prepareInput, textInput, normalizeDiagnostics, engineSnapshot, engineKey, sameJob, resultSnapshot, initialState, transition, describe, canExport, metricDelta, metricRows, diagnosticLocation, outputFilename, syntaxRuns, error };
 })();
 if (typeof module !== 'undefined') module.exports = P8MinifierCore;

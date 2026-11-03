@@ -3,6 +3,8 @@
 const P8Minifier = (() => {
   const Core = typeof P8MinifierCore !== 'undefined' ? P8MinifierCore : require('./minifier-core.js');
   const Export = typeof P8MinifierExport !== 'undefined' ? P8MinifierExport : require('./minifier-export-core.js');
+  const Lua = typeof P8Code !== 'undefined' ? P8Code : require('./code-core.js');
+  const SYNTAX_LIMIT = 200000; // characters; larger text stays plain so rendering never stalls the page
   function mount({ root, adapter, app, media, protocol = globalThis.location?.protocol, editorSource = null, clipboard = globalThis.navigator?.clipboard }) {
     const $ = (id) => root.querySelector('#' + id);
     const radios = (id) => [...$(id).querySelectorAll('[role=radio]')];
@@ -34,6 +36,43 @@ const P8Minifier = (() => {
       const display = value.replace(/\r\n?/g, '\n');
       if (node.value !== display) node.value = display;
     };
+    // #147: an aria-hidden highlighted copy sits behind each read-only textarea. The textarea stays
+    // the accessible plain-text control (selection, copy, focus, diagnostics); its text is drawn
+    // transparent only while the copy is current. Runs become text nodes, never markup.
+    const painted = new Map();
+    function followScroll(area, layer) {
+      const code = layer.children[0];
+      if (code && code.style) code.style.transform = `translate(${-area.scrollLeft || 0}px, ${-area.scrollTop || 0}px)`;
+    }
+    function paintSyntax(paneId, area, layerId) {
+      const pane = $(paneId), layer = $(layerId);
+      const text = area.value;
+      if (painted.get(layerId) === text) return;
+      painted.set(layerId, text);
+      if (!text || text.length > SYNTAX_LIMIT) { layer.replaceChildren(); pane.dataset.syntax = 'off'; return; }
+      try {
+        const doc = root.ownerDocument;
+        const code = doc.createElement('code');
+        for (const [cls, part] of Core.syntaxRuns(text, Lua.lex)) {
+          if (!cls) { code.append(part); continue; }
+          const span = doc.createElement('span');
+          span.className = cls;
+          span.textContent = part;
+          code.append(span);
+        }
+        layer.replaceChildren(code);
+        pane.dataset.syntax = 'on';
+        followScroll(area, layer);
+      } catch (error) {
+        layer.replaceChildren();
+        pane.dataset.syntax = 'off'; // plain text remains fully readable
+        app?.diagnostics?.report?.('minifier', 'E_SYNTAX_VIEW', error);
+      }
+    }
+    for (const [areaId, layerId] of [['mnSourceCode', 'mnSourceHl'], ['mnOutputCode', 'mnOutputHl']]) {
+      const area = $(areaId), layer = $(layerId);
+      area.addEventListener('scroll', () => followScroll(area, layer));
+    }
     const currentInput = (s) => input ? Object.freeze({ ...input, sourceRevision: s.sourceRevision }) : null;
     const setText = (node, text) => { if (node.textContent !== text) node.textContent = text; };
     const actionButtons = (action, disabled) => {
@@ -138,6 +177,8 @@ const P8Minifier = (() => {
       $('mnProjectState').dataset.tone = project?.diagnostics.length ? 'warn' : '';
       setValue($('mnSourceCode'), input?.lua || '');
       setValue($('mnOutputCode'), s.result?.lua || '');
+      paintSyntax('mnSourcePane', $('mnSourceCode'), 'mnSourceHl');
+      paintSyntax('mnOutputPane', $('mnOutputCode'), 'mnOutputHl');
       $('mnSourceStorage').textContent = s.source ? 'In-memory snapshot · not saved to a file or Library. Original files unchanged.' : 'Open a .p8 / .lua file or paste Lua to begin.';
       $('mnOutputState').textContent = !s.result ? 'No result.' : current ? 'Current result · generated build copy.' : 'Stale result · this is an earlier snapshot.';
       $('mnOutputState').dataset.tone = s.result && !current ? 'warn' : '';
