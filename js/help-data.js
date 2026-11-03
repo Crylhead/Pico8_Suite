@@ -76,13 +76,13 @@ const P8HelpData = (() => {
       related: ['studio', 'tiles', 'extras'], keywords: ['color', 'fade', 'dither', 'pal', 'ramp', 'gradient'], legacy: 'doc-overview',
     },
     {
-      id: 'tiles', kind: 'tool', ws: 'tiles', title: 'Tile Maker', rev: 2,
+      id: 'tiles', kind: 'tool', ws: 'tiles', title: 'Tile Maker', rev: 3,
       summary: 'Checks whether a picture can be built from PICO-8 8×8 tiles and builds the tile sheet and map.',
       inputs: ['any image', 'custom palette from Palette & Fades'],
       outputs: ['tiles + map as .p8 cart', 'Library images and maps (Open in Map Editor)'],
       tasks: ['pack an image into tiles', 'reduce the unique tile count', 'check a screen-sized viewport against 256 tiles', 'edit tiles'],
       actions: [
-        { id: 'tiles.import', name: 'Import Image', text: 'Converts to 16 colors (brightness ramp, custom palette by brightness, or nearest color); optional Floyd–Steinberg dither.' },
+        { id: 'tiles.import', name: 'Import Image', text: 'Converts to 16 colors (brightness ramp, custom palette by brightness, or nearest color); optional Floyd–Steinberg dither. A Library image with its own palette brings that palette and its fades along (nearest color) only once you accept replacing an unsaved tile set; Cancel changes nothing.' },
         { id: 'tiles.reduce', name: 'Tile reduction (MAE)', text: 'Raise it and press Rebuild to merge similar tiles until you are within 256.' },
         { id: 'tiles.viewport', name: 'Viewport and heatmap', text: 'Shows how many unique tiles a screen-sized window needs and where it is expensive.' },
         { id: 'tiles.edit', name: 'Edit Tiles…', text: 'Pixel editor for single tiles; Save Changes applies them.' },

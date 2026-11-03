@@ -622,19 +622,28 @@
       showMessage('Import Image', 'Failed to load image');
       return;
     }
-    await importImageData(data, baseNameOf(file.name));
+    try { await importImageData(data, baseNameOf(file.name)); } catch (e) {
+      showMessage('Import Image', `Could not import "${file.name}": ${e?.message || 'unknown error'}. The current tile set is unchanged.`);
+    }
   }
 
-  async function importImageData(data, name) {
-    // Send-to destination (#57): asks itself, so a cancel returns false
-    if (tm.dirty && tm.result && !(await confirmDialog('Import Image', 'Replace the current tile set? Unsaved changes will be lost.', 'Replace'))) return false;
+  /**
+   * Replaces the tile set with an image. Send-to destination (#57): asks itself, so a cancel returns false.
+   * Nothing changes before the user accepted the replacement and the image decoded (#84): `beforeReplace`
+   * (palette adoption, color mode, settings) runs only then, after the old result is gone so the palette
+   * change does not mark it stale. A decode failure throws with everything as it was.
+   */
+  async function importImageData(data, name, { beforeReplace = null } = {}) {
+    if (tm.dirty && tm.result && !(await confirmDialog('Import Image', 'Replace the current tile set? Unsaved changes will be lost.', 'Replace', 'Cancel'))) return false;
+    const original = T.fromImageData(data);
     App.setWorkspace('tiles');
     tm.name = name;
-    tm.original = T.fromImageData(data);
+    tm.original = original;
     tm.result = null;
     tm.vp = null;
     tm.modified = false;
     tm.selected = -1;
+    if (beforeReplace) beforeReplace();
     invalidate('orig', 'recon', 'heat', 'fadeSlots');
     renderAll();
     requestAnimationFrame(zoomFit);
@@ -1296,7 +1305,7 @@ Increase the tile reduction (MAE) threshold and rebuild.`);
 
   async function importFromLibrary() {
     const a = await S.pickAsset({ title: 'Tile Maker: Image from Library' });
-    if (a) importAsset(a);
+    if (a) await importAssetReported(a);
   }
 
   async function sheetToLibrary() {
@@ -1327,22 +1336,32 @@ Increase the tile reduction (MAE) threshold and rebuild.`);
     toast(`Reconstructed image "${a.name}" saved to the library`);
   }
 
-  /** library image -> tiles; an image with its own palette (and fades) brings them along */
+  /**
+   * library image -> tiles; an image with its own palette (and fades) brings them along, but only once the
+   * replacement is accepted (#84). Converting the asset happens first: a failure throws and changes nothing,
+   * so Send to reports it as a failure (not as a cancel or success).
+   */
   function importAsset(a) {
-    if (S.hasOwnPalette(a)) {
-      App.adoptImagePalette(a.pal, a.meta?.fades || null);
-      // nearest color in the image's own palette: every pixel keeps its exact color
-      tm.colorMode = 'nearest';
-      persistSettings();
-    }
-    return importImageData(S.assetImageData(a), a.name);
+    const data = S.assetImageData(a);
+    const ownPalette = S.hasOwnPalette(a);
+    return importImageData(data, a.name, {
+      beforeReplace: ownPalette ? () => {
+        App.adoptImagePalette(a.pal, a.meta?.fades || null);
+        // nearest color in the image's own palette: every pixel keeps its exact color
+        tm.colorMode = 'nearest';
+        persistSettings();
+      } : null,
+    });
   }
+  /** direct routes (drop, Library picker) report a failed import themselves */
+  const importAssetReported = (a) => Promise.resolve().then(() => importAsset(a))
+    .catch((e) => showMessage('Import Image', `Could not import "${a.name}": ${e?.message || 'unknown error'}. The current tile set is unchanged.`));
 
   S.registerConsumer({
     id: 'tiles-import', label: 'Tile Maker', kinds: ['image'],
     open: importAsset,
   });
-  S.bindAssetDrop(dom.origFrame, (a) => { if (a.kind === 'image') importAsset(a); });
+  S.bindAssetDrop(dom.origFrame, (a) => { if (a.kind === 'image') importAssetReported(a); });
 
   App.registerActions({
     'tiles-from-library': importFromLibrary,
