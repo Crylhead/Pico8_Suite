@@ -144,3 +144,20 @@ t('#61 closing during asynchronous target preparation cannot resurrect the tour'
   assert.strictEqual(run.state.status, 'aborted');
   assert.strictEqual(run.state.shown, 0);
 });
+
+t('#105 planned step counts explain unavailable areas and Back revisits the prior available target', async () => {
+  const vm = require('vm'), { read, fn } = require('./source-extract.js');
+  const ui = {}; vm.runInNewContext(fn(read('js/tours.js'), 'progressText'), ui);
+  const engine = Core.create(), tour = { ...fixture(), steps: [
+    { id: 'canvas', title: 'Canvas', text: 'Work', target: '#canvas' },
+    { id: 'hidden', title: 'Hidden', text: 'Optional view', target: '#hidden', optional: true },
+    { id: 'output', title: 'Output', text: 'Export', target: '#output' },
+  ] };
+  engine.register(tour);
+  const run = engine.run('fx', (step) => step.id === 'hidden' ? null : { el: step.id });
+  await run.start(); assert.match(ui.progressText(tour, run.state), /step 1 of 3$/);
+  await run.next(); assert.match(ui.progressText(tour, run.state), /step 3 of 3 · 1 unavailable area skipped$/);
+  await run.back(); assert.strictEqual(run.state.step.id, 'canvas');
+  await run.next(); assert.strictEqual(run.state.step.id, 'output');
+  assert.match(ui.progressText(tour, run.state), /1 unavailable area skipped$/, 'Back/Next must not double-count an unavailable target');
+});

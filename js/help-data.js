@@ -31,7 +31,7 @@ const P8HelpData = (() => {
       related: ['suite', 'library', 'shortcuts'], keywords: ['start', 'launcher', 'welcome'], legacy: 'doc-suite',
     },
     {
-      id: 'studio', kind: 'tool', ws: 'studio', title: 'Pixel Studio', rev: 3,
+      id: 'studio', kind: 'tool', ws: 'studio', title: 'Pixel Studio', rev: 4,
       summary: 'Pixel editor for sprites, sprite sheets and whole-map images with 16 palette slots mapped to the 32 PICO-8 colors, layers and frames.',
       inputs: ['PNG images', 'Library images', 'the gfx of a .p8 cart'],
       outputs: ['Library images', 'PNG', '.p8 gfx section'],
@@ -41,7 +41,7 @@ const P8HelpData = (() => {
         { id: 'studio.tools', name: 'Drawing tools', text: 'Pencil, eraser, line, rectangle, ellipse, fill, color picker, selection tools, pan. Brush sizes 1–4 or a custom brush; mirror X/Y.' },
         { id: 'studio.ink', name: 'Ink', text: 'How the pencil, line, shapes and fill put their color down: normal, lock alpha, behind, shade and shade along the fades.' },
         { id: 'studio.sieve', name: 'Sieve and fill patterns', text: 'A sieve mask limits which pixels change (V turns it on or off); fill patterns use PICO-8 fillp() bits.' },
-        { id: 'studio.layers', name: 'Layers and frames', text: 'Layers (bottom = background) and frames with onion skin; exports flatten the visible layers.' },
+        { id: 'studio.layers', name: 'Layers and frames', text: 'Select a layer to draw on it; the bottom layer is the background. The eye shows or hides a layer. Add, duplicate, reorder, merge and delete affect the document. Layers are shared across frames; PNG and .p8 exports flatten visible layers. Save to Library keeps editable layers and frames.' },
         { id: 'studio.send', name: 'Send to…', text: 'File › Send to lists every destination for the current image (Tile Maker, Palette & Fades preview, Map Editor tileset, Terrain Lab…) with the reason for each one that is unavailable. The destination gets a temporary copy: it is not saved to the Library until you save it.' },
         { id: 'studio.save', name: 'Save to Library', text: 'Ctrl+S makes the image available to the other tools. The working image is also autosaved in this browser. The Library gets the image as it was when you pressed Save: changes made while it is saving stay marked as edited. One save runs at a time.' },
       ],

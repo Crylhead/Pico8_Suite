@@ -1079,6 +1079,16 @@
       row(btn('Save scene…', () => download(sceneJson(), `${baseName()}_scene.json`, 'application/json')), btn('Load scene…', openSceneFile),
         btn('Reset', async () => { if (!(await confirmDialog('Reset all settings and remove every edit?'))) return; pushUndo(true); Object.assign(st, { params: { ...DEFAULTS }, stamps: [], passes: [], strokeStarts: [], preset: 'custom' }); syncControls(); renderOps(); renderPasses(); syncImportUi(); changed(); }))));
 
+    // Stable orientation anchors; no tour action changes terrain or view state.
+    ui.mode.setAttribute('data-tour-id', 'terrain-mode');
+    ui.tools.setAttribute('data-tour-id', 'terrain-tools');
+    gTerrain.setAttribute('data-tour-id', 'terrain-settings');
+    gGen.setAttribute('data-tour-id', 'terrain-generation');
+    gErosion.setAttribute('data-tour-id', 'terrain-erosion');
+    gLook.setAttribute('data-tour-id', 'terrain-look');
+    gPico.setAttribute('data-tour-id', 'terrain-output');
+    gFiles.setAttribute('data-tour-id', 'terrain-files');
+
     const controls = el('section', { className: 'card ex-controls tl-controls' },
       el('div', { className: 'ex-row' }, ui.mode, el('span', { className: 'muted', textContent: 'Simple shows the essentials' })),
       gTerrain, gImport, ui.gText, ui.gImage, gLook, gPico, gGen, gShape, gErosion, gFiles);

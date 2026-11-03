@@ -82,7 +82,7 @@ function targetErrors(selector, step, where, html, sources, tools) {
     dynamic = true;
     const generated = name === 'id' ? literal('id', value) : name === 'class' ? literal('className', value)
       : name === 'data-ex' || name === 'data-value' ? tools.some((t) => t.ws === 'extras' && t.sub === value)
-      : [...src.matchAll(/['"](data-[\w-]+)['"]:\s*['"]([^'"]*)['"]/g)].some((m) => m[1] === name && (value === null || m[2] === value));
+      : [...src.matchAll(/['"](data-[\w-]+)['"]:\s*['"]([^'"]*)['"]/g), ...src.matchAll(/\.setAttribute\(['"](data-[\w-]+)['"],\s*['"]([^'"]*)['"]\)/g)].some((m) => m[1] === name && (value === null || m[2] === value));
     if (!generated) errors.push(`${where}: target ${name === 'id' ? '#' + value : name === 'class' ? '.' + value : '[' + name + (value === null ? '' : '=' + value) + ']'} does not exist in index.html or bundled DOM builders.`);
   };
   if (/nth-child|nth-of-type/.test(selector)) errors.push(`${where}: brittle selector "${selector}"; use an id, class or data-tour-id.`);

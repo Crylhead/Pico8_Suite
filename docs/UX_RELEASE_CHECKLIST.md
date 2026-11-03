@@ -13,7 +13,7 @@ Use this before a release or a larger UX change (see [UX_DEVELOPMENT_PLAN.md](UX
 1. **Help topic** in `js/help-data.js` (`kind: 'tool'`, `ws` = the workspace id): purpose, inputs, outputs, actions, restrictions, shortcuts, related. Bump `rev`.
 2. **Stable ids** for controls/actions (`tool.control`); mark essential controls with `data-help-id` only if they should have tooltips. A rename needs an `ALIASES` entry.
 3. **Shortcuts:** every shortcut shown in a menu is listed in the topic (or the F1 keyboard section).
-4. **Tour:** required for built-in workspaces and Extra Tools tabs (#103/#109), optional for external plugins (`tour: false` explicitly opts out without blocking registration). Use literal ws/sub registration IDs in bundled modules so the audit discovers them. Tag highlighted steps with `areas` covering work, controls, input, output and a safe handoff; document legitimate `areaExceptions` with reasons. Home uses the Suite overview; the Extra Tools overview delegates to subtool tours, and existing Pixel Studio/Terrain expansion gaps are tracked explicitly in #105. Give each step a stable `id`, a non-brittle `target`, `optional`/`conditional` where it can legitimately be absent, and bump the tour `major` only for a meaningful new capability (offers "What's new"); copy edits keep it.
+4. **Tour:** required for built-in workspaces and Extra Tools tabs (#103/#109), optional for external plugins (`tour: false` explicitly opts out without blocking registration). Use literal ws/sub registration IDs in bundled modules so the audit discovers them. Tag highlighted steps with `areas` covering work, controls, input, output and a safe handoff; document legitimate `areaExceptions` with reasons. Home uses the Suite overview; the Extra Tools overview delegates to subtool tours. Give each step a stable `id`, a non-brittle `target`, `optional`/`conditional` where it can legitimately be absent, and bump the tour `major` only for a meaningful new capability (offers "What's new"); copy edits keep it.
 5. `EXTENDING.md` / `docs/` updated if a contract changed; the long-form F1 section updated or its parity noted.
 
 ## Human test plan (about 20 minutes)
@@ -54,7 +54,17 @@ For each tour, start it from its tool with Help › Tour this tool, and once fro
 | Data Tools | Binary → string card, input mode, generated code, nibble card |
 | Extra Tools overview | tabs, description, tool area, panel splitter (wide screens) |
 | LUT Creator / Wave Designer / Line Tool | the tab is selected first; preview/stage and controls (Wave: presets, thumbnail strip, scopes, parameter groups) |
-| Suite, Pixel Studio, Minifier, Terrain Lab | unchanged existing tours |
+| Suite / Minifier | existing overview and source/options/comparison/exports tours |
+| Pixel Studio (#105) | tools, canvas/zoom, options/ink, palette/transparency, preview scale, layers, frames (when visible), status and File/Export workflow |
+| Terrain Lab (#105) | canvas, mode, terrain/import, generation (Advanced), brushes/stamps, erosion (Advanced), look, status, PICO-8/Library output, full-resolution/scene files (Advanced) |
+
+## Editor-area tours (#105)
+
+1. Replay Pixel Studio with the timeline shown, then hidden. The frame strip is highlighted only when visible; the count explains skipped areas and Back returns to an available target. Keep drawing, active layer/frame, selection, undo history and view settings unchanged while only advancing the tour.
+2. Replay Terrain in Simple, then explicitly select Advanced outside the tour and replay. Generation, erosion and scene-file panels appear only in Advanced. The tour must retain that mode, tool, parameters, stamps and passes; it must never import, paint, apply erosion, export or reset. Check Text/Image stamp options are described without changing the selected tool.
+3. Use Tab/Shift+Tab, Enter and Escape with optional Help Off. Next/Back/Close stay reachable; Esc closes and restores focus. Complete once, then replay from Quick tours.
+4. At 320 CSS px, a 320 px high viewport, light/dark and reduced motion, check each tour card and its buttons remain reachable by scrolling. At 200% zoom (or equivalent 640 CSS px viewport), check no new horizontal overflow or blocked controls.
+5. Verify preview Fit/1×/2× wording matches the Preview scale help. Export descriptions distinguish editable Library/scene copies from flattened PNG/.p8 output and Preview from Final. Do not trigger a real export or replace user work just to run a tour.
 
 ## Contextual F1 help (#106)
 

@@ -79,13 +79,13 @@ t('#109 missing workspace and dynamic subtool tours fail; real metadata and just
   assert.strictEqual(registered[0].ws, 'external');
 });
 
-t('#109 required area metadata catches incomplete tours and preserves documented overview/follow-up gaps', () => {
+t('#109 required area metadata catches incomplete tours and preserves documented overview exceptions', () => {
   const valid = real();
   const broken = { ...valid, tours: valid.tours.map((tour) => tour.id === 'minifier' ? { ...tour, steps: tour.steps.map((step) => ({ ...step, areas: step.areas?.filter((area) => area !== 'handoff') })) } : tour) };
   assert.match(check(broken).join('\n'), /Tour "minifier" does not cover area "handoff"/);
   const bad = { ...valid, tours: [...valid.tours, { ...valid.tours.find((x) => x.id === 'palette'), id: 'duplicate-context' }] };
   assert.match(check(bad).join('\n'), /Built-in "palette" needs exactly one tour \(found 2\)/);
-  assert.deepStrictEqual(check(valid), [], 'Home overview and #105 gaps must be explicit, not silently inferred');
+  assert.deepStrictEqual(check(valid), [], 'Home and delegated Extra Tools overview areas must be explicit, not silently inferred');
 });
 
 t('#109 optional targets and before clicks still need real static or bundled builder evidence', () => {
@@ -99,6 +99,9 @@ t('#109 optional targets and before clicks still need real static or bundled bui
   const dynamic = withStep({ target: '#generated', conditional: true });
   dynamic.sources = { ...sources, 'js/fixture.js': "const node = el('div', { id: 'generated' });" };
   assert.deepStrictEqual(check(dynamic), []);
+  const anchored = withStep({ target: '[data-tour-id="generated-area"]', conditional: true });
+  anchored.sources = { ...sources, 'js/fixture.js': "node.setAttribute('data-tour-id', 'generated-area');" };
+  assert.deepStrictEqual(check(anchored), []);
   const unprepared = withStep({ target: '#generated' }); unprepared.sources = dynamic.sources;
   assert.match(check(unprepared).join('\n'), /created by JavaScript; declare/);
 });
