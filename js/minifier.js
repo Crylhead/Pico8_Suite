@@ -185,10 +185,13 @@ const P8Minifier = (() => {
       renderDiagnostics(s);
       const checked = exportCheck(s), enabled = checked.ok && !editorStale && !intakePending && !exportPending && !disposed;
       actionButtons('mn-copy', !enabled); actionButtons('mn-download', !enabled);
-      setText($('mnExportValidation'), editorStale ? 'Earlier editor snapshot. Refresh and optimize before exporting.' : checked.ok ? 'Validated build copy. Cartridge exports preserve the original header and non-Lua data; no source file is saved or replaced.' : checked.reason);
-      $('mnExportValidation').dataset.tone = checked.ok && !editorStale ? 'ok' : s.result ? checked.code === 'E_EXPORT_STALE' || editorStale ? 'warn' : 'error' : '';
-      setText($('mnExportWarnings'), checked.ok ? checked.artifacts.warnings.join(' ') : '');
-      $('mnExportWarnings').hidden = !checked.ok || !checked.artifacts.warnings.length;
+      const budgets = checked.ok ? checked.artifacts.budgets : null;
+      const preservation = checked.ok && checked.artifacts.cart ? 'Cartridge data/format preservation checks passed.' : 'Lua/source consistency checks passed.';
+      setText($('mnExportValidation'), editorStale ? 'Earlier editor snapshot. Refresh and optimize before exporting.' : checked.ok ? `${preservation} ${budgets.textOver ? 'Over-budget debugging output: token/character limits are exceeded.' : 'Tokens and characters are within limits; PNG compression is checked separately.'} These checks do not establish runtime compatibility.` : checked.reason);
+      $('mnExportValidation').dataset.tone = checked.ok && !editorStale ? budgets.warnings.length ? 'warn' : 'ok' : s.result ? checked.code === 'E_EXPORT_STALE' || editorStale ? 'warn' : 'error' : '';
+      const exportWarnings = checked.ok ? [...budgets.warnings, ...checked.artifacts.warnings] : [];
+      setText($('mnExportWarnings'), exportWarnings.join(' '));
+      $('mnExportWarnings').hidden = !exportWarnings.length;
       setText($('mnExportStatus'), exportReport?.state === s ? exportReport.text : '');
       $('mnExportStatus').dataset.tone = exportReport?.state === s ? exportReport.tone : '';
     }
@@ -308,12 +311,14 @@ const P8Minifier = (() => {
       const opener = root.ownerDocument.activeElement;
       exportPending = true; reportExport('Choose a build-copy download. Original source unchanged.');
       try {
-        const { artifacts } = capture;
-        const pngAvailable = !!artifacts.cart && adapter.getState().engine?.capabilities.png && typeof adapter.exportPng === 'function';
-        const pngReason = !artifacts.cart ? 'PNG needs a complete .p8 source cartridge.' : !pngAvailable ? 'PNG unavailable: optional local encoder is missing. Text/Lua exports remain available.' : 'PNG carries cartridge code, ROM and label. Text-only metadata is not retained. Code capacity is checked before download.';
+        const { artifacts } = capture, { budgets } = artifacts;
+        const pngEncoder = !!artifacts.cart && adapter.getState().engine?.capabilities.png && typeof adapter.exportPng === 'function';
+        const pngAvailable = pngEncoder && !budgets.pngBlocked;
+        const pngReason = !artifacts.cart ? 'PNG needs a complete .p8 source cartridge.' : !pngEncoder ? 'PNG unavailable: optional local encoder is missing. Text/Lua exports remain available.' : budgets.pngBlocked ? 'PNG blocked by the code budgets listed above. Lua and text .p8 debugging copies remain available.' : 'PNG carries cartridge code, ROM and label. Text-only metadata is not retained. Code capacity is checked before download.';
+        const budgetNotice = budgets.warnings.length ? '\n\nCode budget warning:\n' + budgets.warnings.join('\n') + (budgets.textOver && artifacts.cart ? `\n${artifacts.cart.filename} exceeds PICO-8 token/character limits. Choose Download .p8 for debugging only to retain an inspection copy; it is not a compatible build.` : '') : '';
         const choice = await app.modal({ title: 'Download optimized build copy',
-          body: `Downloads a separate generated artifact, never a project Save. Keep the original editable source.${artifacts.cart ? ' The .p8 retains the original header and all non-Lua text exactly.' : ' Lua input has no complete source cartridge; only .lua is offered.'}${artifacts.warnings.length ? '\n\n' + artifacts.warnings.join('\n') : ''}\n\n${pngReason}`,
-          buttons: [{ label: 'Cancel', value: null }, { label: `Download ${artifacts.lua.filename}`, value: 'lua', primary: !artifacts.cart }, ...(artifacts.cart ? [{ label: `Download ${artifacts.cart.filename}`, value: 'cart', primary: true }] : []), ...(pngAvailable ? [{ label: `Download ${artifacts.cart.filename}.png`, value: 'png' }] : [])] });
+          body: `Downloads a separate generated artifact, never a project Save. Keep the original editable source.${artifacts.cart ? ' The .p8 retains the original header and all non-Lua text exactly.' : ' Lua input has no complete source cartridge; only .lua is offered.'}${budgetNotice}${artifacts.warnings.length ? '\n\n' + artifacts.warnings.join('\n') : ''}\n\n${pngReason}`,
+          buttons: [{ label: 'Cancel', value: null }, { label: `Download ${artifacts.lua.filename}`, value: 'lua', primary: !artifacts.cart || budgets.textOver }, ...(artifacts.cart ? [{ label: budgets.textOver ? 'Download .p8 for debugging only' : `Download ${artifacts.cart.filename}`, value: budgets.textOver ? 'cart-debug' : 'cart', primary: !budgets.textOver }] : []), ...(pngAvailable ? [{ label: `Download ${artifacts.cart.filename}.png`, value: 'png' }] : [])] });
         if (disposed) return;
         if (!choice) { reportExport('Download cancelled. Original source unchanged.'); return; }
         if (!captureCurrent(capture)) throw Core.error('E_EXPORT_STALE', 'Source or result changed while choosing a download. Optimize the current source again; nothing was downloaded.');
@@ -328,10 +333,12 @@ const P8Minifier = (() => {
           reportExport(`Download requested: ${filename} · build copy. Compressed code: ${png.compressedBytes} bytes (must be <${png.compressedBudgetExclusive}); PNG image: ${png.pngBytes} bytes. Original source unchanged.`, 'ok');
           return;
         }
-        const artifact = choice === 'lua' ? artifacts.lua : choice === 'cart' ? artifacts.cart : null;
+        if (choice === 'cart' && budgets.textOver) throw Core.error('E_EXPORT_BUDGET', 'This cart exceeds PICO-8 code budgets. Use the explicit debugging-copy choice; nothing was downloaded.');
+        const debugCart = choice === 'cart-debug' && budgets.textOver;
+        const artifact = choice === 'lua' ? artifacts.lua : (choice === 'cart' || debugCart) ? artifacts.cart : null;
         if (!artifact) throw Core.error('E_EXPORT_INVALID', 'Choose an available build format.');
         app.download(artifact.text, artifact.filename, artifact.type);
-        reportExport(`Download requested: ${artifact.filename} · build copy. Browser download controls completion; original source is unchanged.`, 'ok');
+        reportExport(`Download requested: ${artifact.filename} · ${debugCart ? 'over-budget debugging copy; not a PICO-8-compatible build' : 'build copy'}. Browser download controls completion; original source is unchanged.`, debugCart ? 'warn' : 'ok');
       } catch (err) { if (!disposed) reportExport(err.code ? err.message : 'Download failed. The browser could not start the build-copy download. Original source unchanged.', 'error'); }
       finally { exportPending = false; pngPending = false; if (!disposed) { render(adapter.getState()); restoreExportFocus(opener); } }
     }
