@@ -264,11 +264,11 @@ const P8HelpData = (() => {
       restrictions: ['If the browser blocks storage, changes last until reload.'], related: ['suite'], keywords: ['preferences', 'theme', 'motion', 'help level'], legacy: 'doc-settings',
     },
     {
-      id: 'report-problem', kind: 'guide', title: 'Report a problem', rev: 1,
+      id: 'report-problem', kind: 'guide', title: 'Report a problem', rev: 2,
       summary: 'Help › Report a problem… builds an editable summary from your text and sanitized error summaries.',
       inputs: [], outputs: ['copied summary', 'diagnostics JSON'], tasks: ['report a bug', 'export diagnostics'],
       actions: [], controls: [], shortcuts: [],
-      restrictions: ['Nothing is sent automatically. Diagnostics do not read your project or storage. By default, exported error messages keep only generic error words (other words appear as […]); “Include full error messages” adds scrubbed text that may contain private details, so review both previews before exporting. Logs are lost when the tab closes; a crashed tab cannot be captured.'],
+      restrictions: ['Nothing is sent automatically. Diagnostics do not read your project or storage. By default, exported error messages keep only generic error words (other words appear as […]), error types are standard names or OtherError and stacks list only the Suite’s own script lines; “Include full error details” adds scrubbed messages, error names and stack function names that may contain private details, so review both previews before exporting. Logs are lost when the tab closes; a crashed tab cannot be captured.'],
       related: ['suite'], keywords: ['bug', 'error', 'diagnostics', 'github', 'crash'], legacy: 'doc-web',
     },
   ];

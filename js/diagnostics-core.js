@@ -119,18 +119,50 @@ const P8Diag = (() => {
     return s || fallback;
   };
 
+  // Default export schema (#85): every field is either generated here, chosen from a finite list or written
+  // by the app itself. Error names are mutable and a rejection reason can be any object, so a runtime name
+  // is kept only when it is a JavaScript or DOMException type; anything else becomes OtherError.
+  const KNOWN_NAMES = new Set(('Error TypeError RangeError SyntaxError ReferenceError EvalError URIError AggregateError InternalError '
+    + 'AbortError NotAllowedError NotFoundError NotReadableError NotSupportedError QuotaExceededError SecurityError InvalidStateError '
+    + 'InvalidAccessError InvalidModificationError NoModificationAllowedError TypeMismatchError DataCloneError DataError EncodingError '
+    + 'NetworkError TimeoutError OperationError ConstraintError TransactionInactiveError ReadOnlyError VersionError UnknownError')
+    .split(' '));
+  const knownName = (n) => { try { return KNOWN_NAMES.has(String(n)) ? String(n) : 'OtherError'; } catch { return 'OtherError'; } };
+  /** codes the app passes to report(): E_ plus upper-case words */
+  const APP_CODE = /^E_[A-Z][A-Z0-9_]{0,40}$/;
+  /** sources the app uses: 'window', 'promise', a tool id, 'worker:terrain' */
+  const APP_SOURCE = /^[a-z][a-z0-9-]{0,30}(?::[a-z][a-z0-9-]{0,30})?$/;
+
   /**
-   * opts: { now: () => ms, browser: string, version: string, sessionId: string }
+   * Default-export stack: file:line:col for the Suite's own scripts only, without function names (a
+   * function name can come from data, e.g. a computed method key). Other frames become "(other script)".
+   */
+  function appStack(stack, appFiles) {
+    const out = [];
+    for (const ln of String(stack || '').split('\n')) {
+      const m = /\(([\w.-]+\.(?:js|mjs|html)):(\d+)(?::(\d+))?\)$/.exec(ln);
+      if (!m) continue;
+      const frame = appFiles.has(m[1].toLowerCase()) ? `${m[1]}:${m[2]}${m[3] ? `:${m[3]}` : ''}` : '(other script)';
+      if (out[out.length - 1] !== frame) out.push(frame);
+    }
+    return out.join('\n');
+  }
+
+  /**
+   * opts: { now: () => ms, browser: string, version: string, sessionId: string,
+   *         appFiles: () => iterable of the Suite's own script basenames (read at export time) }
    * All environment access is injected so the core stays testable.
    */
-  function create({ now = () => Date.now(), browser = 'unknown', version = 'unknown', sessionId } = {}) {
+  function create({ now = () => Date.now(), browser = 'unknown', version = 'unknown', sessionId, appFiles = () => [] } = {}) {
     const session = sessionId || hash(`${now()}:${Math.random()}`).slice(0, 4);
     let records = [];
     let seq = 0;
     const lastSeen = new Map(); // dedupe key -> record
 
     /**
-     * input: { source, severity, code, message, stack, state }
+     * input: { source, severity, code, detailCode?, message, stack, state }
+     * `code` must be a safe code (APP_CODE, or built from knownName); `detailCode` is the same code with the
+     * runtime error name, exported only with the full-messages opt-in.
      * Returns the stored (or merged duplicate) record, or null if nothing could be captured.
      */
     function capture(input) {
@@ -138,10 +170,12 @@ const P8Diag = (() => {
         const i = input || {};
         const severity = SEVERITIES.includes(i.severity) ? i.severity : 'error';
         const source = token(i.source, 'app');
-        const code = token(i.code, 'E_UNKNOWN');
+        const rawCode = token(i.code, 'E_UNKNOWN');
+        const code = i.detailCode != null || APP_CODE.test(rawCode) ? rawCode : 'E_APP';
+        const detailCode = i.detailCode != null ? token(i.detailCode, code) : rawCode;
         const message = sanitize(i.message);
         const stack = sanitizeStack(i.stack);
-        const dedupe = `${source}|${code}|${message}|${stack.split('\n')[0] || ''}`;
+        const dedupe = `${source}|${detailCode}|${message}|${stack.split('\n')[0] || ''}`;
         const prev = lastSeen.get(dedupe);
         if (prev && records.includes(prev)) {
           prev.count++;
@@ -157,6 +191,7 @@ const P8Diag = (() => {
           severity, source, code, message, stack,
           state: sanitize(i.state, MAX_FIELD),
         };
+        if (detailCode !== code) rec.detailCode = detailCode;
         records.push(rec);
         lastSeen.set(dedupe, rec);
         if (records.length > MAX_RECORDS) {
@@ -172,8 +207,9 @@ const P8Diag = (() => {
       try {
         const err = ev && ev.error;
         const name = err && err.name ? err.name : 'Error';
+        const prefix = source === 'window' ? 'E_' : 'E_WORKER_';
         return capture({
-          source, code: source === 'window' ? `E_${name}` : `E_WORKER_${name}`,
+          source, code: `${prefix}${knownName(name)}`, detailCode: `${prefix}${name}`,
           message: (err && err.message) || (ev && ev.message) || 'Script error',
           stack: err && err.stack,
         });
@@ -184,8 +220,9 @@ const P8Diag = (() => {
       try {
         const r = ev && ev.reason;
         const isErr = r && typeof r === 'object' && ('message' in r || 'stack' in r);
+        const name = isErr && r.name ? r.name : null;
         return capture({
-          source, code: `E_REJECTION${isErr && r.name ? `_${r.name}` : ''}`,
+          source, code: `E_REJECTION${name ? `_${knownName(name)}` : ''}`, detailCode: `E_REJECTION${name ? `_${name}` : ''}`,
           message: isErr ? r.message : (typeof r === 'string' ? r : 'Unhandled rejection'),
           stack: isErr ? r.stack : '',
         });
@@ -194,7 +231,7 @@ const P8Diag = (() => {
 
     /** worker 'messageerror': a message could not be deserialized (no payload is recorded). */
     const fromMessageError = (source = 'worker') =>
-      capture({ source, code: 'E_WORKER_MESSAGEERROR', message: 'A worker message could not be deserialized' });
+      capture({ source, code: 'E_WORKER_MESSAGEERROR', detailCode: 'E_WORKER_MESSAGEERROR', message: 'A worker message could not be deserialized' });
 
     /** Explicit tool failure, e.g. report('terrain', 'E_TERRAIN_BUILD', err, 'rebuilding'). */
     function report(source, code, error, state) {
@@ -236,6 +273,18 @@ const P8Diag = (() => {
      */
     function exportBundle({ messages = 'redacted' } = {}) {
       const full = messages === 'sanitized';
+      let own = new Set();
+      try { own = new Set([...appFiles()].map((f) => String(f).toLowerCase())); } catch { /* none known */ }
+      // every default field is listed explicitly (#85): nothing from a record is spread unchecked
+      const safe = (r) => ({
+        id: r.id, seq: r.seq, time: r.time, last: r.last, count: r.count, severity: r.severity,
+        source: APP_SOURCE.test(r.source) ? r.source : 'app',
+        code: r.code,
+        message: redactMessage(r.message),
+        stack: appStack(r.stack, own),
+        state: stateText(r.state),
+      });
+      const detailed = (r) => ({ ...safe(r), code: r.detailCode || r.code, message: r.message, stack: r.stack });
       return {
         format: 'pico8-suite-diagnostics',
         formatVersion: 1,
@@ -244,15 +293,11 @@ const P8Diag = (() => {
         app: { version: token(version, 'unknown'), browser: token(browser, 'unknown') },
         messages: full ? 'sanitized' : 'redacted',
         note: (full
-          ? 'Local-only error summaries with scrubbed message text included at your request; message text can still contain private details, review it. '
-          : 'Local-only error summaries. Message text is reduced to generic error words; other words appear as […]. ')
+          ? 'Local-only error summaries with scrubbed message text, error names and stack function names included at your request; they can still contain private details, review them. '
+          : 'Local-only error summaries. Message text is reduced to generic error words (other words appear as […]); error types are standard names or OtherError; stacks list only the Suite\'s own script lines. ')
           + 'No project content, file paths or storage contents are collected. '
           + 'JavaScript hooks cannot capture a crashed tab or process, and this log is lost when the tab closes.',
-        records: records.map((r) => ({
-          ...r,
-          message: full ? r.message : redactMessage(r.message),
-          state: stateText(r.state),
-        })),
+        records: records.map(full ? detailed : safe),
       };
     }
 

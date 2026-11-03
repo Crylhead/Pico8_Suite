@@ -100,3 +100,69 @@ t('#63/#62 default report has the Error ID but no message text; full text only a
   r.optIn.checked = false; r.optIn.listeners.change();
   assert.ok(!r.json.value.includes('playerSecretName'));
 });
+
+// ---------------------------------------------------------------- #85
+
+/** hostile names in every place an error can carry them; none may reach the default export */
+const HOSTILE = ['CustomerSecretProject', 'CustomerSecretFunction', 'CustomerSecretFile', 'PlainObjSecret', 'workerSecretName', 'secret_code', 'SecretSource'];
+function hostileLog() {
+  const d = D.create({ sessionId: 'S1', appFiles: () => ['app.js', 'suite.js'] });
+  const e = new Error('generic failure');
+  e.name = 'CustomerSecretProject';
+  e.stack = 'Error: generic failure\n    at CustomerSecretFunction (https://host/js/CustomerSecretFile.js:10:5)\n    at Object.run (https://host/js/app.js:20:3)\n    at async load (suite.js:5:6)';
+  d.fromErrorEvent({ error: e });
+  d.fromRejection({ reason: { name: 'PlainObjSecret', message: 'x', stack: 'at f (CustomerSecretFile.js:1:1)' } });
+  const w = new Error('boom'); w.name = 'workerSecretName';
+  d.fromErrorEvent({ error: w }, 'worker:terrain');
+  d.report('SecretSource Here', 'secret_code', new Error('failed'));
+  d.fromErrorEvent({ error: new TypeError('x is not a function') });
+  d.fromRejection({ reason: new RangeError('bad') });
+  d.fromErrorEvent({ error: Object.assign(new Error('denied'), { name: 'NotAllowedError' }) });
+  d.report('terrain', 'E_TERRAIN_RENDER', new Error('render failed'), 'preview render');
+  return d;
+}
+
+t('#85 default export: no custom error name, plain-object name, stack function or foreign file in any field', () => {
+  const d = hostileLog();
+  const json = d.exportJSON();
+  for (const bad of HOSTILE) assert.ok(!json.includes(bad), `${bad} leaked into the default JSON`);
+  const recs = JSON.parse(json).records;
+  for (const r of recs) assert.deepStrictEqual(Object.keys(r).sort(), ['code', 'count', 'id', 'last', 'message', 'seq', 'severity', 'source', 'stack', 'state', 'time'], 'only the listed fields');
+  assert.deepStrictEqual(recs.map((r) => r.code), ['E_OtherError', 'E_REJECTION_OtherError', 'E_WORKER_OtherError', 'E_APP', 'E_TypeError', 'E_REJECTION_RangeError', 'E_NotAllowedError', 'E_TERRAIN_RENDER']);
+  assert.deepStrictEqual(recs.map((r) => r.source), ['window', 'promise', 'worker:terrain', 'app', 'window', 'promise', 'window', 'terrain']);
+  assert.strictEqual(recs[0].stack, '(other script)\napp.js:20:3\nsuite.js:5:6', 'own script lines only, without function names');
+  assert.strictEqual(recs[1].stack, '(other script)');
+  assert.strictEqual(recs[7].state, 'preview render');
+});
+
+t('#85 the report summary built from the default bundle carries no hostile names; IDs stay', async () => {
+  const d = hostileLog();
+  const r = await openReport(d);
+  for (const bad of HOSTILE) {
+    assert.ok(!r.summary.value.includes(bad), `${bad} leaked into the summary`);
+    assert.ok(!r.json.value.includes(bad), `${bad} leaked into the JSON preview`);
+  }
+  for (const rec of d.read().slice(-8)) assert.ok(r.summary.value.includes(rec.id), 'every Error ID is in the summary');
+  assert.match(r.summary.value, /E_TypeError/);
+  assert.match(r.summary.value, /E_TERRAIN_RENDER/);
+});
+
+t('#85 the explicit opt-in shows the detail truthfully; in-memory IDs are unchanged by the mapping', async () => {
+  const d = hostileLog();
+  const full = d.exportBundle({ messages: 'sanitized' });
+  assert.strictEqual(full.messages, 'sanitized');
+  assert.match(full.note, /error names and stack function names included at your request/);
+  assert.deepStrictEqual(full.records.slice(0, 4).map((x) => x.code), ['E_CustomerSecretProject', 'E_REJECTION_PlainObjSecret', 'E_WORKER_workerSecretName', 'secret_code']);
+  assert.match(full.records[0].stack, /^CustomerSecretFunction \(CustomerSecretFile\.js:10:5\)/);
+  // two errors that differ only in their custom name stay separate records (dedupe uses the full name)
+  const d2 = D.create({ sessionId: 'S1' });
+  const a = new Error('m'); a.name = 'OneName';
+  const b = new Error('m'); b.name = 'OtherName';
+  d2.fromErrorEvent({ error: a }); d2.fromErrorEvent({ error: b });
+  assert.strictEqual(d2.size, 2);
+  const r = await openReport(d);
+  r.optIn.checked = true; r.optIn.listeners.change();
+  assert.ok(r.json.value.includes('CustomerSecretProject') && r.summary.value.includes('CustomerSecretProject'), 'opt-in regenerates both previews with detail');
+  r.optIn.checked = false; r.optIn.listeners.change();
+  assert.ok(!r.json.value.includes('CustomerSecretProject'), 'unticking restores the safe default');
+});
