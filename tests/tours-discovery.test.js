@@ -5,7 +5,8 @@ const { read, fn, line } = require('./source-extract.js');
 const Core = require('../js/tours-core.js');
 const Data = require('../js/tours-data.js');
 
-const tour = (extra = {}) => ({ id: 'plugin', title: 'Wave Designer orientation', summary: 'Wave shapes and exports', major: 1, ws: 'extras', sub: 'wave', steps: [{ id: 'intro', title: 'Welcome', text: 'Orientation' }], ...extra });
+// A hypothetical external Extra Tool without a built-in tour (all built-in tools have one, #103).
+const tour = (extra = {}) => ({ id: 'plugin', title: 'Plasma Lab orientation', summary: 'Plasma shapes and exports', major: 1, ws: 'extras', sub: 'plasma', steps: [{ id: 'intro', title: 'Welcome', text: 'Orientation' }], ...extra });
 
 t('#108 current-tour resolution follows live metadata and never substitutes another Extra Tool', () => {
   const engine = Core.create();
@@ -13,9 +14,10 @@ t('#108 current-tour resolution follows live metadata and never substitutes anot
   assert.strictEqual(Core.forContext(engine.list(), { ws: 'home' }).id, 'suite');
   assert.strictEqual(Core.forContext(engine.list(), { ws: 'studio' }).id, 'studio');
   assert.strictEqual(Core.forContext(engine.list(), { ws: 'extras', sub: 'terrain' }).id, 'terrain');
-  assert.strictEqual(Core.forContext(engine.list(), { ws: 'extras', sub: 'wave' }), null);
+  for (const sub of ['lut', 'wave', 'line']) assert.strictEqual(Core.forContext(engine.list(), { ws: 'extras', sub }).id, sub);
+  assert.strictEqual(Core.forContext(engine.list(), { ws: 'extras', sub: 'plasma' }), null);
   assert.ok(engine.register(tour()).ok);
-  assert.strictEqual(Core.forContext(engine.list(), { ws: 'extras', sub: 'wave' }).id, 'plugin');
+  assert.strictEqual(Core.forContext(engine.list(), { ws: 'extras', sub: 'plasma' }).id, 'plugin');
   engine.register(tour({ id: 'extras-overview', sub: null }));
   assert.strictEqual(Core.forContext(engine.list(), { ws: 'extras', sub: 'missing' }), null);
   assert.strictEqual(Core.forContext(engine.list(), { ws: 'missing' }), null);
@@ -67,7 +69,7 @@ function setup() {
     prefs: { get() { throw Error('manual launch should not consult auto-offer preference'); }, set() { throw Error('preference changed'); } },
     modal: (opts) => { modalOpen = true; dialog = opts; opts.onOpen?.(); return new Promise((resolve) => { resolveModal = resolve; }); },
   };
-  const window = { Suite: { tools: () => [{ ws: 'extras', sub: 'wave', name: 'Wave Designer' }] } };
+  const window = { Suite: { tools: () => [{ ws: 'extras', sub: 'plasma', name: 'Plasma Lab' }] } };
   const ctx = vm.createContext({ App, Core, document, window, el, engine,
     start: async (id, opts) => { starts.push({ id, opts, modalOpen }); return true; },
   });
@@ -96,9 +98,11 @@ t('#108 menu action uses current workspace/tab and gives a visible Help fallback
   f.document.body.dataset.workspace = 'extras';
   await f.actions['tour-this-tool'](); assert.strictEqual(f.starts.at(-1).id, 'terrain');
   f.setSub('wave');
+  await f.actions['tour-this-tool'](); assert.strictEqual(f.starts.at(-1).id, 'wave');
+  f.setSub('plasma');
   const missing = f.actions['tour-this-tool']();
   assert.strictEqual(f.dialog.title, 'No tour for this tool yet');
-  assert.match(f.dialog.body, /Wave Designer/);
+  assert.match(f.dialog.body, /Plasma Lab/);
   f.close('help'); await missing;
   assert.deepStrictEqual(f.helpActions, ['docs']);
   assert.strictEqual(f.focused, f.helpButton);
@@ -116,7 +120,7 @@ t('#108 chooser filters, keeps progress, refreshes registrations and launches on
   assert.strictEqual(studio.children[1].textContent, 'Replay');
   assert.match(studio.children[0].children[1].textContent, /Completed.*Current tool/);
   assert.match(f.list.children[0].children[0].children[1].textContent, /Suite overview/);
-  f.input.value = 'TERRAIN'; f.input.listeners.input();
+  f.input.value = 'SEAMLESS'; f.input.listeners.input();
   assert.strictEqual(f.count.textContent, `1 of ${total} tours`);
   f.input.value = 'no-such-tour'; f.input.listeners.input();
   assert.match(f.list.children[0].textContent, /No tours match/);
@@ -141,4 +145,22 @@ t('#108 cancelling selector starts nothing; focus uses the opener or the current
   assert.strictEqual(f.focused, f.helpButton);
   f.restore({ isConnected: false });
   assert.strictEqual(f.focused, f.workspaceButton);
+});
+
+t('#103 every workspace tab and built-in Extra Tools subtool has a replayable tour', () => {
+  const html = read('index.html');
+  // js/app.js: every <main data-ws="..."> is a workspace
+  const workspaces = [...html.matchAll(/<main\b[^>]*\sdata-ws="([\w-]+)"/g)].map((m) => m[1]);
+  const extrasTabs = html.slice(html.indexOf('id="exTabs"'), html.indexOf('</div>', html.indexOf('id="exTabs"')));
+  const subs = [...[...extrasTabs.matchAll(/data-value="([\w-]+)"/g)].map((m) => m[1]), 'terrain']; // Terrain Lab registers from js/terrain.js
+  assert.ok(workspaces.length >= 12 && subs.length === 4, `found ${workspaces} / ${subs}`);
+  const engine = Core.create();
+  for (const x of Data.TOURS) assert.deepStrictEqual(engine.register(x).errors || [], [], x.id);
+  for (const ws of workspaces) {
+    assert.ok(Data.TOURS.some((x) => x.ws === ws && !x.sub), `workspace "${ws}" needs a tour in js/tours-data.js`);
+  }
+  for (const sub of subs) assert.strictEqual(Core.forContext(engine.list(), { ws: 'extras', sub })?.id, sub, `Extra Tools "${sub}" needs its own tour`);
+  for (const x of Data.TOURS.filter((x) => x.scope !== 'suite')) {
+    assert.ok(x.steps[0].before?.ws === x.ws, `tour "${x.id}" must open its workspace in its first step`);
+  }
 });
