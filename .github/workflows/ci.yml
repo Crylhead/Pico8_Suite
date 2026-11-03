@@ -3,7 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+    # Release tags rerun every job, including the real-engine Minifier gate.
+    tags: ['v*']
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -31,7 +34,52 @@ jobs:
           done
       - name: Python bridge syntax
         run: python -m py_compile tools/pico8_bridge.py
-      - name: Python bridge tests
+      - name: Python tests (real-engine Minifier suites skip here; see minifier-native job)
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Static HTML references and IDs
         run: node tests/check-static.js
+
+  # Real pinned Shrinko8 + PNG checks (#145). The engine bundle is Git-ignored, so the fast job
+  # above skips these suites; this job packages it from the pinned archives and fails on any skip.
+  minifier-native:
+    name: Minifier real-engine checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test-only independent PNG reader
+        run: python -m pip install --disable-pip-version-check Pillow==12.1.0
+      # Cached only after a successful job; cache contents are re-verified by the packager anyway.
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/minifier-archives
+          key: minifier-archives-${{ hashFiles('vendor/minifier-lock.json') }}
+      - name: Fetch pinned archives listed in vendor/minifier-lock.json
+        env:
+          ARCHIVES: ${{ runner.temp }}/minifier-archives
+        run: |
+          python - <<'PY'
+          import json, os, pathlib, urllib.request
+          lock = json.loads(pathlib.Path('vendor/minifier-lock.json').read_text())
+          folder = pathlib.Path(os.environ['ARCHIVES']); folder.mkdir(parents=True, exist_ok=True)
+          for key in ('shrinko8', 'pyodide'):
+              path = folder / (key + '.tar.gz')
+              if not path.is_file():
+                  urllib.request.urlretrieve(lock[key]['url'], path)
+              print(key, path.stat().st_size, 'bytes')
+          PY
+      - name: Package and verify pinned assets (SHA-256 of archives, bundle and runtime files)
+        run: >-
+          python tools/package_minifier.py
+          --shrinko-archive "${{ runner.temp }}/minifier-archives/shrinko8.tar.gz"
+          --pyodide-archive "${{ runner.temp }}/minifier-archives/pyodide.tar.gz"
+      - name: Real-engine tests (exact counts, zero skips)
+        run: python tests/run_minifier_native.py
+      - name: Negative controls (broken optimizer and PNG encoder must fail)
+        run: python tests/run_minifier_native.py --negative-controls

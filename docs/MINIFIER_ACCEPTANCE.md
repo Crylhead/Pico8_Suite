@@ -58,6 +58,27 @@ A clean checkout without packaged assets **skips** the native engine tests by th
 
 Final local results: **317 JavaScript regressions passed**, **9 real-engine Python tests passed**, static HTML/reference checks passed, changed test syntax and relative documentation links passed, and `git diff --check` passed. Changed production JavaScript is limited to Minifier export focus restoration and its help text. The native suite was actually run with packaged assets, not skipped.
 
+### Continuous real-engine gate (#145)
+
+The paragraphs above record the original #128 evidence. Since #145, CI separates two levels of checks:
+
+| Job | Runs on | What it proves |
+| --- | --- | --- |
+| `checks` (fast) | Every PR, push to `main`, `v*` tag | JS regressions, syntax, static references, bridge/package Python tests. The engine bundle is not packaged here, so the native and PNG suites report **skipped**; a skip is not a pass. |
+| `minifier-native` (*Minifier real-engine checks*) | Same triggers, plus manual dispatch | Fetches only the archives pinned in `vendor/minifier-lock.json` (CI cache keyed on that file), runs `tools/package_minifier.py` (verifies archive, bundle and runtime SHA-256), then `tests/run_minifier_native.py`. |
+
+`tests/run_minifier_native.py` fails if `engine.zip` is missing or differs from the lock, if any test is skipped/failed/errored, or if the executed count differs from its explicit `EXPECTED` table (9 native, 4 PNG; update it deliberately when tests change). It requires the test-only Pillow reader (CI pins `Pillow==12.1.0`) so the independent PNG decode runs. `--negative-controls` reruns the goldens test against an engine copy with the optimizer disabled and the independent PNG-reader test against an encoder copy that flips payload bits; it fails unless both are detected. Archives are downloaded only by CI or the developer packaging step, never by the user-facing page, and no user cartridge or PICO-8 runtime file is involved.
+
+A release must be tagged `v*` from a commit whose `minifier-native` job passed; the tag push reruns it. Repository owners should mark *Minifier real-engine checks* as a required status check for `main`.
+
+Known local limitation: on Windows, the native suite has pre-existing environment failures (default cp1252 file decoding, and the case-insensitive filesystem in the `X.lua` include case). Use `PYTHONUTF8=1`; the case-sensitivity case is authoritative on the Linux CI runner and the browser's case-sensitive Pyodide filesystem.
+
+```sh
+python tools/package_minifier.py
+python tests/run_minifier_native.py
+python tests/run_minifier_native.py --negative-controls
+```
+
 ## Integration defect fixed
 
 The keyboard-only journey found that Cancel/Escape in Download left focus on the page body: Minifier disabled the opener before the shared dialog captured it, and that control was still disabled when shared restoration ran. The presenter now captures the export opener first and restores it only after re-enabling controls. A stale disabled opener falls back to Source actions. Later focus, another open dialog, a hidden workspace or a disposed view prevents restoration from stealing focus. Clipboard completion uses the same guard. The focused regression fails against the pre-fix presenter and passes with the correction; shared modal code is unchanged.
