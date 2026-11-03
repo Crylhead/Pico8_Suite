@@ -107,7 +107,7 @@ Keep these issues open rather than treating a green model test as full acceptanc
 | #57 | Addressed in the follow-up below (browser journey; prompt buttons fixed). |
 | #59 | Addressed in the follow-up below (browser F1/search/legacy/keyboard walkthrough). |
 | #60 | Addressed in the follow-up below (browser walkthrough; placement fallback fixed). |
-| #61 | Browser welcome/replay/keyboard/missing-target smoke; asynchronous engine cancellation and help-text lookup are covered by regressions. |
+| #61 | Addressed in the follow-up below (browser walkthrough; card placement regression from #60 fixed). |
 | #62 | Addressed in the follow-up below (allowlisted default export). Manual browser check of the Report dialog opt-in remains. |
 | #63 | Addressed in the follow-up below (browser/offline walkthrough, issue-form fields). |
 | #64 | Addressed in the follow-up below (45/45 layout, resize, persistence and touch/pen checks). |
@@ -235,3 +235,20 @@ Headless Chrome, driven over the DevTools protocol with real mouse, keyboard and
 - No exceptions were thrown and no diagnostics were recorded.
 
 Not covered: a physical touch device, a screen reader announcing `aria-describedby`, and non-Chromium browsers.
+
+## Follow-up: #61 Quick tours walkthrough (2026-11-03)
+
+Headless Chrome, driven over the DevTools protocol with real keyboard and pointer input, using a temporary script outside the repo. All acceptance checks pass after one fix.
+
+**Fixed in this pass (regression from #60):** `position()` in `js/tours.js` placed the tour card wherever `P8Tips.place` answered. Since #60, `place` may return `null`, or a shortened spot with `maxHeight`, so a tip never covers its control. The tour card ignored `maxHeight`, so a tall card ran past the viewport edge. At 320×200, steps 1, 3 and 6 of the Pixel Studio tour had their **buttons off-screen**, and at 1400×260 step 2 did. The card now takes the centered spot whenever it does not fit whole beside its target, and the target ring stays. After the fix, every step at both sizes and at 320×640 keeps its card and buttons on screen. `tests/tours-position.test.js` runs the real `position()`; the shortened/null case fails on the old code.
+
+**Results:**
+- **Welcome** (fresh profile, Home): it offers *Never auto-offer / Explore independently / Start tour*. Explore leaves no overlay, the app works and `skipped` is stored. Never is not offered again after a reload and sets `autoOfferTours: false`. With help level **Off** there is no automatic offer.
+- **Replay from Help › Quick tours:** all three tours were started with Enter and stepped with Enter on the focused Next, including one Back, through to Finish (`done`). The Suite tour skips its optional *Active project* step when no project is open (steps 1, 2, 3, 5). The card is a non-modal `dialog`. Escape mid-tour closes it, records it as closed early (`skipped`) and returns focus to the opener. Clicking Next through to Finish also completes a tour.
+- **Missing targets:** a step whose target is missing is skipped and the tour continues (A, C). A tour whose targets are all missing returns `false`, shows *"This tour has nothing to show here right now."* and leaves no card or ring.
+- **Versions:** a tour recorded done at `major` 1 and shipped at `major` 2 keeps its status and reports What's new. Other tours keep their status. An invalid stored `major` (0) is dropped by normalization, as the schema requires.
+- **Reduced motion:** the card and ring have no transition or animation. Tours work offline.
+- **No project state changes:** Pixel Studio's image, dirty flag, revision and tool, and the shared palette, are identical before and after all tours.
+- No exceptions were thrown and no diagnostics were recorded.
+
+Not covered: a screen reader announcing the non-modal card, a physical touch device and non-Chromium browsers.
