@@ -21,7 +21,7 @@ body[data-workspace="minifier"] { height: 100vh; height: 100dvh; display: flex; 
 .layout-minifier summary { cursor: pointer; font-weight: var(--fw-label); padding: var(--space-2); border-radius: var(--radius-xs); }
 .mn-options details p { margin: var(--space-4) 0; }
 #mnFlags { display: block; overflow-wrap: anywhere; color: var(--muted); }
-#mnStatus, #mnEngine, #mnInputStatus, #mnSourceStorage, #mnMetricsState, #mnDiagnosticsShown, .mn-diagnostics li { overflow-wrap: anywhere; }
+#mnStatus, #mnEngine, #mnInputStatus, #mnSourceStorage, #mnEditorAvailability, #mnEditorState, #mnMetricsState, #mnDiagnosticsShown, .mn-diagnostics li { overflow-wrap: anywhere; }
 .mn-results { display: flex; flex-direction: column; gap: var(--space-5); overflow-y: auto; min-height: 0; }
 #mnCompareMode { align-self: flex-start; flex-wrap: wrap; }
 .mn-code-views { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); flex: 1 0 220px; min-height: 220px; }
