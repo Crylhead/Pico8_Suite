@@ -265,3 +265,67 @@ t('#41 a local of one if branch does not prove a use in its else/elseif branch',
     assert.deepStrictEqual([r.retire, r.unresolved], [['b.p8'], []], lua);
   }
 });
+
+// ---------------------------------------------------------------- #82
+
+const HELPERS = ['all', 'ipairs', 'pairs', 'count'];
+// every way the code can make a helper name something other than PICO-8's builtin; the functions mutate their argument
+const REBIND = {
+  'global function': (h) => `function ${h}(t) t[1]="other.p8" return #t end`,
+  'local function': (h) => `local function ${h}(t) t[1]="other.p8" return #t end`,
+  'local value': (h) => `local ${h}=function(t) t[1]="other.p8" return #t end`,
+  assignment: (h) => `${h}=function(t) t[1]="other.p8" return #t end`,
+  'compound assignment': (h) => `${h}..=""`,
+  'multiple assignment': (h) => `z,${h}=1,function(t) t[1]="other.p8" return #t end`,
+  parameter: (h) => `function use(${h}) end`,
+  'loop variable': (h) => `for ${h}=1,2 do end`,
+  _G: (h) => `_G["${h}"]=function(t) t[1]="other.p8" end`,
+  '#include': () => '#include helpers.lua',
+};
+const listUse = (h) => (h === 'count' ? 'x=count(cs)' : `for c in ${h}(cs) do end`);
+const fx82 = (h, rebind) => `local cs={"old.p8"}\n${rebind}\n${listUse(h)}\nreload(0,0,10,cs[1]) --@data x[]`;
+const helperCall = (h) => new RegExp(`handed to ${h}\\(\\) \\(which may not be PICO-8's builtin`);
+
+t('#82 a redefined or shadowed list helper is not proof: every candidate stays and the rewrite is refused', () => {
+  for (const h of HELPERS) {
+    for (const [form, make] of Object.entries(REBIND)) {
+      const lua = fx82(h, make(h));
+      const r = retire(lua);
+      assert.deepStrictEqual(r.retire, [], `${h} / ${form}: nothing may retire`);
+      assert.deepStrictEqual(r.kept.map((k) => k.cart).sort(), ['old.p8', 'other.p8'], `${h} / ${form}`);
+      // (an unreadable #include is reported separately as well)
+      const read = r.unresolved.find((u) => u.call.startsWith('reload'));
+      assert.ok(read, `${h} / ${form}: the list read is reported`);
+      assert.match(read.why, helperCall(h), `${h} / ${form}`);
+      assert.strictEqual(read.line, 4, `${h} / ${form}: the location of the read`);
+      const w = P.rewriteAnchors(lua, where, whereSet);
+      assert.strictEqual(w.text, lua, `${h} / ${form}: the list initializer is not rewritten`);
+      assert.match(w.errors[0]?.msg || '', helperCall(h), `${h} / ${form}`);
+    }
+  }
+  // the reason names the rebinding and where it is
+  assert.match(retire(fx82('count', REBIND['global function']('count'))).unresolved[0].why, /count is defined as a function at line 2\) at line 3$/);
+  assert.match(retire(fx82('pairs', REBIND.parameter('pairs'))).unresolved[0].why, /pairs is declared as a local, parameter or loop variable at line 2/);
+});
+
+t('#82 adoption keeps a source cart that a list read through a redefined helper may reach', () => {
+  for (const h of HELPERS) {
+    const r = adoptOf(`reload(0,0,0x100,"atlas.p8")\nlocal cs={"atlas.p8", "b.p8"}\n${REBIND['global function'](h)}\n${listUse(h)}\nreload(0,0,0x100,cs[i])\n`, ['atlas.p8', 'b.p8']);
+    assert.ok(!r.assets.some((a) => a.type === 'cartset'), `${h}: the list is not adopted as a cart set`);
+    const skip = r.skipped.find((s) => helperCall(h).test(s.why));
+    assert.ok(skip, `${h}: the list read is skipped with the reason`);
+    assert.strictEqual(skip.carts, null, `${h}: the unproven list may read any cart`);
+    assert.ok(r.keptCarts.includes('atlas.p8') && !r.adoptedCarts.includes('atlas.p8'), `${h}: atlas.p8 is not treated as fully adopted`);
+  }
+});
+
+t('#82 the builtin helpers, fields and table keys of the same name keep the list provable', () => {
+  for (const h of HELPERS) {
+    const lua = `local o={${h}=1}\no.${h}=2\nlocal cs={"old.p8"}\n${listUse(h)}\nreload(0,0,10,cs[1]) --@data x[]`;
+    const r = retire(lua);
+    assert.deepStrictEqual([r.retire, r.unresolved], [['other.p8'], []], `${h}: an unreferenced cart can still retire`);
+    assert.deepStrictEqual(P.rewriteAnchors(lua, where, whereSet).errors, [], h);
+    const ok = adoptOf(`local cs={"atlas.p8", "b.p8"}\n${listUse(h)}\nreload(0,0,0x100,cs[i])\n`, ['atlas.p8', 'b.p8']);
+    assert.deepStrictEqual(ok.adoptedCarts.sort(), ['atlas.p8', 'b.p8'], `${h}: a proven list is adopted as before`);
+  }
+});
