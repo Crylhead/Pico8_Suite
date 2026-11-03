@@ -113,7 +113,7 @@ Keep these issues open rather than treating a green model test as full acceptanc
 | #64 | Addressed in the follow-up below (45/45 layout, resize, persistence and touch/pen checks). |
 | #65 | Keyboard/focus/contrast walkthrough done 2026-11-03 (`docs/ACCESSIBILITY.md`); splitter reset announcement fixed. No screen reader available. |
 | #66 | Addressed in the follow-up below (disposable-folder walkthrough; Commit-stage baseline fixed). Native picker/permission UI not shown. |
-| #67 | Foreground before/after input-to-paint and frame-pacing evidence at 256/512/1024; independent worker retry smoke. Archive timings are attributed, not independently reproduced. |
+| #67 | Addressed: independent foreground before/after, frame pacing and worker-retry evidence in `docs/PERFORMANCE_BASELINE_TERRAIN.md` (2026-11-03). |
 | #68 | First-run/returning-user browser journey, task navigation and narrow-layout checks. |
 
 ## Follow-up: #62 default diagnostics export is allowlist-based (2026-11-03)
