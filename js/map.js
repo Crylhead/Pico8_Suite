@@ -1169,8 +1169,14 @@
     'map-export-png': exportPng,
   });
 
-  /** Opens a map built elsewhere (Tile Maker) without saving it to the library. */
-  window.P8MapEditor = { openAsset, importCartText };
+  /**
+   * Public entry for other tools (Tile Maker). Opening a map replaces the map, its undo/redo history, tileset
+   * and palette, so it always goes through the guarded 'map-open' Send to (#81): an unsaved map gets the
+   * Replace / Cancel prompt before anything changes, and the size limit applies. Resolves true when the map
+   * was opened; the incoming map stays unsaved (`saved: false` = temporary copy). importCartText asks itself.
+   */
+  const openAssetGuarded = (a, { saved = false } = {}) => S.openIn('map-open', a, { saved });
+  window.P8MapEditor = { openAsset: openAssetGuarded, importCartText };
 
   buildSheetCanvas();
   rebuildMapCanvas();

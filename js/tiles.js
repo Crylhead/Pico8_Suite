@@ -891,7 +891,7 @@
   }
 
   /** The tiles become the Map Editor's tileset (sprites 0–255), the tile map its map. */
-  function sendToMapEditor() {
+  async function sendToMapEditor() {
     if (!requireResult()) return;
     const { tiles, map, mapW, mapH } = tm.result;
     if (tiles.length > T.MAX_SPRITES) {
@@ -910,11 +910,14 @@ Increase the tile reduction (MAE) threshold and rebuild.`);
     const mem = T.spriteMemory(shift ? [new Uint8Array(tiles[0].length), ...tiles] : tiles, pal.rgb);
     const sheet = new Uint8Array(128 * 128);
     for (let i = 0; i < mem.length; i++) { sheet[i * 2] = mem[i] & 15; sheet[i * 2 + 1] = mem[i] >> 4; }
-    window.P8MapEditor.openAsset({
+    // guarded (#81): an unsaved map in the Map Editor gets Replace / Cancel first; on cancel nothing changes
+    // in either tool and the Send to flow has already said so
+    const opened = await window.P8MapEditor.openAsset({
       kind: 'map', name: tm.name || 'tiles', w: mapW, h: mapH, cells: Uint8Array.from(map, (v) => v + shift),
       sheet, pal: pal.picos || null, sheetName: `${tm.name || 'tiles'} (Tile Maker)`, source: 'tiles',
-    });
-    if (shift) toast(`Map Editor: ${mapW}×${mapH} map with ${tiles.length} tiles at sprites 1–${tiles.length} (not saved to the library yet)`);
+    }, { saved: false });
+    if (!opened) return;
+    if (shift) toast(`Map Editor: ${mapW}×${mapH} map with ${tiles.length} tiles at sprites 1–${tiles.length}`);
     else toast('Map Editor: 256 tiles, so tile 0 holds a real tile; map() skips tile 0, draw those cells with spr().', 'warn', 6000);
   }
 

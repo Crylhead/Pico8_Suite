@@ -76,7 +76,7 @@ const P8HelpData = (() => {
       related: ['studio', 'tiles', 'extras'], keywords: ['color', 'fade', 'dither', 'pal', 'ramp', 'gradient'], legacy: 'doc-overview',
     },
     {
-      id: 'tiles', kind: 'tool', ws: 'tiles', title: 'Tile Maker', rev: 1,
+      id: 'tiles', kind: 'tool', ws: 'tiles', title: 'Tile Maker', rev: 2,
       summary: 'Checks whether a picture can be built from PICO-8 8×8 tiles and builds the tile sheet and map.',
       inputs: ['any image', 'custom palette from Palette & Fades'],
       outputs: ['tiles + map as .p8 cart', 'Library images and maps (Open in Map Editor)'],
@@ -86,6 +86,7 @@ const P8HelpData = (() => {
         { id: 'tiles.reduce', name: 'Tile reduction (MAE)', text: 'Raise it and press Rebuild to merge similar tiles until you are within 256.' },
         { id: 'tiles.viewport', name: 'Viewport and heatmap', text: 'Shows how many unique tiles a screen-sized window needs and where it is expensive.' },
         { id: 'tiles.edit', name: 'Edit Tiles…', text: 'Pixel editor for single tiles; Save Changes applies them.' },
+        { id: 'tiles.tomap', name: 'Tiles + Map → Map Editor', text: 'Opens the tiles as the Map Editor tileset (sprite 0 stays empty when they fit) and the tile map as its map, as a temporary copy that is not in the Library. If the Map Editor has unsaved changes it first asks Replace / Cancel; Cancel changes neither tool.' },
       ],
       controls: [{ id: 'tiles.mae', label: 'Tile reduction (MAE)', text: 'Higher values merge more similar tiles.' }],
       shortcuts: [['Ctrl+I', 'Import image'], ['Ctrl+O', 'Open tile project'], ['Ctrl+S', 'Save tile project']],
