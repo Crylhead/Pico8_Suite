@@ -110,7 +110,7 @@ Keep these issues open rather than treating a green model test as full acceptanc
 | #61 | Browser welcome/replay/keyboard/missing-target smoke; asynchronous engine cancellation and help-text lookup are covered by regressions. |
 | #62 | Addressed in the follow-up below (allowlisted default export). Manual browser check of the Report dialog opt-in remains. |
 | #63 | Addressed in the follow-up below (browser/offline walkthrough, issue-form fields). |
-| #64 | Actual 320/768/1280 layouts, 200% zoom, theme and pointer/touch checks. |
+| #64 | Addressed in the follow-up below (45/45 layout, resize, persistence and touch/pen checks). |
 | #65 | Keyboard/focus/contrast walkthrough done 2026-11-03 (`docs/ACCESSIBILITY.md`); splitter reset announcement fixed. No screen reader available. |
 | #66 | Addressed in the follow-up below (disposable-folder walkthrough; Commit-stage baseline fixed). Native picker/permission UI not shown. |
 | #67 | Foreground before/after input-to-paint and frame-pacing evidence at 256/512/1024; independent worker retry smoke. Archive timings are attributed, not independently reproduced. |
@@ -198,3 +198,20 @@ No exceptions were thrown and no diagnostics were recorded.
 **Observed, not changed (transaction core, out of #66's scope):** if creating the journal file succeeds but writing it fails (simulated by failing only `createWritable`), an empty `suite.journal.json` stays behind, as the core intends ("may belong to another write"). Further writes are then refused until the project is reopened. With a real permission denial, creating the file fails as well, so nothing is left behind (verified above).
 
 Not covered: the native folder picker and permission prompt UI, a real user folder on disk, and screen reader or touch input.
+
+## Follow-up: #64 Side panel layout walkthrough (2026-11-03)
+
+Headless Chrome on `main` at `cf4b944`, driven over the DevTools protocol with real mouse, touch and pen input, using a temporary script outside the repo. **45/45 checks pass. No code change was needed.**
+
+- **Layouts** at 1280×900, 768×1024, 320×640 and 200% zoom (a 1280 px window at 2×, i.e. 640 CSS px), each in the dark and light themes, for Pixel Studio, Map Editor and Terrain Lab. Terrain Lab was checked in **Simple** mode and again in **Advanced** mode: Simple hides its 36 advanced controls by design, and the *Advanced* option is the route to them.
+  - Every visible button, input, select and textarea in the side panel was scrolled into view and hit-tested: none was unreachable or horizontally off-screen (33 in Pixel Studio, 8 in Map Editor, 27/58 in Terrain Lab).
+  - There was no horizontal page overflow.
+  - The main canvas kept at least 266 px of width. Its displayed aspect ratio matched its pixel size within 0.2%.
+  - At 768 px and below, the side panel stacks under the canvas (splitter hidden). Option bars that do not fit get their own horizontal scroll strip.
+- **Pointer resize** (Pixel Studio): dragging the splitter changes the width. Dragging far left stops at the 560 px maximum with 626 px of canvas left; far right stops at the 200 px minimum with every panel control reachable. Double-click restores 272 px.
+- **Persistence:** a width survives a workspace switch (each panel keeps its own) and a reload. Four corrupt stored layouts recover to a width within the bounds without errors: broken JSON, non-numeric fields, an out-of-range width (clamped to the maximum) and an unknown version. *Settings › reset* (`P8PanelLayout.resetAll`) restores 272 px and clears the stored widths.
+- **Drawing:** after a resize, a touch tap and a pen tap with the pencil each set exactly the pixel under the pointer.
+- Keyboard resizing and the focus ring were verified in the #65 run (including the splitter reset announcement fixed there).
+- No exceptions were thrown and no diagnostics were recorded.
+
+Not covered: a physical touch screen or pen, browser zoom through the UI (it was emulated with the device scale factor), and non-Chromium browsers.
