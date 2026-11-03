@@ -267,7 +267,7 @@ const P8HelpData = (() => {
       summary: 'Help › Report a problem… builds an editable summary from your text and sanitized error summaries.',
       inputs: [], outputs: ['copied summary', 'diagnostics JSON'], tasks: ['report a bug', 'export diagnostics'],
       actions: [], controls: [], shortcuts: [],
-      restrictions: ['Nothing is sent automatically. Diagnostics do not read your project or storage, but error messages may include private details: review both previews before exporting. Logs are lost when the tab closes; a crashed tab cannot be captured.'],
+      restrictions: ['Nothing is sent automatically. Diagnostics do not read your project or storage. By default, exported error messages keep only generic error words (other words appear as […]); “Include full error messages” adds scrubbed text that may contain private details, so review both previews before exporting. Logs are lost when the tab closes; a crashed tab cannot be captured.'],
       related: ['suite'], keywords: ['bug', 'error', 'diagnostics', 'github', 'crash'], legacy: 'doc-web',
     },
   ];

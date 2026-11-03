@@ -114,3 +114,36 @@ t('#62 paths containing spaces, short quoted values and API-key spellings are sc
     assert.ok(!/Alice|Demo|cart\.p8|xy|abcdefghi/.test(scrubbed), scrubbed);
   }
 });
+
+t('#62 default export keeps only generic error words: unquoted user text never leaves', () => {
+  const d = mk();
+  // unquoted identifiers/values that regex scrubbing alone passes through
+  d.report('code', 'E_RUN', new TypeError('playerSecretName.split is not a function'));
+  d.report('code', 'E_PARSE', new SyntaxError('Unexpected identifier hunter2 near mygame level'));
+  d.report('code', 'E_X', new Error('[pwd] Ünïcode wörd'), 'saving  <b>cart</b>');
+  const text = d.exportJSON();
+  for (const bad of ['playerSecretName', 'split', 'hunter2', 'mygame', 'level', 'pwd', 'Ünïcode', '<b>']) assert.ok(!text.includes(bad), `${bad} leaked`);
+  const msgs = JSON.parse(text).records.map((r) => r.message);
+  assert.deepStrictEqual(msgs, ['[…] is not a function', 'Unexpected identifier […]', '[…]']);
+  assert.strictEqual(JSON.parse(text).messages, 'redacted');
+  assert.strictEqual(D.redactMessage('Could not decode image.'), 'Could not decode image.');
+  assert.strictEqual(D.redactMessage('x'), D.redactMessage('x'));
+  // in-memory records (local UI) keep the scrubbed text; only export is reduced
+  assert.strictEqual(d.read()[0].message, 'playerSecretName.split is not a function');
+});
+
+t('#62 full scrubbed messages are an explicit opt-in, still bounded and scrubbed', () => {
+  const d = mk();
+  d.report('code', 'E_RUN', new Error(`foo.bar failed at C:\\Users\\Anna\\x.p8 ${'z'.repeat(5000)}`));
+  const b = d.exportBundle({ messages: 'sanitized' });
+  assert.strictEqual(b.messages, 'sanitized');
+  assert.match(b.records[0].message, /^foo\.bar failed/);
+  assert.ok(!b.records[0].message.includes('Anna'));
+  assert.ok(b.records[0].message.length < 330);
+  assert.match(b.note, /review/);
+});
+
+t('#62 stack function names must be identifiers; other frame text is dropped', () => {
+  const st = D.sanitizeStack('E\n    at Object.run (app.js:1:2)\n    at eval my secret words (code.js:3:4)\n    at async load (suite.js:5:6)');
+  assert.strictEqual(st, 'Object.run (app.js:1:2)\n(code.js:3:4)\nload (suite.js:5:6)');
+});

@@ -5,6 +5,8 @@
 // - Records live only in an in-memory ring buffer. Nothing is stored, uploaded or sent.
 // - Messages and stacks are sanitized deterministically and conservatively: paths, URLs, tokens,
 //   e-mail addresses, long hex/base64 runs and quoted strings are replaced; fields are truncated.
+// - Because scrubbing is best effort, the default export goes further: messages keep only an
+//   allowlist of generic error words (redactMessage). Full scrubbed text is an explicit opt-in.
 // - Capture never throws: errors inside this module are swallowed.
 // - A JavaScript error is not a tab crash. Hooks cannot see a crashed tab or process, and the
 //   buffer is lost when the tab closes.
@@ -41,13 +43,64 @@ const P8Diag = (() => {
     return s.length > max ? `${s.slice(0, max)}…[truncated]` : s;
   }
 
+  // Allowlist for the default export (#62). Regex scrubbing above is best effort: an exception can
+  // carry arbitrary unquoted user text ("Unexpected token mysecret", "foo.bar is not a function").
+  // The default bundle therefore keeps only generic error words, small numbers and the redaction
+  // placeholders; every other word becomes "[…]". Adding a word here must never admit user data:
+  // only generic English/engine vocabulary, no identifiers or names.
+  const SAFE_WORDS = new Set((
+    'a an the of to in on at for from by with without into as is are was were be been not no nor or and '
+    + 'but if than then this that it its can cannot could would should must may might does do did has have had '
+    + 'error errors exception failed failure fail fails unable invalid unexpected unknown missing empty expected '
+    + 'undefined null nan true false object function property properties method value values argument arguments '
+    + 'parameter type types read reading write writing written set setting get getting assign assignment '
+    + 'constant variable defined declared initialization initialized before after access accessing lexical '
+    + 'declaration constructor class instance prototype iterable iterator callable reference range length '
+    + 'array string number bigint symbol boolean index offset size count maximum minimum max min limit exceeded '
+    + 'call calls stack too much many large small long short out over under end input output token tokens json '
+    + 'syntax parse parsing position line column character characters end data '
+    + 'identifier keyword statement expression operator literal regular template '
+    + 'load loading loaded save saving saved open opening opened close closed create created delete deleted '
+    + 'remove removed rename move copy copied decode decoding encode encoding render rendering rebuild '
+    + 'file files folder folders directory path name names image images bitmap canvas palette colour colours '
+    + 'color colors tile tiles map maps sprite sprites gfx sound music cart carts project projects scene '
+    + 'workspace journal recovery permission permissions denied granted handle handles request requests '
+    + 'worker workers message messages network fetch timeout timed aborted abort cancelled canceled '
+    + 'operation operations quota storage blocked busy changed holds bytes byte data custom fades first add '
+    + 'deserialized serialized clone cloned transfer script resource module import export'
+  ).split(/\s+/));
+
+  const PLACEHOLDER = /^(?:\[(?:path|url|email|secret|hex|blob|unprintable)\]|"\[text\]"|…\[truncated\])$/;
+
+  /** Default-export form of a (sanitized) message: allowlisted words only, deterministic. */
+  function redactMessage(text, max = MAX_MESSAGE) {
+    const s = sanitize(text, max);
+    const out = [];
+    for (const part of s.split(/(\[(?:path|url|email|secret|hex|blob|unprintable)\]|"\[text\]"|…\[truncated\]|[^\w\u0080-￿["…]+)/u)) {
+      if (!part) continue;
+      let keep;
+      if (PLACEHOLDER.test(part)) keep = part;                                                // sanitize() output
+      else if (/^[^\w\u0080-￿]+$/u.test(part)) keep = part.replace(/[^\s.,:;()!?-]/g, ''); // punctuation only
+      else if (/^\d{1,5}$/.test(part) || SAFE_WORDS.has(part.toLowerCase())) keep = part;
+      else keep = '[…]';
+      out.push(keep);
+    }
+    // "foo.bar baz" -> one "[…]": collapse runs of unknown words joined by punctuation/space
+    return out.join('').replace(/\[…\](?:[\s.,:;()!?-]*\[…\])+/g, '[…]').replace(/\s+/g, ' ').trim();
+  }
+
+  /** Developer-supplied operation state, restricted to plain word characters for export. */
+  const stateText = (v) => sanitize(v, MAX_FIELD).replace(/[^\w .:-]+/g, ' ').replace(/\s+/g, ' ').trim();
+
   /** Stack frames reduced to "function (file.js:line:col)" with the directory removed. */
   function sanitizeStack(stack) {
     if (typeof stack !== 'string' || !stack) return '';
     const lines = stack.split('\n').slice(0, 12).map((ln) => {
       const m = /^\s*(?:at\s+)?(?:(.*?)\s*[@(])?\s*(?:[^\s()@]*[\\/])?([\w.-]+\.(?:js|mjs|html)):(\d+)(?::(\d+))?\)?\s*$/.exec(ln);
       if (!m) return '';
-      const fn = sanitize(m[1] || '', 40).replace(/[()]/g, '');
+      // function names must look like JS identifiers/member chains; anything else is dropped
+      const raw = sanitize(m[1] || '', 40).replace(/[()]/g, '').replace(/^async\s+|^new\s+/, '');
+      const fn = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$<][\w$<>]*)*$/.test(raw) ? raw : '';
       return `${fn ? `${fn} ` : ''}(${m[2]}:${m[3]}${m[4] ? `:${m[4]}` : ''})`;
     }).filter(Boolean);
     const out = lines.join('\n');
@@ -175,17 +228,31 @@ const P8Diag = (() => {
       return () => { win.removeEventListener('error', onErr); win.removeEventListener('unhandledrejection', onRej); };
     }
 
-    /** Default export bundle: metadata and sanitized records only. */
-    function exportBundle() {
+    /**
+     * Export bundle. Default (messages: 'redacted'): each message is reduced to allowlisted generic
+     * words (redactMessage), so arbitrary error text never leaves by default. messages: 'sanitized'
+     * is an explicit user opt-in that includes the regex-scrubbed text, which may still hold
+     * private details and must be reviewed.
+     */
+    function exportBundle({ messages = 'redacted' } = {}) {
+      const full = messages === 'sanitized';
       return {
         format: 'pico8-suite-diagnostics',
         formatVersion: 1,
         generated: new Date(now()).toISOString(),
         session,
-        app: { version: sanitize(version, MAX_FIELD), browser: sanitize(browser, MAX_FIELD) },
-        note: 'Sanitized, local-only error summaries. No project content, file paths or storage contents are included. '
+        app: { version: token(version, 'unknown'), browser: token(browser, 'unknown') },
+        messages: full ? 'sanitized' : 'redacted',
+        note: (full
+          ? 'Local-only error summaries with scrubbed message text included at your request; message text can still contain private details, review it. '
+          : 'Local-only error summaries. Message text is reduced to generic error words; other words appear as […]. ')
+          + 'No project content, file paths or storage contents are collected. '
           + 'JavaScript hooks cannot capture a crashed tab or process, and this log is lost when the tab closes.',
-        records: records.map((r) => ({ ...r })),
+        records: records.map((r) => ({
+          ...r,
+          message: full ? r.message : redactMessage(r.message),
+          state: stateText(r.state),
+        })),
       };
     }
 
@@ -194,7 +261,7 @@ const P8Diag = (() => {
       read: () => records.map((r) => ({ ...r })),
       clear() { records = []; lastSeen.clear(); },
       exportBundle,
-      exportJSON: () => JSON.stringify(exportBundle(), null, 2),
+      exportJSON: (opts) => JSON.stringify(exportBundle(opts), null, 2),
       get size() { return records.length; },
     };
   }
@@ -209,7 +276,7 @@ const P8Diag = (() => {
     return 'unknown';
   }
 
-  return { create, sanitize, sanitizeStack, browserFamily, MAX_RECORDS };
+  return { create, sanitize, redactMessage, sanitizeStack, browserFamily, MAX_RECORDS };
 })();
 
 if (typeof module !== 'undefined') module.exports = P8Diag;
