@@ -52,7 +52,7 @@ For each tour, start it from its tool with Help › Tour this tool, and once fro
 | Project Audit | Choose Project Folder, carts table, columns, details, Export CSV |
 | Data Carts | Open Project Folder, Inspect/Pack, cart list; with a cart open also the memory map, viewer and output buttons |
 | Data Tools | Binary → string card, input mode, generated code, nibble card |
-| Extra Tools overview | tabs, description, tool area, panel splitter (wide screens) |
+| Extra Tools overview | tabs, description, tool area; the panel splitter step appears only while the Terrain Lab tab is selected |
 | LUT Creator / Wave Designer / Line Tool | the tab is selected first; preview/stage and controls (Wave: presets, thumbnail strip, scopes, parameter groups) |
 | Suite / Minifier | existing overview and source/options/comparison/exports tours |
 | Pixel Studio (#105) | tools, canvas/zoom, options/ink, palette/transparency, preview scale, layers, frames (when visible), status and File/Export workflow |
