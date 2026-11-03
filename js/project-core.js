@@ -267,6 +267,39 @@ const P8Project = (() => {
     return src(sig[i]) === '=';
   }
 
+  /** Helpers trusted not to change a table handed to them, but only while they are PICO-8's own builtins. */
+  const LIST_HELPERS = ['all', 'ipairs', 'pairs', 'count'];
+
+  /**
+   * Why the helper `fn` (all/ipairs/pairs/count) may not be PICO-8's builtin in this code, or null when it is
+   * (#82). The spelling alone proves nothing: a function definition, local, parameter, loop variable or
+   * assignment anywhere (also in a later or inner block, conservatively), _ENV/_G or an #include may make it
+   * user code that changes the table it receives. Fields (a.count) and table keys ({count=...}) do not.
+   */
+  function helperRebound(ctx, fn) {
+    ctx.helperWhy = ctx.helperWhy || new Map();
+    if (ctx.helperWhy.has(fn)) return ctx.helperWhy.get(fn);
+    const { sig, src, info } = ctx;
+    const at = (k) => `line ${ctx.lineOf(sig[k].s) + 1}`;
+    let why = null;
+    if (ctx.env) why = `the code uses _ENV/_G, which can redefine ${fn}`;
+    else if (ctx.includes.length) why = `#include at line ${ctx.lineOf(ctx.includes[0].s) + 1} brings code that may redefine ${fn}`;
+    for (let k = 0; !why && k < sig.length; k++) {
+      const tk = sig[k];
+      if (!NAME.has(tk.t) || src(tk) !== fn) continue;
+      const prev = src(sig[k - 1]);
+      const next = src(sig[k + 1]);
+      if (prev === '.' || prev === ':') continue;
+      if (info[k].top === '{' && ['{', ',', ';'].includes(prev) && next === '=') continue;
+      if (prev === 'function') why = `${fn} is defined as a function at ${at(k)}`;
+      else if (info[k].param || info[k].decl) why = `${fn} is declared as a local, parameter or loop variable at ${at(k)}`;
+      else if (isAssign(next)) why = `${fn} is assigned at ${at(k)}`;
+      else if (next === ',' && !['(', '[', '{'].includes(info[k].top) && targetsFollow(ctx, k + 1)) why = `${fn} is assigned in a multiple assignment at ${at(k)}`;
+    }
+    ctx.helperWhy.set(fn, why);
+    return why;
+  }
+
   /**
    * The one binding of `name` that the executable code allows to be trusted, or why there is none.
    * Every token `name` that is not a field (a.name), a table key ({name=...}) or the binding itself
@@ -275,8 +308,8 @@ const P8Project = (() => {
    * or _ENV/_G for a global make it unprovable; a local proves only uses inside its own block, after it.
    * A name followed by "," outside brackets may be a target of a multiple assignment (also inside a
    * function body that sits in a table or call). kind 'list' also allows only cs[...] (never assigned,
-   * also not as `cs[i],x=`), #cs and all/ipairs/pairs/count(cs): any other use may hand the table to
-   * code that changes it.
+   * also not as `cs[i],x=`), #cs and all/ipairs/pairs/count(cs) while that helper is PICO-8's builtin
+   * (helperRebound, #82): any other use may hand the table to code that changes it.
    * -> {k (sig index of the name), rhs (sig index after "="), local} | {why}
    */
   function bindingOf(ctx, name, kind, useAt) {
@@ -311,7 +344,12 @@ const P8Project = (() => {
       }
       if (prev === '#') continue;
       const fn = src(sig[k - 2]);
-      if (prev === '(' && next === ')' && ['all', 'ipairs', 'pairs', 'count'].includes(fn) && !['.', ':'].includes(src(sig[k - 3]))) continue;
+      if (prev === '(' && next === ')' && LIST_HELPERS.includes(fn) && !['.', ':'].includes(src(sig[k - 3]))) {
+        const rebound = helperRebound(ctx, fn);
+        if (!rebound) continue;
+        other.push([k, `is handed to ${fn}() (which may not be PICO-8's builtin: ${rebound})`]);
+        continue;
+      }
       other.push([k, 'is used as a whole (code it is handed to may change it)']);
     }
     const at = (k) => `line ${ctx.lineOf(sig[k].s) + 1}`;
