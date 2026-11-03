@@ -1648,7 +1648,11 @@
   // Diagnostics (#62, js/diagnostics-core.js) and Report a problem (#63) //
   // ------------------------------------------------------------------ //
 
-  const diagnostics = P8Diag.create({ browser: P8Diag.browserFamily(navigator.userAgent), version: VERSION });
+  // the Suite's own scripts (local <script src>, read at export time so later tags count) and the page itself:
+  // only their stack lines are exported by default (#85)
+  const ownScripts = () => [...document.scripts].map((s) => s.getAttribute('src')).filter((src) => src && !/^[a-z][a-z0-9+.-]*:|^\/\//i.test(src))
+    .map((src) => src.split(/[?#]/)[0].split('/').pop()).concat('index.html');
+  const diagnostics = P8Diag.create({ browser: P8Diag.browserFamily(navigator.userAgent), version: VERSION, appFiles: ownScripts });
   diagnostics.install(window);
   const REPO_NEW_ISSUE = 'https://github.com/Crylhead/Pico8_Suite/issues/new?template=bug_report.yml';
 
@@ -1681,7 +1685,7 @@
     const fullMessages = el('input', { type: 'checkbox' });
     const exportOpts = () => ({ messages: fullMessages.checked ? 'sanitized' : 'redacted' });
     const jsonPreview = el('textarea', { rows: 8, className: 'report-preview', value: diagnostics.exportJSON(exportOpts()), attrs: { 'aria-label': 'Diagnostics JSON preview (editable)' } });
-    const note = el('p', { className: 'hint', textContent: 'Nothing is sent automatically. Copy summary copies exactly the summary preview; Download diagnostics downloads exactly the JSON preview. Review and edit each separately. The issue-form link contains no report data; add attachments yourself. Descriptions may contain anything you type. By default, error messages keep only generic error words; other words appear as […]. JavaScript hooks cannot recover a crashed tab or process.' });
+    const note = el('p', { className: 'hint', textContent: 'Nothing is sent automatically. Copy summary copies exactly the summary preview; Download diagnostics downloads exactly the JSON preview. Review and edit each separately. The issue-form link contains no report data; add attachments yourself. Descriptions may contain anything you type. By default, error messages keep only generic error words (other words appear as […]), error types are standard names or OtherError, and stacks list only the Suite’s own script lines. JavaScript hooks cannot recover a crashed tab or process.' });
     const status = el('p', { className: 'hint', attrs: { role: 'status', 'aria-live': 'polite' } });
     const refresh = () => {
       preview.value = buildReportSummary({
@@ -1693,12 +1697,12 @@
       jsonPreview.value = diagnostics.exportJSON(exportOpts());
       refresh();
       status.textContent = fullMessages.checked
-        ? 'Full error messages included. They may contain names, values or code from your work: review both previews. Earlier edits to the previews were replaced.'
-        : 'Error messages reduced to generic words again. Earlier edits to the previews were replaced.';
+        ? 'Full error details included (messages, error names, stack function names). They may contain names, values or code from your work: review both previews. Earlier edits to the previews were replaced.'
+        : 'Error details reduced to the safe default again. Earlier edits to the previews were replaced.';
     });
     refresh();
     const body = el('div', { className: 'report-form' }, note, what.node, steps.node, expected.node, actual.node,
-      el('label', { className: 'check' }, fullMessages, el('span', { textContent: 'Include full error messages (scrubbed, but may contain private details; regenerates both previews)' })),
+      el('label', { className: 'check' }, fullMessages, el('span', { textContent: 'Include full error details: messages, error names and stack function names (scrubbed, but may contain private details; regenerates both previews)' })),
       el('label', { className: 'report-row' }, el('span', { textContent: 'Summary preview' }), preview),
       el('label', { className: 'report-row' }, el('span', { textContent: 'Diagnostics JSON preview (edit or remove records before downloading)' }), jsonPreview), status);
     const say = (m) => { status.textContent = m; };
