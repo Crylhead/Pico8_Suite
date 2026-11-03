@@ -3,6 +3,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -10,7 +11,8 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-BUNDLE = ROOT / 'vendor/shrinko8/runtime/engine.zip'
+# The override is only for tests/run_minifier_native.py negative controls (broken engine copies).
+BUNDLE = pathlib.Path(os.environ.get('P8_MINIFIER_ENGINE_ZIP') or ROOT / 'vendor/shrinko8/runtime/engine.zip')
 FIXTURES = ROOT / 'tests/fixtures/minifier'
 
 

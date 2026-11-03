@@ -3,6 +3,7 @@ import base64
 import builtins
 import importlib.util
 import json
+import os
 import pathlib
 import random
 import sys
@@ -10,7 +11,9 @@ import unittest
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-BUNDLE = ROOT / 'vendor/shrinko8/runtime/engine.zip'
+# Overrides are only for tests/run_minifier_native.py negative controls (broken engine/encoder copies).
+BUNDLE = pathlib.Path(os.environ.get('P8_MINIFIER_ENGINE_ZIP') or ROOT / 'vendor/shrinko8/runtime/engine.zip')
+ENCODER = pathlib.Path(os.environ.get('P8_MINIFIER_PNG_ENCODER') or ROOT / 'vendor/shrinko8/suite_png.py')
 FIXTURE = ROOT / 'tests/fixtures/minifier/release/representative.min.p8'
 
 
@@ -19,7 +22,7 @@ class PngTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         sys.path.insert(0, str(BUNDLE))
-        spec = importlib.util.spec_from_file_location('suite_png_test', ROOT / 'vendor/shrinko8/suite_png.py')
+        spec = importlib.util.spec_from_file_location('suite_png_test', ENCODER)
         cls.png = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.png)
 
