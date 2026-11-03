@@ -188,11 +188,12 @@ For registered plug-ins, Extra Tools adds the tab (with the next <kbd>Alt</kbd>+
 
 ## Help registry (F1)
 
-`js/help-data.js` holds the canonical help content and `js/help-core.js` (`P8Help`) the lookup API; the older long-form text in `#docsTemplate` (index.html) stays available as **Help › Full documentation** until its content is migrated (`tests/help.test.js` lists the sections that are still full-documentation-only). F1 opens the topic of the current workspace with a search box, the Help index and a link to the detailed reference.
+`js/help-data.js` holds the canonical help content and `js/help-core.js` (`P8Help`) the lookup API; the older long-form text in `#docsTemplate` (index.html) stays available as **Help › Full documentation** until its content is migrated (`tests/help.test.js` lists the sections that are still full-documentation-only). F1 opens the focused `data-help-id` explanation, otherwise the selected subtool, otherwise the workspace. Search, the Help index, a return-to-context link and the full reference remain available. Clearing search returns to the topic being read.
 
 - **A new tool must add a `kind: 'tool'` topic** whose `ws` equals its workspace id (purpose, inputs, outputs, key actions, restrictions, related topics, shortcuts) and bump `rev` when its behavior changes. The test fails for a workspace tab or `registerTool` entry without a topic, a dangling `related`/`legacy` reference or a duplicate id.
 - Stable ids: topics (`code`), controls and actions (`code.run`). Renamed ids need an entry in `ALIASES` so tooltips (#60) and tours (#61) keep working.
-- API: `P8Help.topic(id)`, `forWorkspace(ws)`, `control(controlId)` → `{ topic, control }`, `search(query)`, `toc()`. Do not scrape the DOM for help text.
+- Extra Tools subtopics use `kind: 'guide'`, `ws: 'extras'`, and `sub` equal to the tab's stable ID. Keep one canonical workspace topic and unique control/action IDs; moving a control to a subtopic preserves its ID for tooltips and tours. Unregistered subtools fall back to the workspace topic.
+- API: `P8Help.topic(id)`, `forWorkspace(ws, sub?)`, `control(controlId)` → `{ topic, control }`, `context({ topicId, controlId, ws, sub })` → `{ topic, controlId }`, `search(query)`, `toc()`. Explicit topic/control links take precedence over focused control, then subtool, then workspace. Do not scrape the DOM for help text.
 - In the app: `P8App.runAction('docs')` opens Help, `docs-full` the long-form documentation.
 
 ## Explanatory tooltips

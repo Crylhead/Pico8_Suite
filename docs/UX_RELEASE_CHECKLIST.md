@@ -32,6 +32,12 @@ Run each on the affected surface and note pass/fail; baseline tasks from the UX 
 | Keyboard | Tab through the app bar, menus, dialogs and a tool; focus is visible, option groups use arrow keys, dialogs return focus on close. See `docs/ACCESSIBILITY.md`. |
 | Responsive | At 1280, 768 and 320 CSS px and 200% zoom: no lost controls, no horizontal page scroll, dialogs usable. |
 
+## Contextual F1 help (#106)
+
+1. In Pixel Studio, focus a Preview scale button or the Transparent select and press F1. Help must focus/scroll to that exact explanation (including detailed text). Esc must return focus to the original control without editing the image. Repeat with optional hints Off.
+2. Select each Extra Tools tab (LUT, Wave, Line, Terrain), focus a control without a help ID and press F1. Each opens its own subject. Check a known focused help ID takes precedence, and an unknown ID or an extension without a subtopic falls back safely.
+3. Search for another tool, clear the query, browse the index and use Return to the original context. Follow a related topic, then Full documentation: the reference must follow the topic being read. Repeat keyboard-only and at 320 CSS px; help remains local/offline.
+
 ## Pixel Studio preview scale (#102)
 
 On disposable images sized 64×64, 128×128 (including the default sheet), 256×256, 128×256 and 1024×512:

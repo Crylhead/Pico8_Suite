@@ -190,31 +190,71 @@ const P8HelpData = (() => {
       related: ['datacarts', 'audit', 'map', 'project-context'], keywords: ['anchor', 'reload', 'suite.json', 'demoframe', 'write'], legacy: 'doc-cartbuilder',
     },
     {
-      id: 'extras', kind: 'tool', ws: 'extras', title: 'Extra Tools', rev: 1,
+      id: 'extras', kind: 'tool', ws: 'extras', title: 'Extra Tools', rev: 2,
       summary: 'Smaller tools behind one tab bar: LUT Creator, Wave Designer, Line Tool and Terrain Lab.',
       inputs: ['OBJ models', 'heightmaps and images', 'Library images and palettes'],
       outputs: ['.p8 data carts', 'Lua tables', 'Picotron POD', 'waves.p8', 'Library images'],
       tasks: ['make motion paths', 'make 3D ball formations', 'design waveforms', 'draw vector lines as Lua', 'generate seamless terrain'],
-      actions: [
-        { id: 'extras.lut', name: 'LUT Creator', text: '2D motion paths and 3D ball formations exported as Lua, POD or a data cart.' },
-        { id: 'extras.wave', name: 'Wave Designer', text: '16 scope waveforms; Export waves.p8 (Ctrl+E).' },
-        { id: 'extras.line', name: 'Line Tool', text: 'Lines on a 128×128 canvas exported as Lua (Shift: 45° steps).' },
-        { id: 'extras.terrain', name: 'Terrain Lab', text: 'Seamless terrain from noise or a heightmap with brushes, stamps, erosion and a 128×128 PICO-8 color map. The preview answers at once; the final render follows when you pause.' },
-      ],
-      controls: [{ id: 'extras.panel', label: 'Side panel splitter', text: 'Drag the splitter left of the controls, or focus it and use the arrow keys (Shift = larger steps, Home / End, Enter hides or shows the panel, 0 or double-click resets). On narrow screens the panel stacks below the canvas instead.' },
-        { id: 'extras.terrain.preview', label: 'Terrain preview / final', text: 'The badge above the map says what you are looking at: Queued (your edit is acknowledged, the image shown is stale), Preview (fast low-resolution result of your latest edit), Preview · rendering final…, Final (full resolution, the only state exports use) or Render failed (Error ID and Retry). No percentages are shown because the renderer reports no progress.' }],
+      actions: [{ id: 'extras.tabs', name: 'Choose a tool', text: 'Select LUT Creator, Wave Designer, Line Tool or Terrain Lab using the tabs. F1 opens the selected tool’s help; Alt+1…4 switches the built-in tabs.' }],
+      controls: [{ id: 'extras.panel', label: 'Side panel splitter', text: 'Drag the splitter left of the controls, or focus it and use the arrow keys (Shift = larger steps, Home / End, Enter hides or shows the panel, 0 or double-click resets). On narrow screens the panel stacks below the canvas instead.' }],
       shortcuts: [['Alt+1…4', 'Switch Extra Tools tab'], ['Ctrl+E', 'Export waves.p8 (Wave Designer)'], ['[ ]', 'Terrain brush size']],
       restrictions: ['Settings are kept in this browser only.'],
-      related: ['palette', 'studio', 'library'], keywords: ['terrain', 'lut', 'wave', 'line', 'heightmap', 'erosion', 'pod'], legacy: 'doc-extras',
+      related: ['extras-lut', 'extras-wave', 'extras-line', 'extras-terrain', 'library'], keywords: ['terrain', 'lut', 'wave', 'line', 'heightmap', 'erosion', 'pod'], legacy: 'doc-extras',
+    },
+
+    {
+      id: 'extras-lut', kind: 'guide', ws: 'extras', sub: 'lut', title: 'LUT Creator', rev: 1,
+      summary: '2D motion paths and 3D ball formations for PICO-8 effects.',
+      inputs: ['motion path settings', 'OBJ models'], outputs: ['Lua lookup tables', 'Picotron POD', 'formations.p8 data cart'], tasks: ['make motion paths', 'make 3D ball formations'],
+      actions: [
+        { id: 'extras.lut', name: 'LUT Creator', text: '2D motion paths and 3D ball formations exported as Lua, POD or a data cart.' },
+        { id: 'extras.lut.workflow', name: 'Workflow', text: 'Choose 2D motion paths or 3D formations. Edit the preview and settings; save formations to slots before exporting the filled slots. Export offers Lua tables, POD and PICO-8 data carts as appropriate to the selected mode.' },
+      ],
+      controls: [], shortcuts: [],
+      restrictions: ['Formation data carts hold up to 8 KB; check the generated loader code.'], related: ['extras', 'library'], keywords: ['lut', 'lut creator'], legacy: 'doc-extras',
+    },
+    {
+      id: 'extras-wave', kind: 'guide', ws: 'extras', sub: 'wave', title: 'Wave Designer', rev: 1,
+      summary: 'Mix and preview 16 scope waveforms, then export waveform data.',
+      inputs: ['waveform presets', 'JSON projects'], outputs: ['waves.p8 data cart', 'JSON project', 'loader code'], tasks: ['design waveforms', 'export waves.p8'],
+      actions: [
+        { id: 'extras.wave', name: 'Wave Designer', text: '16 scope waveforms; Export waves.p8 (Ctrl+E).' },
+        { id: 'extras.wave.workflow', name: 'Workflow', text: 'Select a preset thumbnail, adjust the waveform mix and processing, and inspect the TIME or XY scope. Export waves.p8 writes all 16 waveforms; Loader code shows how to read them. Save and Load keep the project as JSON.' },
+      ],
+      controls: [], shortcuts: [['Ctrl+E', 'Export waves.p8'], ['PgUp / PgDn', 'Switch waveform preset']],
+      restrictions: ['Waveform output is scope data, not a PICO-8 music or sound-effects song.'], related: ['extras', 'library'], keywords: ['wave', 'wave designer'], legacy: 'doc-extras',
+    },
+    {
+      id: 'extras-line', kind: 'guide', ws: 'extras', sub: 'line', title: 'Line Tool', rev: 1,
+      summary: 'Draw vector-style lines on a 128×128 canvas and export Lua.',
+      inputs: ['drawn lines', 'Library images for tracing'], outputs: ['Lua line table and draw function', 'Library image'], tasks: ['draw vector lines as Lua', 'trace an image'],
+      actions: [
+        { id: 'extras.line', name: 'Line Tool', text: 'Lines on a 128×128 canvas exported as Lua (Shift: 45° steps).' },
+        { id: 'extras.line.workflow', name: 'Workflow', text: 'Drag to draw lines; Shift constrains them to 45° steps. Array draws parallel lines. A Library image can be used for tracing. Export Lua produces a line table and drawing function; Pixels → Library saves the rasterized result.' },
+      ],
+      controls: [], shortcuts: [['Shift + drag', 'Constrain to 45° steps'], ['Ctrl+Z / Ctrl+Y', 'Undo / redo']],
+      restrictions: ['The drawing area is 128×128 pixels.'], related: ['extras', 'library'], keywords: ['line', 'line tool'], legacy: 'doc-extras',
+    },
+    {
+      id: 'extras-terrain', kind: 'guide', ws: 'extras', sub: 'terrain', title: 'Terrain Lab', rev: 1,
+      summary: 'Generate and edit seamless terrain, then export color and height maps.',
+      inputs: ['procedural settings', 'heightmaps and Library images', 'palettes'], outputs: ['color and height maps', 'PICO-8 cart', 'Library images', 'scene JSON'], tasks: ['generate seamless terrain', 'paint heightmaps', 'export terrain'],
+      actions: [
+        { id: 'extras.terrain', name: 'Terrain Lab', text: 'Seamless terrain from noise or a heightmap with brushes, stamps, erosion and a 128×128 PICO-8 color map. The preview answers at once; the final render follows when you pause.' },
+        { id: 'extras.terrain.workflow', name: 'Workflow', text: 'Simple exposes terrain presets and the main shaping controls; Advanced adds erosion, brushes, stamps and full-resolution settings. Preview is the fast response to an edit; exports use the final render. Save to Library or use the export and handoff actions to continue in another tool.' },
+      ],
+      controls: [{ id: 'extras.terrain.preview', label: 'Terrain preview / final', text: 'The badge above the map says what you are looking at: Queued (your edit is acknowledged, the image shown is stale), Preview (fast low-resolution result of your latest edit), Preview · rendering final…, Final (full resolution, the only state exports use) or Render failed (Error ID and Retry). No percentages are shown because the renderer reports no progress.' }], shortcuts: [['[ / ]', 'Change brush size'], ['Ctrl+Z / Ctrl+Y', 'Undo / redo']],
+      restrictions: ['The PICO-8 output is 128×128. Final-render status determines which result exports use.'], related: ['extras', 'library'], keywords: ['terrain', 'terrain lab'], legacy: 'doc-extras',
     },
 
     // ---- guides and reference ------------------------------------------------------------
     {
-      id: 'suite', kind: 'guide', title: 'The Suite', rev: 2,
+      id: 'suite', kind: 'guide', title: 'The Suite', rev: 3,
       summary: 'What the Suite is, how tools share work, and how to run it offline.',
       inputs: [], outputs: [],
       tasks: ['switch tools', 'run the Suite offline', 'understand what is stored in the browser'],
       actions: [
+        { id: 'suite.help', name: 'Contextual Help', text: 'F1 opens the focused control’s explanation when available, otherwise the selected Extra Tool or workspace. Search and the Help index remain available; clearing search returns to the topic being read. The Return link restores the original context, and Full documentation follows the current topic.' },
         { id: 'suite.about', name: 'About', text: 'Help › About shows the web app version, author and current tools, including Extra Tools tabs. Run in PICO-8 additionally needs the optional local Python bridge and an installed PICO-8; a remotely hosted copy does not connect to the bridge automatically.' },
         { id: 'suite.offline', name: 'Offline use', text: 'The Suite is plain HTML/JS: open index.html from disk or a static host. No account, server or network is needed; only Report a problem → GitHub needs a connection.' },
         { id: 'suite.backup', name: 'Backup limits', text: 'Library → Export Library Backup covers saved assets. It does not include tool working sessions or files in project folders.' },
