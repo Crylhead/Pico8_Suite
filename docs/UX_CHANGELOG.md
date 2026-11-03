@@ -105,7 +105,7 @@ Keep these issues open rather than treating a green model test as full acceptanc
 | --- | --- |
 | #56 | Real folder-adoption/permission walkthrough. Data Carts currently delegates adoption to Project Audit and therefore replaces its scan too; independence between those tools needs review. |
 | #57 | Addressed in the follow-up below (browser journey; prompt buttons fixed). |
-| #59 | Browser F1, search, legacy-reference and keyboard walkthrough. |
+| #59 | Addressed in the follow-up below (browser F1/search/legacy/keyboard walkthrough). |
 | #60 | Browser hover/focus/Escape, touch and narrow-viewport checks. |
 | #61 | Browser welcome/replay/keyboard/missing-target smoke; asynchronous engine cancellation and help-text lookup are covered by regressions. |
 | #62 | Addressed in the follow-up below (allowlisted default export). Manual browser check of the Report dialog opt-in remains. |
@@ -151,3 +151,18 @@ Headless Chrome on `main` at `c532fbc`, driven over the DevTools protocol agains
 - No exceptions were thrown, and `P8App.diagnostics` stayed empty.
 
 **Noted, not changed:** Pixel Studio lists itself as a destination for its own image (harmless; it reopens the same picture). Touch input and screen reader announcement were not checked.
+
+## Follow-up: #59 Help registry browser walkthrough (2026-11-03)
+
+Headless Chrome, driven over the DevTools protocol with real key events, against a local `http.server`. The script was temporary and kept outside the repo. No code change was needed. Results on `main` at `c532fbc`:
+
+- **F1 in every workspace tab** (all 11: Home, Pixel Studio, Palette & Fades, Tile Maker, Map Editor, Code Editor, Cart Builder, Project Audit, Data Carts, Data Tools, Extra Tools) opens Help on that workspace's canonical topic (`P8Help.forWorkspace`), with focus in the search field; Escape closes it. F1 also works while typing in a Code Editor field, and F1 inside an open Help dialog does not stack a second dialog.
+- **Search** finds controls, tasks and shortcuts: *tile reduction* → Tile Maker; *count tokens* → Project Audit, Code Editor; *ctrl+r* → Code Editor; *report* → Report a problem first. *zzzqqq* gives the "No results" state with suggestions and working *Browse the Help index* / *Open the full documentation* links. The index link clears the query and moves focus to the heading.
+- **Keyboard:** Tab from the search field reaches the first index link, and Enter opens that topic and focuses its heading. Related-topic and *← Help index* links work.
+- **Legacy reference:** Code Editor's *Detailed reference* opens Full documentation scrolled to `#doc-code`, and *Search Help* returns to Help with a single dialog open.
+- **Offline:** with network emulated offline, Help › Help and search work (everything is local).
+- **Narrow layout:** at 360 px the dialog fits (326 px) without horizontal page overflow.
+- Escape in a non-empty search field first clears the query (native `type=search` behavior); a second Escape closes the dialog.
+- No exceptions were thrown, and `P8App.diagnostics` stayed empty throughout.
+
+Not covered: screen reader announcement of the live region, touch input, and a real non-Chromium browser.
