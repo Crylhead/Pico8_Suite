@@ -31,6 +31,16 @@ Run each on the affected surface and note pass/fail; baseline tasks from the UX 
 | Keyboard | Tab through the app bar, menus, dialogs and a tool; focus is visible, option groups use arrow keys, dialogs return focus on close. See `docs/ACCESSIBILITY.md`. |
 | Responsive | At 1280, 768 and 320 CSS px and 200% zoom: no lost controls, no horizontal page scroll, dialogs usable. |
 
+## Pixel Studio preview scale (#102)
+
+On disposable images sized 64×64, 128×128 (including the default sheet), 256×256, 128×256 and 1024×512:
+
+1. Compare **Fit / 1× / 2×**. Fixed modes must display exactly the source dimensions multiplied by 1 or 2, as shown in the readout; larger images scroll instead of shrinking. Fit must show the whole image and use integer enlargement when possible.
+2. Resize the side panel and repeat at 1280, 768 and 320 CSS px and 200% browser zoom, in dark and light themes. Fit must recalculate, fixed scales must stay unchanged, and the page must not gain horizontal overflow from the preview.
+3. Tab to the scale group and use arrow keys to change modes. Tab to the preview and scroll with arrow/Page/Home/End keys, including with a canvas selection active; selection pixels must stay unchanged. Reload to check the selected mode persists; legacy stored `previewScale: 0` selects Fit.
+4. Paint, toggle a layer, change frames and play animation. Verify the preview follows the current composite, retains transparency background behavior and stays sharp at 1×/2×. Changing preview scale must not change main-canvas zoom or document pixels.
+5. Focus the scale group with optional help enabled, search F1 for Preview scale and replay the Pixel Studio tour; all must describe the same Fit/1×/2× behavior.
+
 ## Handoff
 
 State exactly which automated checks ran and which human rows were covered; list gaps once (for example "no PICO-8 available", "touch not tested").

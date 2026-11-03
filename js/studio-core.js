@@ -10,6 +10,14 @@ const P8Studio = (() => {
   const SHEET = 128;
   const hex = '0123456789abcdef';
 
+  /** Preview dimensions in CSS pixels; 0 (including legacy Auto) means Fit. */
+  function previewSize(w, h, mode, viewportW, viewportH) {
+    let scale = mode === 1 || mode === 2 ? mode : Math.min(viewportW / w, viewportH / h);
+    if (!Number.isFinite(scale) || scale <= 0) return null; // hidden panel
+    if (mode !== 1 && mode !== 2 && scale >= 1) scale = Math.floor(scale);
+    return { w: Math.max(1, Math.floor(w * scale)), h: Math.max(1, Math.floor(h * scale)), scale };
+  }
+
   // ------------------------------------------------------------------ //
   // Documents                                                          //
   // ------------------------------------------------------------------ //
@@ -641,7 +649,7 @@ const P8Studio = (() => {
   }
 
   return {
-    EMPTY, MAX_SIDE, SHEET,
+    EMPTY, MAX_SIDE, SHEET, previewSize,
     HISTORY_LIMIT, HISTORY_BYTES, historyEntryBytes, createHistory,
     blankCel, newDoc, cloneDoc, flatten, flattenSlots, docFromAsset, resizeDoc, scaleDoc, blit, crop, flipH, flipV, rotateCW,
     line, rect, ellipse, fillRegion,
