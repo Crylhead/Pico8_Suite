@@ -1,6 +1,6 @@
 # Minifier engine foundation and job adapter — MIN-01 / #119, MIN-02 / #120
 
-Real Shrinko8 runs in a local browser **module Web Worker**. The DOM-free model and adapter below manage application jobs, revisions and cancellation. The native Develop → Minifier workspace accepts standalone UTF-8 `.p8` / `.lua` files, pasted Lua and immutable live Code Editor snapshots (including unsaved edits). The handoff returns to the existing editor without applying output; later editor changes invalidate its job/result. Project includes are supported through already-authorized Code Editor folder handles; validated output actions remain a subsequent roadmap step. See [the handoff API](../EXTENDING.md#minifier-jobs).
+Real Shrinko8 runs in a local browser **module Web Worker**. The DOM-free model and adapter below manage application jobs, revisions and cancellation. The native Develop → Minifier workspace accepts standalone UTF-8 `.p8` / `.lua` files, pasted Lua and immutable live Code Editor snapshots (including unsaved edits). The handoff returns to the existing editor without applying output; later editor changes invalidate its job/result. Project includes are supported through already-authorized Code Editor folder handles; validated separate build-copy exports are available after preservation checks. See [the handoff API](../EXTENDING.md#minifier-jobs).
 
 ## Pins and package scope
 
@@ -198,3 +198,12 @@ The unchanged pinned Shrinko8 handles actual expansion. The Suite bridge creates
 | Cartridge version, P8SCII, LF/CRLF | Raw inputs remain unchanged in the snapshot; actual fixture retains version 42 and heart glyph, with CLI-identical output/counts |
 
 `tests/fixtures/minifier/project` exercises nested/repeated paths, spaces, `../`, CRLF, P8SCII, tab selection and `--@data`. Native tests compare actual CLI output and both counts with the bridge, plus refusal cases. Browser verification uses the real packaged Pyodide worker. These checks do not replace #128’s real PICO-8 release validation.
+
+
+## Validated build-copy exports — MIN-08
+
+`js/minifier-export-core.js` validates the exact successful job/source snapshot and produces frozen `.min.lua` and, for cart input, `.min.p8` artifacts. Copy contains only Lua. Download is a browser operation, never an in-place save; stale/cancelled/failed/incomplete results and preservation failures cannot export. A source/result change while the format dialog is open stops the download. Clipboard denial/unavailability reports failure; source state remains unchanged.
+
+Shrinko8 normalizes asset sections and may add `__meta:title__` metadata. The exporter checks its decoded ROM/version and optimized Lua, then builds the final cartridge using **only optimized Lua** inside the **exact original header and non-Lua text**. It checks that final envelope and independently decodes ROM/label/version/section presence through `P8Cart`. Empty graphics/sound sections, unknown data sections and metadata survive exactly. Generated Lua uses the original Lua-marker line ending; copied/downloaded Lua retains the result text. The section readers now recognize colon-bearing metadata boundaries, covered by the real comment-only/empty-output case. Empty optimized code is valid; empty source intake remains rejected.
+
+`--@data` and keep/preserve hints warn that output is an **optimized build copy**, not an editable project round trip. Keep original authoring files. Code budgets remain visible; data/format validation is not a runtime-equivalence claim. Native tests run real minification, generate artifacts through the actual JavaScript exporter, and read those files with Shrinko8’s independent Python cartridge reader, comparing complete ROM, label pixels, version and code. LF/CRLF, all data regions, metadata and empty sections/output are covered. Full PICO-8 runtime testing remains #128; PNG remains #129.

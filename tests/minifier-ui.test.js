@@ -50,7 +50,7 @@ function fixture(wide = true, protocol, io = {}) {
     el(tag, props = {}, ...children) { const n = Object.assign(node(props.id), props, { tag, children }); created.push(n); return n; },
     modal(options) { return new Promise((resolve) => { const d = { ...options, finish: resolve }; dialogs.push(d); options.onOpen?.(d); }); },
     pickFile: async () => null, confirmDialog: async () => true, ...io };
-  const view = UI.mount({ root, adapter, media, protocol, app, editorSource: io.editorSource });
+  const view = UI.mount({ root, adapter, media, protocol, app, editorSource: io.editorSource, clipboard: io.clipboard });
   return { view, adapter, nodes, actions, root, workers, media, doc, dialogs, created, $: (id) => nodes.get(id),
     async initialize(extra) { const p = view.initialize(); await flush(); workers.at(-1).reply(extra); await p; },
     async finish(extra) { const p = actions['mn-optimize'](); await flush(); workers.at(-1).reply(extra); await p; },
@@ -71,7 +71,8 @@ t('MIN-03 shell uses the real adapter, remains lazy and requires explicit ready 
   assert.match(f.$('mnOutputState').textContent, /Current result/);
   assert.strictEqual(f.$('mnTokensBefore').textContent, '4'); assert.strictEqual(f.$('mnTokensAfter').textContent, '3');
   assert.strictEqual(f.$('mnBytesBefore').textContent, '—'); assert.match(f.$('mnBytesBefore').attrs['aria-label'], /Not emitted/);
-  for (const id of ['mnUseEditor', 'mnCopy', 'mnDownload']) assert.ok(f.$(id).disabled, id);
+  assert.ok(f.$('mnUseEditor').disabled);
+  for (const id of ['mnCopy', 'mnDownload']) assert.strictEqual(f.$(id).disabled, false, id);
   f.view.dispose();
 });
 
@@ -316,4 +317,60 @@ t('MIN-07 dependency preparation commits a complete plain tree; denied/cancelled
   const pending = f.actions['mn-use-editor'](); await flush(); f.actions['mn-cancel']();
   gate.resolve({ source: source('late()'), edges: [], diagnostics: [], buildCopy: false });
   assert.strictEqual(await pending, false); assert.strictEqual(f.view.getState(), kept); f.view.dispose();
+});
+
+t('MIN-08 copy reports real clipboard success or denial and never changes the source/save state', async () => {
+  const copied = [], clipboard = { writeText: async (text) => copied.push(text) };
+  const f = fixture(true, undefined, { clipboard }); await f.initialize(); f.view.load(source()); await f.finish({ result: result(4, 4) });
+  const kept = f.view.getState(); await f.actions['mn-copy']();
+  assert.deepStrictEqual(copied, ['cls()']); assert.match(f.$('mnExportStatus').textContent, /Copied optimized Lua/); assert.strictEqual(f.view.getState(), kept);
+  clipboard.writeText = async () => { throw Error('denied'); }; await f.actions['mn-copy']();
+  assert.match(f.$('mnExportStatus').textContent, /Copy failed.*denied/); assert.strictEqual(f.$('mnExportStatus').dataset.tone, 'error');
+  f.view.dispose();
+  const unavailable = fixture(); await unavailable.initialize(); unavailable.view.load(source()); await unavailable.finish(); await unavailable.actions['mn-copy']();
+  assert.match(unavailable.$('mnExportStatus').textContent, /Copy failed/); unavailable.view.dispose();
+});
+
+t('MIN-08 download is a separate named build; cancellation and stale dialogs never download', async () => {
+  const downloads = [], f = fixture(true, undefined, { download: (...args) => downloads.push(args) });
+  await f.initialize(); f.view.load(source()); await f.finish(); const kept = f.view.getState();
+  let pending = f.actions['mn-download'](); assert.strictEqual(f.dialogs.at(-1).title, 'Download optimized build copy');
+  assert.strictEqual(f.dialogs.at(-1).buttons.length, 2); f.dialogs.at(-1).finish(null); await pending;
+  assert.strictEqual(downloads.length, 0); assert.match(f.$('mnExportStatus').textContent, /cancelled/);
+  pending = f.actions['mn-download'](); f.dialogs.at(-1).finish('lua'); await pending;
+  assert.deepStrictEqual(downloads[0], ['cls()', 'demo.min.lua', 'text/plain;charset=utf-8']); assert.strictEqual(f.view.getState(), kept);
+  assert.match(f.$('mnExportStatus').textContent, /Download requested/); assert.ok(!/Saved/.test(f.$('mnExportStatus').textContent));
+  pending = f.actions['mn-download'](); f.view.load(source('newer()')); f.dialogs.at(-1).finish('lua'); await pending;
+  assert.strictEqual(downloads.length, 1); assert.match(f.$('mnExportStatus').textContent, /changed while choosing/);
+  await f.actions['mn-copy'](); assert.match(f.$('mnExportStatus').textContent, /current successful result/); assert.ok(f.$('mnCopy').disabled); f.view.dispose();
+});
+
+t('MIN-08 repeated .p8 downloads retain exact assets, and corrupted worker assets disable both actions', async () => {
+  const K = require('../js/code-core.js'), downloads = [];
+  const text = K.NEW_CART + 'local x=1\nprint(x)\n__gfx__\n1234\n__music__\n__sfx__\n';
+  const raw = { ...result(), lua: 'print(1)', cartText: K.joinCart(K.splitCart(text), 'print(1)') };
+  const f = fixture(true, undefined, { download: (...args) => downloads.push(args) }); await f.initialize();
+  f.view.load({ kind: 'p8', entryPath: 'demo.p8', files: [{ path: 'demo.p8', text }] }); await f.finish({ result: raw });
+  for (let i = 0; i < 2; i++) { const p = f.actions['mn-download'](); f.dialogs.at(-1).finish('cart'); await p; }
+  assert.strictEqual(downloads[0][1], 'demo.min.p8'); assert.deepStrictEqual(downloads[0], downloads[1]);
+  assert.strictEqual(K.splitCart(downloads[0][0]).tail, K.splitCart(text).tail);
+  await f.finish({ result: { ...raw, cartText: raw.cartText.replace('1234', '4321') } });
+  assert.ok(f.$('mnCopy').disabled); assert.ok(f.$('mnDownload').disabled); assert.match(f.$('mnExportValidation').textContent, /engine changed cartridge assets/); assert.strictEqual(f.$('mnExportValidation').dataset.tone, 'error');
+  await f.actions['mn-download'](); assert.strictEqual(downloads.length, 2); f.view.dispose();
+});
+
+t('MIN-08 pending clipboard completion cannot claim a new source was copied', async () => {
+  const gate = deferred(), f = fixture(true, undefined, { clipboard: { writeText: () => gate.promise } });
+  await f.initialize(); f.view.load(source()); await f.finish();
+  const copy = f.actions['mn-copy'](); assert.ok(f.$('mnCopy').disabled); f.view.load(source('newer()')); gate.resolve(); await copy;
+  assert.match(f.$('mnExportStatus').textContent, /captured earlier build/); assert.strictEqual(f.$('mnExportStatus').dataset.tone, 'warn');
+  assert.strictEqual(f.view.getInput().lua, 'newer()'); f.view.dispose();
+});
+
+t('MIN-08 download initiation failure reports failure without claiming Save or losing the result', async () => {
+  const f = fixture(true, undefined, { download: () => { throw Error('browser blocked'); } });
+  await f.initialize(); f.view.load(source()); await f.finish(); const kept = f.view.getState();
+  const pending = f.actions['mn-download'](); f.dialogs.at(-1).finish('lua'); await pending;
+  assert.match(f.$('mnExportStatus').textContent, /Download failed/); assert.strictEqual(f.$('mnExportStatus').dataset.tone, 'error');
+  assert.strictEqual(f.view.getState(), kept); f.view.dispose();
 });

@@ -58,7 +58,7 @@ const P8MinifierCore = (() => {
     try { return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); }
     catch (_) { throw error('E_INPUT_ENCODING', 'This file is not valid UTF-8 text. Save it as a UTF-8 .lua or .p8 text file before importing.'); }
   }
-  function prepareInput(raw) {
+  function prepareInput(raw, { allowEmpty = false } = {}) {
     const source = sourceSnapshot(raw);
     if (!source) return null;
     const Code = typeof P8Code !== 'undefined' ? P8Code : require('./code-core.js');
@@ -83,7 +83,7 @@ const P8MinifierCore = (() => {
     } else if (/^\ufeff?pico-8 cartridge(?:\s|$)/.test(text)) {
       throw error('E_FORMAT_UNSUPPORTED', 'This looks like a complete cartridge. Open it with a .p8 filename instead of treating it as Lua.');
     }
-    if (!lua.trim()) throw error('E_EMPTY', 'Source has no Lua code. Choose a nonempty .lua file or a .p8 cartridge with code.');
+    if (!allowEmpty && !lua.trim()) throw error('E_EMPTY', 'Source has no Lua code. Choose a nonempty .lua file or a .p8 cartridge with code.');
     return freeze({ source, lua, tabs: Code.codeTabs(lua), original });
   }
   function textInput(name, text) {

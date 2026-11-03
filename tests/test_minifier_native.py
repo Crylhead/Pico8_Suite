@@ -127,6 +127,43 @@ class NativeMinifierTests(unittest.TestCase):
         self.assertTrue(result['ok'], result)
         self.assertIn('♥', result['lua'])
 
+    def test_exported_carts_retain_assets_with_an_independent_native_reader(self):
+        from pico_cart import CartFormat, read_cart
+        from pico_defs import from_p8str
+        header = 'pico-8 cartridge // http://www.pico-8.com\nversion 42\n__lua__\n'
+        text = header + '--[[keep:source note]]\nprint("♥")\n-->8\nreload(0x8000,0,4,"data.p8") --@data entry.bin\n__gfx__\n12345678\n__map__\n0011fe\n__gff__\n00ff\n__music__\n03 00010203\n__sfx__\n00100000' + '01873' * 32 + '\n__label__\n0123456789abcdef\n__data__\n00ff1122\n__meta:title__\nNative asset check\n'
+        # Node builds through the actual export module; Shrinko8's separate native reader
+        # then decodes its bytes, rather than trusting the JavaScript cart round trip.
+        script = r'''
+const fs = require('fs'), C = require('./js/minifier-core.js'), E = require('./js/minifier-export-core.js');
+const { engine } = require('./tests/minifier-fixtures.js');
+const data = JSON.parse(fs.readFileSync(0, 'utf8'));
+let s = C.transition(C.initialState(), {type:'source',source:data.source});
+s = C.transition(s,{type:'ready',engine:engine()}); s = C.transition(s,{type:'start'});
+s = C.transition(s,{type:'complete',job:s.activeJob,result:data.result});
+process.stdout.write(JSON.stringify(E.build(s,{...C.prepareInput(data.source),sourceRevision:s.sourceRevision})));
+'''
+        for original in [text, text.replace('\n', '\r\n'), header + '-- comment only\n__gfx__\n__music__\n__sfx__\n']:
+            with self.subTest(crlf='\r\n' in original), tempfile.TemporaryDirectory() as directory:
+                result = self.run_source(original, 'assets.p8')
+                self.assertTrue(result['ok'], result)
+                source = {'entryPath': 'assets.p8', 'kind': 'p8', 'files': [{'path': 'assets.p8', 'text': original}]}
+                node = subprocess.run(['node', '-e', script], input=json.dumps({'source': source, 'result': result}), text=True, capture_output=True, cwd=ROOT, check=False)
+                self.assertEqual(node.returncode, 0, node.stderr)
+                artifacts = json.loads(node.stdout)
+                before = pathlib.Path(directory) / 'before.p8'
+                after = pathlib.Path(directory) / artifacts['cart']['filename']
+                before.write_bytes(original.encode('utf-8'))
+                after.write_bytes(artifacts['cart']['text'].encode('utf-8'))
+                a, b = read_cart(str(before), CartFormat.p8), read_cart(str(after), CartFormat.p8)
+                self.assertEqual(a.rom, b.rom)
+                self.assertEqual(a.version_id, b.version_id)
+                self.assertEqual(a.label.array if a.label else None, b.label.array if b.label else None)
+                self.assertEqual(from_p8str(b.code).rstrip('\n'), result['lua'].rstrip('\n'))
+                non_lua = original[original.index('__gfx__'):]
+                self.assertTrue(artifacts['cart']['text'].endswith(non_lua))
+                self.assertEqual(artifacts['lua']['text'], result['lua'])
+
 
 if __name__ == '__main__':
     unittest.main()
