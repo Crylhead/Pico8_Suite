@@ -39,8 +39,8 @@ const P8HelpData = (() => {
       actions: [
         { id: 'studio.canvas', name: 'Canvas size', text: '1×1 to 1024×1024 with presets (sprite, 128×128 sheet, half sheet, whole map 1024×512). Orange dashed boxes mark 128×128 screens.' },
         { id: 'studio.tools', name: 'Drawing tools', text: 'Pencil, eraser, line, rectangle, ellipse, fill, color picker, selection tools, pan. Brush sizes 1–4 or a custom brush; mirror X/Y.' },
-        { id: 'studio.ink', name: 'Ink', text: 'Normal, lock alpha, behind, shade and shade along the fades.' },
-        { id: 'studio.sieve', name: 'Sieve and fill patterns', text: 'A sieve mask limits which pixels change; fill patterns use PICO-8 fillp() bits.' },
+        { id: 'studio.ink', name: 'Ink', text: 'How the pencil, line, shapes and fill put their color down: normal, lock alpha, behind, shade and shade along the fades.' },
+        { id: 'studio.sieve', name: 'Sieve and fill patterns', text: 'A sieve mask limits which pixels change (V turns it on or off); fill patterns use PICO-8 fillp() bits.' },
         { id: 'studio.layers', name: 'Layers and frames', text: 'Select a layer to draw on it; the bottom layer is the background. The eye shows or hides a layer. Add, duplicate, reorder, merge and delete affect the document. Layers are shared across frames; PNG and .p8 exports flatten visible layers. Save to Library keeps editable layers and frames.' },
         { id: 'studio.send', name: 'Send to…', text: 'File › Send to lists every destination for the current image (Tile Maker, Palette & Fades preview, Map Editor tileset, Terrain Lab…) with the reason for each one that is unavailable. The destination gets a temporary copy: it is not saved to the Library until you save it.' },
         { id: 'studio.save', name: 'Save to Library', text: 'Ctrl+S makes the image available to the other tools. The working image is also autosaved in this browser. The Library gets the image as it was when you pressed Save: changes made while it is saving stay marked as edited. One save runs at a time.' },
@@ -106,6 +106,7 @@ const P8HelpData = (() => {
       tasks: ['paint a level map', 'import a map from a cart', 'write a map into an existing cart', 'copy and paste cell blocks'],
       actions: [
         { id: 'map.tools', name: 'Tools', text: 'Draw, rectangle fill, flood fill, pick, select, pan.' },
+        { id: 'map.tileset', name: 'Tileset', text: 'Click a tile, or drag across several, to make the brush. Reload reads the tileset image from the Library again after you edited it in Pixel Studio.' },
         { id: 'map.sizes', name: 'Map sizes', text: '128×32 is __map__; 128×64 also uses sprites 128–255 for rows 32–63.' },
         { id: 'map.p8', name: '.p8 import / write', text: 'New .p8 Cart writes map, sprites and a viewer; Write into Existing .p8 replaces only the map (and optionally sprites).' },
         { id: 'map.save-status', name: 'Save status', text: 'The badge beside the map name shows Not saved, Unsaved changes, Saving…, Saved to Library, Downloaded copy, memory-only, failed or conflict.' },
@@ -123,8 +124,8 @@ const P8HelpData = (() => {
       tasks: ['edit cart code', 'count tokens', 'follow #include', 'run a cart'],
       actions: [
         { id: 'code.minify', name: 'Minify…', text: 'Cart → Minify… copies the current unsaved Lua, cart sections and available folder context to Minifier. Uses already-granted read access for reachable includes from the folder opened in Code Editor. No save, Run, folder scan or permission prompt is requested. Back to Code Editor returns to the existing buffer, caret and undo history. Optimized code is never applied back; later edits make the captured snapshot earlier.' },
-        { id: 'code.save', name: 'Save', text: 'Rechecks the current file, preserves external changes to non-Lua sections, and asks you to resolve concurrent Lua edits before saving.' },
-        { id: 'code.run', name: 'Run', text: 'Saves and starts the cart in PICO-8 through tools/run_pico8_bridge.bat (needs Python). printh() output appears below the code. A .lua file runs the cart of the open folder that #includes it; after Open Folder switches to another folder, the old cart is never used: open the folder the cart is in to run it.' },
+        { id: 'code.save', name: 'Save', text: 'Ctrl+S. Rechecks the current file, preserves external changes to non-Lua sections, and asks you to resolve concurrent Lua edits before saving.' },
+        { id: 'code.run', name: 'Run', text: 'Ctrl+R. Saves and starts the cart in PICO-8 through tools/run_pico8_bridge.bat (needs Python). printh() output appears below the code. A .lua file runs the cart of the open folder that #includes it; after Open Folder switches to another folder, the old cart is never used: open the folder the cart is in to run it.' },
         { id: 'code.include', name: 'Folders and #include', text: 'Open Folder… lists carts; Ctrl+click an #include line to open it.' },
         { id: 'code.tabs', name: 'Code tabs', text: 'Jump to each -->8 tab; Functions lists every function.' },
       ],
@@ -184,7 +185,7 @@ const P8HelpData = (() => {
       outputs: ['on-screen tables', 'CSV and JSON', 'copied summary'],
       tasks: ['count tokens in a project', 'find unused carts', 'check load/run/reload references'],
       actions: [
-        { id: 'audit.scan', name: 'Choose Project Folder / Rescan', text: 'Reads every .p8 in the folder and subfolders locally; nothing is uploaded.' },
+        { id: 'audit.scan', name: 'Choose Project Folder / Rescan', text: 'Reads every .p8 in the folder and subfolders locally; nothing is uploaded. Ctrl+O chooses a folder, F5 rescans.' },
         { id: 'audit.summary', name: 'Project summary', text: 'Shows which carts are used and which nothing points to.' },
       ],
       controls: [{ id: 'audit.columns', label: 'Column checkboxes', text: 'Hide columns; click a header to sort.' }],
