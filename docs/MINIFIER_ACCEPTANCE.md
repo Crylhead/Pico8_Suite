@@ -67,7 +67,7 @@ The paragraphs above record the original #128 evidence. Since #145, CI separates
 | `checks` (fast) | Every PR, push to `main`, `v*` tag | JS regressions, syntax, static references, bridge/package Python tests. The engine bundle is not packaged here, so the native and PNG suites report **skipped**; a skip is not a pass. |
 | `minifier-native` (*Minifier real-engine checks*) | Same triggers, plus manual dispatch | Fetches only the archives pinned in `vendor/minifier-lock.json` (CI cache keyed on that file), runs `tools/package_minifier.py` (verifies archive, bundle and runtime SHA-256), then `tests/run_minifier_native.py`. |
 
-`tests/run_minifier_native.py` fails if `engine.zip` is missing or differs from the lock, if any test is skipped/failed/errored, or if the executed count differs from its explicit `EXPECTED` table (9 native, 4 PNG; update it deliberately when tests change). It requires the test-only Pillow reader (CI pins `Pillow==12.1.0`) so the independent PNG decode runs. `--negative-controls` reruns the goldens test against an engine copy with the optimizer disabled and the independent PNG-reader test against an encoder copy that flips payload bits; it fails unless both are detected. Archives are downloaded only by CI or the developer packaging step, never by the user-facing page, and no user cartridge or PICO-8 runtime file is involved.
+`tests/run_minifier_native.py` fails if `engine.zip` is missing or differs from the lock, if any test is skipped/failed/errored, or if the executed count differs from its explicit `EXPECTED` table (12 native, 5 PNG since #148; update it deliberately when tests change). It requires the test-only Pillow reader (CI pins `Pillow==12.1.0`) so the independent PNG decode runs. `--negative-controls` reruns the release and corpus goldens tests against an engine copy with the optimizer disabled and the independent PNG-reader test against an encoder copy that flips payload bits; it fails unless both are detected. Archives are downloaded only by CI or the developer packaging step, never by the user-facing page, and no user cartridge or PICO-8 runtime file is involved.
 
 A release must be tagged `v*` from a commit whose `minifier-native` job passed; the tag push reruns it. Repository owners should mark *Minifier real-engine checks* as a required status check for `main`.
 
@@ -78,6 +78,52 @@ python tools/package_minifier.py
 python tests/run_minifier_native.py
 python tests/run_minifier_native.py --negative-controls
 ```
+
+## Compatibility corpus (#148)
+
+`tests/fixtures/minifier/corpus/` holds small, self-authored carts (CC0; `assets.p8` reuses the release fixture's data sections). No proprietary PICO-8 engine, ROM or third-party cart is included. `manifest.json` lists each case and what it covers; `engine-results.json` records the pinned engine's complete result for each.
+
+| Case | Covers | PNG |
+| --- | --- | --- |
+| `shorthand.p8` | `?`, `if (…)`, `while (…)`, compound assignment, `\` and `\=`, `^^`, `>>>`, `<<>`, `~`, `@`/`%`/`$` peeks, `..=`, `!=` | yes |
+| `strings.p8` | multiline `[[ ]]`, `[==[ ]==]` containing `]]` and `--`, escapes, P8SCII glyphs, `\^` control code, `#include` and `--[[` inside strings | yes |
+| `scopes.p8` | code tabs, local/global shadowing, closures, varargs, `goto`, metatables, `cartdata`/`dset`/`dget`, multi-value `poke` | yes |
+| `assets.p8` | `__gfx__`, `__map__`, `__gff__`, `__sfx__`, `__music__`, `__label__`, `__meta:title__` | yes |
+| `inc/main.p8` | repeated `#include`, includes from two folders | no |
+| `plain.lua` | `.lua` entry, constant folding, local function | no |
+
+Negative cases (inline in `manifest.json`): unsupported compiler hint and `#compile` directive, missing include, case-ambiguous include, missing code tab, Lua syntax error and invalid cart header. Each must fail with its specific code and an actionable message, return no Lua or cart text, and leave the exporter unable to build.
+
+Automated checks, all in the real-engine gate (`tests/test_minifier_native.py`, `tests/test_minifier_png.py`):
+
+- every positive case equals its recorded result (output, metrics, diagnostics, fixed Minimal + Tokens flags); two runs are identical; the pinned upstream CLI produces the same text and token/character counts;
+- every `.p8` case, exported through the actual JavaScript exporter, keeps ROM (gfx/map/flags/SFX/music), version, label, metadata and the exact non-Lua text, compared with Shrinko8's independent reader;
+- every PNG-eligible case decodes back from `.p8.png` to the same ROM, code, label and version (a cart without `__label__` gets a blank label image, as in every `.p8.png`);
+- the negatives above.
+
+Sources are read with CRLF normalized to LF. After deliberately changing a fixture or the engine pin, run `python tests/minifier_corpus.py --write` (packaged engine required) and review the diff; it reproduces the committed file byte for byte.
+
+**Finding:** PICO-8 0.2.7 rejects `#include` inside an included file ("unexpected symbol near '#'"), while the pinned engine and the Minifier resolve nested includes (see `project/sub/nested.lua`). The optimized, flattened build runs; the original project does not run in PICO-8 itself. The corpus include cart therefore keeps every `#include` in the cart.
+
+### Runtime parity run — performed 2026-11-04
+
+Performed by a Claude Code session on Windows 11 with the installed **PICO-8 v0.2.7** (version from the installed manual), using `pico8 -x` on the unmodified carts. Each runtime cart prints one console line on its first drawn frame: its computed values and a checksum of the whole 128×128 screen (`fb`). Originals ran from the fixture folder; optimized carts were built through the JavaScript exporter from the recorded results.
+
+| Cart | Original and optimized `.min.p8` console line (identical) |
+| --- | --- |
+| shorthand | `sum=15210.5 fb=0xbae6.5278` |
+| strings | `checks=17,20,8,3,23,21,6,65,135 fb=0x3870.b9bb` |
+| scopes | `cnt=3 n=3 2nd=5 sh=10 g=1 loops=4 mt=42 pk=6 cdata=7 fb=0x60bb.3d59` |
+| assets | `flags=2 cell=1 px=8 fb=0x3798.67c1` |
+| includes | `total=6 twice=8 deep=14` |
+
+All ten carts booted cleanly. The `.min.p8.png` builds of `shorthand` and `assets` also loaded in PICO-8 and printed the same lines.
+
+Not covered by this run: audio (the assets cart starts `music(0)`; sound was not compared), input-driven behavior, frames after the first, other PICO-8 versions, macOS/Linux PICO-8, and browser engines. `scopes.p8` creates a `p8suite_corpus_v1` cartdata file in PICO-8's own data folder. The lockstep control harness available to the session timed out at boot on these carts (and on the release cart), so console reports were used instead.
+
+### Manual checklist (not yet performed)
+
+For each runtime cart, open the original and the exported `.min.p8` in PICO-8, note the version, and compare: the screen after a few seconds, the console line, and for `assets` the music. Repeat `assets` and `shorthand` from `.min.p8.png`. Record results here only after doing them.
 
 ## Integration defect fixed
 

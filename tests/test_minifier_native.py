@@ -10,6 +10,8 @@ import sys
 import tempfile
 import unittest
 
+import minifier_corpus
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 # The override is only for tests/run_minifier_native.py negative controls (broken engine copies).
 BUNDLE = pathlib.Path(os.environ.get('P8_MINIFIER_ENGINE_ZIP') or ROOT / 'vendor/shrinko8/runtime/engine.zip')
@@ -175,6 +177,74 @@ process.stdout.write(JSON.stringify(E.build(s,{...C.prepareInput(data.source),so
                 non_lua = original[original.index('__gfx__'):]
                 self.assertTrue(artifacts['cart']['text'].endswith(non_lua))
                 self.assertEqual(artifacts['lua']['text'], result['lua'])
+
+    # --- #148 compatibility corpus -------------------------------------------------------------
+    def test_corpus_matches_goldens_cli_and_is_deterministic(self):
+        corpus = minifier_corpus.manifest()
+        golden = minifier_corpus.goldens()
+        lock = json.loads((ROOT / 'vendor/minifier-lock.json').read_text())
+        self.assertEqual(golden['engine']['shrinko8Commit'], lock['shrinko8']['commit'])
+        self.assertGreaterEqual(len(corpus['cases']), 6)
+        for case in corpus['cases']:
+            with self.subTest(case=case['name']), tempfile.TemporaryDirectory() as directory:
+                files = minifier_corpus.files_for(case)
+                job = minifier_corpus.job(case['entry'], files)
+                first = json.loads(self.bridge.optimize(json.dumps(job)))
+                second = json.loads(self.bridge.optimize(json.dumps(job)))
+                self.assertTrue(first['ok'], first)
+                self.assertEqual(first, second, 'same input must give identical output')
+                self.assertEqual(first, golden['cases'][case['name']], 'output differs from the recorded pinned-engine result')
+                self.assertEqual(first['flags'], self.bridge.FLAGS, 'fixed Minimal + Tokens preset')
+                # The same files through the pinned upstream CLI with the same flags.
+                folder = pathlib.Path(directory)
+                for rel, text in files.items():
+                    (folder / rel).parent.mkdir(parents=True, exist_ok=True)
+                    (folder / rel).write_bytes(text.encode('utf-8'))
+                output = folder / ('out.' + case['entry'].rsplit('.', 1)[1])
+                command = [sys.executable, '-c', 'import sys;sys.path.insert(0,sys.argv.pop(1));import shrinko8;sys.exit(shrinko8.main())', str(BUNDLE), str(folder / case['entry']), str(output), *self.bridge.FLAGS, *self.bridge.COUNT_FLAGS]
+                cli = subprocess.run(command, text=True, capture_output=True, check=True)
+                self.assertEqual(first['cartText'] if case['entry'].endswith('.p8') else first['lua'], output.read_bytes().decode('utf-8'))
+                for side, prefix in [('original', 'input'), ('optimized', 'None')]:
+                    self.assertIn(f'count:{prefix}:tokens:{first["metrics"][side]["tokens"]}:8192', cli.stdout)
+                    self.assertIn(f'count:{prefix}:chars:{first["metrics"][side]["characters"]}:65535', cli.stdout)
+                self.assertLessEqual(first['metrics']['optimized']['tokens'], first['metrics']['original']['tokens'])
+
+    def test_corpus_exports_keep_every_cart_section_with_an_independent_reader(self):
+        from pico_cart import read_cart_from_source
+        from pico_defs import from_p8str
+        golden = minifier_corpus.goldens()
+        for case in [c for c in minifier_corpus.manifest()['cases'] if c['entry'].endswith('.p8')]:
+            with self.subTest(case=case['name']):
+                files = minifier_corpus.files_for(case)
+                result = golden['cases'][case['name']]
+                built = minifier_corpus.export(minifier_corpus.job(case['entry'], files), result)
+                original = files[case['entry']]
+                a = read_cart_from_source(original, preprocess_hook=lambda path, code, *args, **opts: (code, []))
+                b = read_cart_from_source(built['cart']['text'])
+                self.assertEqual(a.rom, b.rom, 'gfx/map/flags/sfx/music bytes')
+                self.assertEqual(a.version_id, b.version_id)
+                self.assertEqual(a.label.array if a.label else None, b.label.array if b.label else None)
+                self.assertEqual(from_p8str(b.code).rstrip('\n'), result['lua'].rstrip('\n'))
+                self.assertTrue(built['cart']['text'].endswith(original[original.index('__gfx__'):] if '__gfx__' in original else ''))
+                if '__meta:title__' in original:
+                    self.assertIn('__meta:title__\ncorpus assets\n', built['cart']['text'])
+
+    def test_corpus_negatives_refuse_with_actionable_codes_and_no_export(self):
+        golden = minifier_corpus.goldens()
+        negatives = minifier_corpus.manifest()['negative']
+        self.assertGreaterEqual(len(negatives), 7)
+        for case in negatives:
+            with self.subTest(case=case['name']):
+                job = minifier_corpus.job(case['entry'], case['files'])
+                result = json.loads(self.bridge.optimize(json.dumps(job)))
+                self.assertEqual(result, golden['negative'][case['name']])
+                self.assertFalse(result['ok'])
+                self.assertNotIn('lua', result)
+                self.assertNotIn('cartText', result)
+                diagnostic = result['diagnostics'][0]
+                self.assertEqual((diagnostic['severity'], diagnostic['code']), ('error', case['code']))
+                self.assertGreater(len(diagnostic['message']), 10, 'message says what to fix')
+                self.assertEqual(minifier_corpus.export(job, result), {'canExport': False, 'built': False})
 
 
 if __name__ == '__main__':
