@@ -1,8 +1,8 @@
 # Minifier core acceptance record — MIN-10 / #128
 
-**Date:** 2026-11-03. **Integrated baseline:** `b92d03cab15de6c237d9963eaf7cf5528986becd` (MIN-01–MIN-09 merged). This change adds fixtures, combined regressions and this record, and fixes the export focus-return defect found by the keyboard acceptance check.
+**Date:** 2026-11-03. **Historical MIN-10 baseline:** `b92d03cab15de6c237d9963eaf7cf5528986becd` (MIN-01–MIN-09 merged). PR #142 added fixtures, combined regressions and this record, and fixed the export focus-return defect found by the keyboard acceptance check. The stage-specific counts and results below remain that historical evidence; later PNG results are recorded separately.
 
-**Core release gate: PASSED for the representative cart.** On 2026-11-03 the user confirmed matching original and optimized behavior, including the startup tone, in installed Windows PICO-8 0.2.7. This completes the outstanding runtime requirement for #128 and core tracker #130 together with the previously merged implementation and automated/browser checks. PNG export remains optional MIN-11 / #129 and is not implemented. This result does not guarantee equivalence for arbitrary cartridges.
+**Core release gate: PASSED for the representative cart.** On 2026-11-03 the user confirmed matching original and optimized behavior, including the startup tone, in installed Windows PICO-8 0.2.7. This completes the outstanding runtime requirement for #128 and core tracker #130 together with the previously merged implementation and automated/browser checks. Optional PNG export MIN-11 is also implemented: [PR #144](https://github.com/Crylhead/Pico8_Suite/pull/144) is merged and [#129](https://github.com/Crylhead/Pico8_Suite/issues/129) is closed after the separate user-run PNG check. See [PNG verification](MINIFIER_PNG.md). This result does not guarantee equivalence for arbitrary cartridges.
 
 ## Environment and scope of evidence
 
@@ -136,11 +136,11 @@ Both contain a short startup SFX, a white/red two-tile map, a moving sprite, an 
 | Authoring cart observed in PICO-8 | User-supplied recording and confirmation; expected sprite/map/line/text visible |
 | Optimized cart observed in PICO-8 | User-supplied recording and confirmation; expected sprite/map/line/text visible, no runtime error reported |
 | Visual/audio/runtime comparison | User confirms “exactly the same .. with startup tone and everything” |
-| Core release decision | Required representative-cart gate passed; optional PNG #129 remains open |
+| Core release decision | Core representative-cart gate passed; optional PNG was subsequently verified and merged in #144, closing #129 |
 
 
 ### Evidence provenance and limits
 
 The optimized-cart recording (`PICO-8_0.gif`) and original-cart recording (`PICO-8_1.gif`) each contain 479 frames / 14.37 seconds. Inspected frames show the expected animation and heart glyph. The user first confirmed that the optimized cart runs, then tested the supplied original cart and explicitly confirmed matching behavior including the startup tone. This is installed-console evidence supplied by the user; the assistant did not execute PICO-8 locally. No longer test duration, local executable path, console `info` readout or audio recording is claimed. The earlier syntax error came from treating cartridge text as code and was resolved by loading the `.p8` file as a cartridge.
 
-The fixture SHA-256 values above identify the delivered repository files; the user did not independently report local hashes. The independent parser/data checks and all 317 JavaScript / 9 native-engine checks remain the evidence recorded earlier. Runtime confirmation applies to these representative carts in PICO-8 0.2.7. Other cartridges, OS/browser engines and PNG output need their own appropriate validation.
+The fixture SHA-256 values above identify the delivered repository files; the user did not independently report local hashes. The independent parser/data checks and all 317 JavaScript / 9 native-engine checks remain the evidence recorded earlier. Runtime confirmation applies to these representative carts in PICO-8 0.2.7. Other cartridges and OS/browser engines need their own appropriate validation. PNG output subsequently received its separate representative-fixture check, recorded in [MINIFIER_PNG.md](MINIFIER_PNG.md).
