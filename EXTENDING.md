@@ -252,3 +252,9 @@ A result for an older revision is dropped, never shown as current. Every edit up
 - A remembered project shows as **Reconnect** (the click is the permission request); granted = **Continue project**; denied, revoked, missing and name-only projects show an explanation and no action. No project: the text says how to open one.
 - The storage notice says the Library and tool sessions are browser-only; when IndexedDB is unavailable (`assets.mode() === 'memory'`) it becomes a warning.
 - `tests/home.test.js` fails for a task group that does not exist and when one of the six first-run tasks (pixel art, palette, terrain, code, audit, packing) is missing.
+
+## Minifier jobs
+
+`js/minifier-core.js` (`P8MinifierCore`) is a DOM-free immutable model; `js/minifier-engine.js` (`P8MinifierEngine.create()`) adapts it to the real local worker from `js/minifier-worker-host.js`. See [the engine and adapter contract](docs/MINIFIER_ENGINE.md#shared-model-and-adapter--min-02) for script order, API, errors and state semantics. There is no production UI yet.
+
+Use `setSource({kind, entryPath, files:[{path,text}]})` with plain snapshots, `setOptions({profile, target})` with named presets, and only call `optimize()` for an explicit user action. Await `initialize()` and use `P8MinifierCore.describe(state).canOptimize` to enable controls. Every source/options change invalidates current output immediately; `canExport` checks source/options/job identity but the future export layer must also validate cart content. Never infer readiness from script presence or reimplement revision guards in the UI. Cancel pending work on teardown and `dispose()` when the owner goes away; `retry()` only initializes a fresh worker, so it cannot resubmit source implicitly.
