@@ -632,7 +632,7 @@
         el('span', { className: 'cb-part-tools' },
           el('label', { className: 'check', title: p.set ? 'Cart sets stay raw (one reload() reads every cart of the set)' : lzOk ? 'Store LZ-packed (the anchored lines call unlz)' : an.some((x) => x.ranged) ? 'LZ needs whole-part anchors: unlz() cannot unpack a +offset range of the packed stream' : 'LZ needs anchored lines of the form  reload(tmp,…) unlz(tmp,dest)' },
             el('input', { type: 'checkbox', checked: p.lz, disabled: p.set || (!lzOk && !p.lz), dataset: { lz: p.ref } }), el('span', { textContent: 'LZ' })),
-          el('button', { className: 'btn btn-sm', type: 'button', textContent: 'Move…', disabled: pj.busy, title: 'Choose the cart for this part without dragging', attrs: { 'aria-label': `Move ${p.ref} to a cart` }, dataset: { move: p.ref } }),
+          el('button', { className: 'btn btn-sm', type: 'button', textContent: 'Move…', disabled: pj.busy, title: 'Choose the cart for this part without dragging', dataset: { helpId: 'cartbuilder.move' }, attrs: { 'aria-label': `Move ${p.ref} to a cart` }, dataset: { move: p.ref } }),
           p.set ? null : el('button', { className: 'btn btn-sm', type: 'button', textContent: 'Line', title: 'Copy a reload() line with the anchor for this part', dataset: { line: p.ref } }))));
     }
     dom.parts.replaceChildren(...out);

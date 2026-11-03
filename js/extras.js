@@ -78,7 +78,7 @@
     return node;
   }
 
-  const btn = (label, onClick, { primary = false, title = '' } = {}) => el('button', { type: 'button', className: `btn btn-sm${primary ? ' btn-primary' : ''}`, textContent: label, title, onclick: onClick });
+  const btn = (label, onClick, { primary = false, title = '', helpId = '' } = {}) => el('button', { type: 'button', className: `btn btn-sm${primary ? ' btn-primary' : ''}`, textContent: label, title, onclick: onClick, dataset: helpId ? { helpId } : {} });
   const group = (title, ...children) => el('fieldset', { className: 'ex-group panel-group' }, el('legend', { className: 'panel-heading', textContent: title }), ...children);
   const row = (...children) => el('div', { className: 'ex-row' }, ...children);
 
@@ -305,7 +305,7 @@
             return i;
           })()),
           select('Format', [['keyed', '{x0=,y0=,x1=,y1=,c=}'], ['compact', '{x0,y0,x1,y1,c}']], st.format, (v) => { st.format = v; persist(); })),
-          row(btn('Export Lua…', exportLua, { primary: true }), btn('Pixels → Library', toLibrary)))));
+          row(btn('Export Lua…', exportLua, { primary: true, helpId: 'extras.line' }), btn('Pixels → Library', toLibrary)))));
 
     renderPalette();
     return {
@@ -527,7 +527,7 @@
           btn('Load…', loadProject, { title: 'Load a project (.json)' }),
           btn('Save…', () => download(JSON.stringify({ format: 'wave_designer', version: 1, presets: st.presets }, null, 2), 'waves_project.json'), { title: 'Save all 16 presets as .json' }),
           btn('Loader code', () => showCode('Reading waves.p8', X.wavesLoader('waves.p8'), 'waves_loader.lua', 'Each wave is 256 unsigned bytes (0 = -1, 255 = +1) in the __map__ section of waves.p8.')),
-          btn('Export waves.p8', exportCart, { primary: true, title: 'All 16 waves as a PICO-8 data cart (Ctrl+E)' })),
+          btn('Export waves.p8', exportCart, { primary: true, title: 'All 16 waves as a PICO-8 data cart (Ctrl+E)', helpId: 'extras.wave' })),
         strip),
       el('section', { className: 'card ex-wave-scopes' },
         el('div', { className: 'ex-scopes' }, timeCv, xyCv),
@@ -978,7 +978,7 @@
 
     // ---------------- shared ---------------- //
 
-    const modeSeg = el('div', { className: 'seg', role: 'radiogroup', attrs: { 'aria-label': 'LUT type' } },
+    const modeSeg = el('div', { className: 'seg', role: 'radiogroup', dataset: { helpId: 'extras.lut.workflow' }, attrs: { 'aria-label': 'LUT type' } },
       el('button', { type: 'button', role: 'radio', dataset: { value: '2d' }, textContent: '2D motion path' }),
       el('button', { type: 'button', role: 'radio', dataset: { value: '3d' }, textContent: '3D ball formation' }));
     const aspectSeg = el('div', { className: 'seg seg-sm', role: 'radiogroup', attrs: { 'aria-label': 'Preview screen' } },
