@@ -13,7 +13,7 @@ Use this before a release or a larger UX change (see [UX_DEVELOPMENT_PLAN.md](UX
 1. **Help topic** in `js/help-data.js` (`kind: 'tool'`, `ws` = the workspace id): purpose, inputs, outputs, actions, restrictions, shortcuts, related. Bump `rev`.
 2. **Stable ids** for controls/actions (`tool.control`); mark essential controls with `data-help-id` only if they should have tooltips. A rename needs an `ALIASES` entry.
 3. **Shortcuts:** every shortcut shown in a menu is listed in the topic (or the F1 keyboard section).
-4. **Tour:** optional. If the tool has steps, give each a stable `id`, a non-brittle `target`, `optional`/`conditional` where it can legitimately be absent, and bump the tour `major` only for a meaningful new capability (offers "What's new"); copy edits keep it.
+4. **Tour:** required for built-in workspaces and Extra Tools tabs (#103), optional for external plugins. Give each step a stable `id`, a non-brittle `target`, `optional`/`conditional` where it can legitimately be absent, and bump the tour `major` only for a meaningful new capability (offers "What's new"); copy edits keep it.
 5. `EXTENDING.md` / `docs/` updated if a contract changed; the long-form F1 section updated or its parity noted.
 
 ## Human test plan (about 20 minutes)
@@ -35,8 +35,26 @@ Run each on the affected surface and note pass/fail; baseline tasks from the UX 
 ## Tour discovery (#108)
 
 1. On Home and in Pixel Studio, use Help › Tour this tool. In Extra Tools select Terrain Lab and repeat; the selected subtool’s tour must start. Close with Esc and verify focus returns to the visible Help menu button. Repeat from a deep link and with automatic offers disabled.
-2. On a tool without a tour (currently including LUT, Wave and Line), the same action must explain that no tour exists and offer Read Help / Browse Quick tours. Neither choice changes document content. Check future built-in tour coverage separately under #103.
+2. On a tool without a tour (only possible for an external plugin since #103), the same action must explain that no tour exists and offer Read Help / Browse Quick tours. Neither choice changes document content.
 3. Open Quick tours, search by tool/subject, try a query with no results, clear it and replay a completed tour. Verify progress, Suite overview / Tool tour and Current tool labels. The selector must close before the tour starts. Cancel the selector and verify focus return. At 320 CSS px, the search and Start/Replay buttons must remain usable; repeat in both themes.
+
+## Tool-area tours (#103)
+
+For each tour, start it from its tool with Help › Tour this tool, and once from Help › Quick tours on a different tool. Step through to Finish, then replay and leave with Esc midway. Expected each time: the tour opens its own workspace/tab, highlights the named areas (hidden or not-yet-built areas such as the PICO-8 output, nibble results or a data cart range are skipped), changes no document, selection or file, and focus returns to the opener. Repeat a few tours at 320 CSS px, in both themes and with reduced motion: the card stays whole on screen with Back/Next/Close reachable.
+
+| Tour | Areas to see highlighted |
+| --- | --- |
+| Palette & Fades | system palette, custom slots, Normal/Ramp, fade generator, gradient preview, fade slider, menu bar (save/export/Library) |
+| Tile Maker | import bar, tile reduction, views, viewport heatmap switch, stats, Edit Tiles, Export to PICO-8 |
+| Map Editor | tools, name/save badge, Size…, map canvas, tileset, brush, menu bar |
+| Code Editor | editor, code tabs, Save, Run, token meter, Files, Functions, Sprites → Pixel Studio |
+| Cart Builder | project folder, Add Image, parts, stages, Auto-pack, report, Write Carts |
+| Project Audit | Choose Project Folder, carts table, columns, details, Export CSV |
+| Data Carts | Open Project Folder, Inspect/Pack, cart list; with a cart open also the memory map, viewer and output buttons |
+| Data Tools | Binary → string card, input mode, generated code, nibble card |
+| Extra Tools overview | tabs, description, tool area, panel splitter (wide screens) |
+| LUT Creator / Wave Designer / Line Tool | the tab is selected first; preview/stage and controls (Wave: presets, thumbnail strip, scopes, parameter groups) |
+| Suite, Pixel Studio, Minifier, Terrain Lab | unchanged existing tours |
 
 ## Contextual F1 help (#106)
 
