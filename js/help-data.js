@@ -156,7 +156,7 @@ const P8HelpData = (() => {
       related: ['code', 'datacarts', 'cartbuilder', 'project-context'], keywords: ['tokens', 'scan', 'unused', 'include', 'csv'], legacy: 'doc-audit',
     },
     {
-      id: 'datacarts', kind: 'tool', ws: 'datacarts', title: 'Data Carts', rev: 1,
+      id: 'datacarts', kind: 'tool', ws: 'datacarts', title: 'Data Carts', rev: 2,
       summary: 'Shows what every data cart holds and which ranges the code reloads; packs new data carts and writes the reload() lines.',
       inputs: ['a project folder', '.p8 files', 'Library images'],
       outputs: ['.p8 data cart', 'reload() lines', 'Library images and palettes', 'range downloads'],
@@ -167,7 +167,7 @@ const P8HelpData = (() => {
         { id: 'datacarts.pack', name: 'Pack', text: 'Builds a data cart (17,152 bytes) from ranges, images and files and verifies the cart text before download.' },
       ],
       controls: [], shortcuts: [],
-      restrictions: ['Detection of reads is heuristic: check the code before reusing bytes.'],
+      restrictions: ['Detection of reads is heuristic: check the code before reusing bytes.', 'The project folder is shared with Project Audit: Open Project Folder… and Use the active project scan it there, and both tools then show it. .p8 files you open here stay until you choose a project folder again; a scan in Project Audit does not replace them.'],
       related: ['audit', 'cartbuilder', 'code', 'project-context'], keywords: ['reload', 'memory', 'lz', 'pack', 'hex'], legacy: 'doc-datacarts',
     },
     {
