@@ -53,9 +53,9 @@ Both output actions require a current successful validated result. Cancelled, fa
 
 For cartridges, checks compare the engine's decoded asset ROM/version and generated Lua, then insert only that Lua into the **exact original header and non-Lua text**. Final checks cover code, data, labels, version and section presence. Metadata, empty graphics/sound sections and their line endings survive. Generated cart Lua follows the original Lua-marker line ending; copied/downloaded Lua uses the engine result text.
 
-Copy writes only Lua. Clipboard denial or unavailability reports failure; manually select the read-only text and copy with your keyboard. If source changes during copying, feedback identifies the captured earlier build. Download requests a separate browser artifact; the browser controls completion. It is never a project Save. A source/result change while the format dialog is open blocks the download. `.p8.png` export is unavailable.
+Copy writes only Lua. Clipboard denial or unavailability reports failure; manually select the read-only text and copy with your keyboard. If source changes during copying, feedback identifies the captured earlier build. Download requests a separate browser artifact; the browser controls completion. It is never a project Save. A source/result change while the format dialog is open blocks the download. Export completion returns keyboard focus to its invoking control when still usable, otherwise the Source actions; it does not pull focus back after you navigate elsewhere. `.p8.png` export is unavailable.
 
-Independent cartridge-parser checks establish format/data preservation; they do **not** establish runtime equivalence. Full real PICO-8 release validation is tracked separately in [MIN-10 / #128](https://github.com/Crylhead/Pico8_Suite/issues/128).
+Independent cartridge-parser checks establish format/data preservation; they do **not** establish runtime equivalence. See the [acceptance record and outstanding installed-PICO-8 check](MINIFIER_ACCEPTANCE.md). Full real PICO-8 release validation is tracked separately in [MIN-10 / #128](https://github.com/Crylhead/Pico8_Suite/issues/128).
 
 ## Help, tooltips and Quick Tour
 

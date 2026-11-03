@@ -374,3 +374,27 @@ t('MIN-08 download initiation failure reports failure without claiming Save or l
   assert.match(f.$('mnExportStatus').textContent, /Download failed/); assert.strictEqual(f.$('mnExportStatus').dataset.tone, 'error');
   assert.strictEqual(f.view.getState(), kept); f.view.dispose();
 });
+
+
+t('MIN-10 export completion restores a disabled opener after render, without stealing later focus', async () => {
+  const gate = deferred(), f = fixture(true, undefined, { clipboard: { writeText: () => gate.promise } });
+  await f.initialize(); f.view.load(source()); await f.finish();
+  const copy = f.$('mnCopy'), download = f.$('mnDownload'), open = f.$('mnOpen');
+  for (const node of [copy, download, open]) { node.isConnected = true; node.getClientRects = () => [{}]; }
+  f.root.contains = (node) => [copy, download, open].includes(node);
+  f.doc.body = {}; f.doc.querySelector = () => null;
+  download.focus(); let pending = f.actions['mn-download'](); assert.ok(download.disabled);
+  f.doc.activeElement = f.doc.body; f.dialogs.at(-1).finish(null); await pending;
+  assert.strictEqual(f.doc.activeElement, download, 'Cancel must restore the now-enabled opener');
+  copy.focus(); pending = f.actions['mn-copy'](); f.doc.activeElement = f.doc.body; gate.resolve(); await pending;
+  assert.strictEqual(f.doc.activeElement, copy);
+  download.focus(); pending = f.actions['mn-download'](); f.view.load(source('newer()'));
+  f.doc.activeElement = f.doc.body; f.dialogs.at(-1).finish('lua'); await pending;
+  assert.strictEqual(f.doc.activeElement, open, 'stale disabled opener falls back to current Source actions');
+  await f.finish(); download.focus(); pending = f.actions['mn-download'](); open.focus();
+  f.dialogs.at(-1).finish(null); await pending; assert.strictEqual(f.doc.activeElement, open, 'later focus must not be stolen');
+  download.focus(); pending = f.actions['mn-download'](); f.root.hidden = true; f.doc.activeElement = f.doc.body;
+  f.dialogs.at(-1).finish(null); await pending; assert.strictEqual(f.doc.activeElement, f.doc.body, 'hidden workspace must not gain focus');
+  f.root.hidden = false; download.focus(); pending = f.actions['mn-download'](); f.view.dispose(); f.doc.activeElement = f.doc.body;
+  f.dialogs.at(-1).finish(null); await pending; assert.strictEqual(f.doc.activeElement, f.doc.body, 'disposed view must not gain focus');
+});
