@@ -935,7 +935,9 @@
     // bound to the folder it scans (#83): a scan overtaken by another folder never replaces that folder's list
     const folder = ed.folder;
     const files = new Map();
+    const sourceIndex = ed.sourceIndex = { files: new Map(), ready: false };
     ed.files = files;
+    sourceBridge.refresh();
     const walk = async (dir, prefix, depth) => {
       for await (const [name, h] of dir.entries()) {
         if (ed.folder !== folder) return;
@@ -943,11 +945,14 @@
         if (h.kind === 'directory') {
           if (depth < 5 && !name.startsWith('.') && !['node_modules', 'backup', 'bbs'].includes(name.toLowerCase())) await walk(h, `${prefix}${name}/`, depth + 1);
         } else if (/\.(p8|lua)$/i.test(name)) {
+          sourceIndex.files.set(`${prefix}${name}`, h); // Keep case collisions visible to Minifier.
           files.set(`${prefix}${name}`.toLowerCase(), { rel: `${prefix}${name}`, handle: h });
         }
       }
     };
-    try { await walk(folder, '', 0); } catch (err) { if (ed.folder === folder) toast(`Could not read the folder: ${err.message}`, 'warn'); }
+    try { await walk(folder, '', 0); if (ed.folder === folder) sourceIndex.ready = true; }
+    catch (err) { if (ed.folder === folder) toast(`Could not read the folder: ${err.message}`, 'warn'); }
+    sourceBridge.refresh();
   }
 
   function renderFiles() {
@@ -1429,8 +1434,26 @@
   const sourceBridge = K.createSourceBridge({
     read: () => ({ ready: !sourceRestoring, doc: ed.doc, loc: ed.loc, name: ed.name, parts: ed.parts,
       text: dom.ta.value, savedLua: ed.savedLua, folder: ed.folder, folderReady: ed.folderReady, rel: ed.rel, parent: ed.parent,
+      projectIndex: ed.sourceIndex, projectReady: ed.sourceIndex?.ready,
       selection: { start: dom.ta.selectionStart, end: dom.ta.selectionEnd, direction: dom.ta.selectionDirection, top: dom.ta.scrollTop, left: dom.ta.scrollLeft } }),
     focus: () => dom.ta.focus({ preventScroll: true }),
+    project: (snapshot, { live = () => true } = {}) => {
+      const folder = ed.folder, index = ed.sourceIndex;
+      const current = () => live() && sourceBridge.isCurrent(snapshot.identity) && ed.folder === folder && ed.sourceIndex === index;
+      const readable = folder && ed.folderReady && ed.rel && index?.ready;
+      return P8MinifierProject.resolve(snapshot.source, {
+        names: readable ? [...index.files.keys()] : [], live: current,
+        read: async (path) => {
+          if (!current()) throw P8MinifierCore.error('E_STALE', 'Editor changed while reading includes.');
+          const handle = readable && index.files.get(path);
+          if (!handle || (handle.queryPermission && await handle.queryPermission({ mode: 'read' }) !== 'granted')) throw P8MinifierCore.error('E_INCLUDE_READ', `Read access is unavailable for ${path}. Reconnect the folder in Code Editor.`);
+          if (!current()) throw P8MinifierCore.error('E_STALE', 'Editor changed while checking read access.');
+          const file = await handle.getFile(), bytes = await file.arrayBuffer();
+          if (!current()) throw P8MinifierCore.error('E_STALE', 'Editor changed while reading includes.');
+          return P8MinifierCore.decodeText(bytes);
+        },
+      });
+    },
   });
   S.codeSource = sourceBridge;
   sourceBridge.subscribe((status) => {

@@ -420,7 +420,7 @@ const P8Code = (() => {
   const NEW_CART = 'pico-8 cartridge // http://www.pico-8.com\nversion 42\n__lua__\n';
 
   /** Read-only editor handoff. Native identities stay private; snapshots contain plain copies only. */
-  function createSourceBridge({ read, focus }) {
+  function createSourceBridge({ read, focus, project }) {
     const ids = new WeakMap(), listeners = new Set();
     let serial = 0, revision = 0, fingerprint = null, status = null, published = null;
     const id = (object) => {
@@ -434,7 +434,7 @@ const P8Code = (() => {
     };
     function inspect(c) {
       const p = c.parts || {};
-      const next = [c.ready, c.doc, c.loc, c.name, c.text, c.savedLua, p.head, p.tail, p.crlf, (p.sections || []).join('\0'), c.folder, c.folderReady, c.rel, c.parent?.rel, c.parent?.name];
+      const next = [c.ready, c.doc, c.loc, c.name, c.text, c.savedLua, p.head, p.tail, p.crlf, (p.sections || []).join('\0'), c.folder, c.folderReady, c.rel, c.parent?.rel, c.parent?.name, c.projectIndex, c.projectReady];
       if (fingerprint && next.every((value, index) => value === fingerprint[index])) return status;
       fingerprint = next; revision++;
       const kind = p.head == null ? 'lua' : 'p8';
@@ -460,6 +460,7 @@ const P8Code = (() => {
         selection: { start: c.selection?.start || 0, end: c.selection?.end || 0, direction: c.selection?.direction || 'none', top: c.selection?.top || 0, left: c.selection?.left || 0 } });
     }
     return Object.freeze({ getStatus, getSnapshot,
+      getProjectSnapshot(snapshot, options) { return project ? project(snapshot, options) : Promise.resolve(freeze({ source: snapshot.source, edges: [], diagnostics: [], buildCopy: false })); },
       isCurrent(identity) { const now = getStatus().identity; return !!identity && identity.documentId === now.documentId && identity.locationId === now.locationId && identity.folderId === now.folderId && identity.revision === now.revision; },
       subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
       refresh() {

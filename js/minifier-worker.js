@@ -42,7 +42,7 @@
       shrinko8Version: info.version, shrinko8Commit: lock.shrinko8.commit,
       pyodideVersion: python.version, pythonVersion: info.pythonVersion,
       startupMs: Math.round(performance.now() - start), wasmHeapBytes: python._module.HEAP8.byteLength,
-      capabilities: { p8: true, lua: true, png: false, includes: false, profiles: ['minimal'], targets: ['tokens'] },
+      capabilities: { p8: true, lua: true, png: false, includes: true, profiles: ['minimal'], targets: ['tokens'] },
     } };
   }
 

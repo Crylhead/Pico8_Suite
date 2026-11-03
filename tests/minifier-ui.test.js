@@ -52,7 +52,7 @@ function fixture(wide = true, protocol, io = {}) {
     pickFile: async () => null, confirmDialog: async () => true, ...io };
   const view = UI.mount({ root, adapter, media, protocol, app, editorSource: io.editorSource });
   return { view, adapter, nodes, actions, root, workers, media, doc, dialogs, created, $: (id) => nodes.get(id),
-    async initialize() { const p = view.initialize(); await flush(); workers.at(-1).reply(); await p; },
+    async initialize(extra) { const p = view.initialize(); await flush(); workers.at(-1).reply(extra); await p; },
     async finish(extra) { const p = actions['mn-optimize'](); await flush(); workers.at(-1).reply(extra); await p; },
   };
 }
@@ -299,4 +299,21 @@ t('MIN-06 result publication checks live editor identity even before a change no
   f.workers[0].reply(); await run;
   assert.match(f.$('mnEditorState').textContent, /Earlier snapshot/); assert.match(f.$('mnOutputState').textContent, /Stale result/);
   assert.ok(f.$('mnOptimize').disabled); assert.strictEqual(e.state.text, 'next()'); f.view.dispose();
+});
+
+t('MIN-07 dependency preparation commits a complete plain tree; denied/cancelled reads preserve prior result', async () => {
+  const e = editorFixture(); let prepare = async (snapshot) => ({ source: { ...snapshot.source, files: [...snapshot.source.files, { path: 'lib.lua', text: 'print("♥")\r\n' }] }, edges: [{ target: 'lib.lua' }], diagnostics: [], buildCopy: true });
+  const editorSource = { ...e.source, getProjectSnapshot: (...args) => prepare(...args) };
+  const f = fixture(true, undefined, { editorSource }); await f.initialize({ engine: { ...engine(), capabilities: { ...engine().capabilities, includes: true } } });
+  assert.strictEqual(await f.actions['mn-use-editor'](), true); assert.strictEqual(f.view.getInput().source.files.length, 2);
+  assert.match(f.$('mnProjectState').textContent, /2 source file/); await f.finish();
+  assert.deepStrictEqual(Object.keys(f.workers[0].requests.at(-1).job.files[1]).sort(), ['path', 'text']);
+  const kept = f.view.getState();
+  prepare = async () => { throw require('../js/minifier-core.js').error('E_INCLUDE_READ', 'Cannot read main.lua → lib.lua'); };
+  assert.strictEqual(await f.actions['mn-use-editor'](), false); assert.strictEqual(f.view.getState(), kept);
+  assert.match(f.$('mnInputStatus').textContent, /main.lua → lib.lua/);
+  const gate = deferred(); prepare = () => gate.promise;
+  const pending = f.actions['mn-use-editor'](); await flush(); f.actions['mn-cancel']();
+  gate.resolve({ source: source('late()'), edges: [], diagnostics: [], buildCopy: false });
+  assert.strictEqual(await pending, false); assert.strictEqual(f.view.getState(), kept); f.view.dispose();
 });

@@ -112,13 +112,13 @@ const P8HelpData = (() => {
       related: ['tiles', 'studio', 'cartbuilder', 'library'], keywords: ['level', 'tilemap', 'cells', 'mget', 'mset'], legacy: 'doc-map',
     },
     {
-      id: 'code', kind: 'tool', ws: 'code', title: 'Code Editor', rev: 3,
+      id: 'code', kind: 'tool', ws: 'code', title: 'Code Editor', rev: 4,
       summary: 'Edits the __lua__ section of a .p8 cart or a .lua file with PICO-8 syntax, completion, token count and Run through the optional helper.',
       inputs: ['.p8 or .lua files', 'project folders'],
       outputs: ['the same file (Save)', 'PICO-8 run via the bridge'],
       tasks: ['edit cart code', 'count tokens', 'follow #include', 'run a cart'],
       actions: [
-        { id: 'code.minify', name: 'Minify…', text: 'Cart → Minify… copies the current unsaved Lua, cart sections and available folder context to Minifier. No save, Run, folder scan or write permission is requested. Back to Code Editor returns to the existing buffer, caret and undo history. Optimized code is never applied back; later edits make the captured snapshot earlier.' },
+        { id: 'code.minify', name: 'Minify…', text: 'Cart → Minify… copies the current unsaved Lua, cart sections and available folder context to Minifier. Uses already-granted read access for reachable includes from the folder opened in Code Editor. No save, Run, folder scan or permission prompt is requested. Back to Code Editor returns to the existing buffer, caret and undo history. Optimized code is never applied back; later edits make the captured snapshot earlier.' },
         { id: 'code.save', name: 'Save', text: 'Rechecks the current file, preserves external changes to non-Lua sections, and asks you to resolve concurrent Lua edits before saving.' },
         { id: 'code.run', name: 'Run', text: 'Saves and starts the cart in PICO-8 through tools/run_pico8_bridge.bat (needs Python). printh() output appears below the code. A .lua file runs the cart of the open folder that #includes it; after Open Folder switches to another folder, the old cart is never used: open the folder the cart is in to run it.' },
         { id: 'code.include', name: 'Folders and #include', text: 'Open Folder… lists carts; Ctrl+click an #include line to open it.' },
@@ -130,18 +130,19 @@ const P8HelpData = (() => {
       related: ['minifier', 'audit', 'datacarts', 'project-context'], keywords: ['lua', 'token', 'editor', 'syntax', 'include', 'run'], legacy: 'doc-code',
     },
     {
-      id: 'minifier', kind: 'tool', ws: 'minifier', title: 'Minifier', rev: 2,
+      id: 'minifier', kind: 'tool', ws: 'minifier', title: 'Minifier', rev: 3,
       summary: 'Open a .p8 / .lua file or paste Lua, then compare original and generated code with local Shrinko8. Minimal profile and Tokens focus are the defaults. Use current editor copies its live unsaved buffer; Back to Code Editor preserves editing context. Dedicated copy/download actions follow separately.',
       inputs: ['UTF-8 .p8 text cartridges', 'UTF-8 .lua files', 'pasted Lua', 'current Code Editor buffer'],
       outputs: ['read-only original/optimized comparison; no save or download action yet'],
       tasks: ['inspect original and generated source', 'compare local Minifier results', 'recover from an engine load error'],
       actions: [
-        { id: 'minifier.editor', name: 'Use current editor / Back to Code Editor', text: 'Captures live code, including unsaved changes. Replacing an existing Minifier source asks first. Nothing is saved or applied to Code Editor. Back returns to its existing content, caret and undo history. Later editor edits, saves or document/folder changes mark the snapshot earlier and cancel its running job; use current editor again to refresh before optimizing. Includes are not resolved yet.' },
+        { id: 'minifier.editor', name: 'Use current editor / Back to Code Editor', text: 'Captures live code, including unsaved changes. Replacing an existing Minifier source asks first. Nothing is saved or applied to Code Editor. Back returns to its existing content, caret and undo history. Later editor edits, saves or document/folder changes mark the snapshot earlier and cancel its running job; use current editor again to refresh before optimizing. Reachable includes are read from the already-opened folder with granted access. Missing, denied, ambiguous, cyclic or semantically unsupported dependencies stop intake and keep the prior result. Dependency snapshots stay fixed until you explicitly refresh; external disk edits are not watched.' },
         { id: 'minifier.open', name: 'Open file…', text: 'Reads a .p8 or .lua file into an unsaved page-only snapshot. Text carts retain their entire original text and non-Lua data; the comparison shows Lua. Empty, malformed or unreadable input keeps the current source/result. Replacing a snapshot asks first. No write permission is requested.' },
         { id: 'minifier.paste', name: 'Paste Lua…', text: 'Paste nonempty Lua into the dialog and choose Load Lua. Cancel or Escape keeps the current source. It becomes a page-only snapshot named pasted.lua; Lua syntax is checked only when you explicitly Optimize.' },
         { id: 'minifier.optimize', name: 'Optimize', text: 'Runs once on an immutable source snapshot after the engine is ready. Input changes invalidate the result. Cancel stops pending work; switching tools also cancels it. No automatic optimization on typing, navigation, save or Run.' },
       ],
       controls: [
+        { id: 'minifier.includes', label: 'Project includes', text: 'Open the project folder in Code Editor and use Minify… to capture its reachable .lua/.p8 dependencies. Relative paths, spaces, ../ inside the folder, repeated includes and .p8:0–9 tabs are supported. Use exact case and explicit extensions; quoted paths, root fallback and unsafe escapes are refused.', detail: 'Pinned Shrinko8 preprocesses whole carts before selecting a tab. Tab source carts with includes, unusual/empty tab boundaries, and recursive tab includes are refused where Suite semantics differ. Unknown preprocessor/compiler requests block the build. --@data and other source directives warn that generated output is a build copy, never a project source replacement. Counts use the same resolved file set, not the editor estimate.' },
         { id: 'minifier.profile', label: 'Profile', text: 'Minimal keeps names and line breaks. It can change expressions, comments and spacing, and may save zero tokens. Safe and Aggressive are unavailable with this engine.' },
         { id: 'minifier.target', label: 'Focus', text: 'Tokens is the only supported focus. Character and compressed size can stay the same or increase.' },
         { id: 'minifier.view', label: 'Code view', text: 'Compare shows both read-only views; Original and Optimized show one. Select text and use your keyboard to copy it. Changing the view never changes source.' },
@@ -150,7 +151,7 @@ const P8HelpData = (() => {
         { id: 'minifier.location', label: 'Source location', text: 'Selects the corresponding line in the current read-only Lua snapshot. Cart positions are reported in whole-file coordinates. Unknown files, out-of-range positions and old jobs never become source actions; reported columns are displayed, and the whole line is selected.' },
       ],
       shortcuts: [['Arrow keys / Home / End', 'Select a code view or diagnostic severity within its focused option group']],
-      restrictions: ['For file:// opening, use Start_Pico8_Suite.bat on Windows or python tools/serve_suite.py (Python 3.9+). The optional launcher verifies/prepares pinned assets and opens localhost; first setup needs Internet or the pinned archives. Hosted use needs no Python service.', 'File:// shows Local setup required; Retry cannot change the page origin and is disabled. Library/session data is separate for each address: export/import a Library backup before switching. See docs/MINIFIER_ENGINE.md.', 'Retry engine initializes a fresh worker without resubmitting source.', 'Earlier results are labelled stale and cannot enable dedicated output actions.', 'Includes, PNG export and real PICO-8 equivalence validation remain separate roadmap steps.'],
+      restrictions: ['For file:// opening, use Start_Pico8_Suite.bat on Windows or python tools/serve_suite.py (Python 3.9+). The optional launcher verifies/prepares pinned assets and opens localhost; first setup needs Internet or the pinned archives. Hosted use needs no Python service.', 'File:// shows Local setup required; Retry cannot change the page origin and is disabled. Library/session data is separate for each address: export/import a Library backup before switching. See docs/MINIFIER_ENGINE.md.', 'Retry engine initializes a fresh worker without resubmitting source.', 'Earlier results are labelled stale and cannot enable dedicated output actions.', 'Standalone Open/Paste cannot read neighboring files: use Code Editor’s opened folder for includes. Dedicated exports, PNG export and real PICO-8 equivalence validation remain separate roadmap steps.'],
       related: ['code', 'cartbuilder'], keywords: ['shrinko8', 'optimize', 'minify', 'tokens'], legacy: 'doc-minifier',
     },
     {
