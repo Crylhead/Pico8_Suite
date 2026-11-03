@@ -210,11 +210,12 @@ const P8HelpData = (() => {
 
     // ---- guides and reference ------------------------------------------------------------
     {
-      id: 'suite', kind: 'guide', title: 'The Suite', rev: 1,
+      id: 'suite', kind: 'guide', title: 'The Suite', rev: 2,
       summary: 'What the Suite is, how tools share work, and how to run it offline.',
       inputs: [], outputs: [],
       tasks: ['switch tools', 'run the Suite offline', 'understand what is stored in the browser'],
       actions: [
+        { id: 'suite.about', name: 'About', text: 'Help › About shows the web app version, author and current tools, including Extra Tools tabs. Run in PICO-8 additionally needs the optional local Python bridge and an installed PICO-8; a remotely hosted copy does not connect to the bridge automatically.' },
         { id: 'suite.offline', name: 'Offline use', text: 'The Suite is plain HTML/JS: open index.html from disk or a static host. No account, server or network is needed; only Report a problem → GitHub needs a connection.' },
         { id: 'suite.backup', name: 'Backup limits', text: 'Library → Export Library Backup covers saved assets. It does not include tool working sessions or files in project folders.' },
       ],
