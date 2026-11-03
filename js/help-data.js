@@ -31,7 +31,7 @@ const P8HelpData = (() => {
       related: ['suite', 'library', 'shortcuts'], keywords: ['start', 'launcher', 'welcome'], legacy: 'doc-suite',
     },
     {
-      id: 'studio', kind: 'tool', ws: 'studio', title: 'Pixel Studio', rev: 1,
+      id: 'studio', kind: 'tool', ws: 'studio', title: 'Pixel Studio', rev: 2,
       summary: 'Pixel editor for sprites, sprite sheets and whole-map images with 16 palette slots mapped to the 32 PICO-8 colors, layers and frames.',
       inputs: ['PNG images', 'Library images', 'the gfx of a .p8 cart'],
       outputs: ['Library images', 'PNG', '.p8 gfx section'],
@@ -43,7 +43,7 @@ const P8HelpData = (() => {
         { id: 'studio.sieve', name: 'Sieve and fill patterns', text: 'A sieve mask limits which pixels change; fill patterns use PICO-8 fillp() bits.' },
         { id: 'studio.layers', name: 'Layers and frames', text: 'Layers (bottom = background) and frames with onion skin; exports flatten the visible layers.' },
         { id: 'studio.send', name: 'Send to…', text: 'File › Send to lists every destination for the current image (Tile Maker, Palette & Fades preview, Map Editor tileset, Terrain Lab…) with the reason for each one that is unavailable. The destination gets a temporary copy: it is not saved to the Library until you save it.' },
-        { id: 'studio.save', name: 'Save to Library', text: 'Ctrl+S makes the image available to the other tools. The working image is also autosaved in this browser.' },
+        { id: 'studio.save', name: 'Save to Library', text: 'Ctrl+S makes the image available to the other tools. The working image is also autosaved in this browser. The Library gets the image as it was when you pressed Save: changes made while it is saving stay marked as edited. One save runs at a time.' },
       ],
       controls: [
         { id: 'studio.slot', label: 'Color slot', text: 'Double-click a slot (or Remap…) to choose which of the 32 PICO-8 colors it shows.' },
