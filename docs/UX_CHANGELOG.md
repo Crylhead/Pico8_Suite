@@ -112,7 +112,7 @@ Keep these issues open rather than treating a green model test as full acceptanc
 | #63 | Addressed in the follow-up below (browser/offline walkthrough, issue-form fields). |
 | #64 | Actual 320/768/1280 layouts, 200% zoom, theme and pointer/touch checks. |
 | #65 | Keyboard/focus/contrast walkthrough done 2026-11-03 (`docs/ACCESSIBILITY.md`); splitter reset announcement fixed. No screen reader available. |
-| #66 | Disposable folder happy path, cancellation, permission denial and preflight-to-actual-write comparison. |
+| #66 | Addressed in the follow-up below (disposable-folder walkthrough; Commit-stage baseline fixed). Native picker/permission UI not shown. |
 | #67 | Foreground before/after input-to-paint and frame-pacing evidence at 256/512/1024; independent worker retry smoke. Archive timings are attributed, not independently reproduced. |
 | #68 | First-run/returning-user browser journey, task navigation and narrow-layout checks. |
 
@@ -173,3 +173,28 @@ Not covered: screen reader announcement of the live region, touch input, and a r
 The [review of `fd31e3c`](HEALTH_REVIEW_2026-11-03_fd31e3c.md) reproduced six further correctness gaps, tracked in #80–#85. Specific UX integration findings are the unguarded existing Tile Maker → Map Editor send (#81), stale include-parent context after Code Editor folder adoption/picking (#83), and palette/settings changes before Tile Maker import cancellation (#84). Default diagnostics message allowlisting remains in place, but arbitrary error names and identifier-shaped stack metadata still appear in default exports (#85); this limits the complete privacy claim made for #62/#63. No diagnostic upload occurs automatically.
 
 The review passed 205 JS regressions, five bridge tests, syntax and static HTML checks. These new findings came from actual-function/core probes with controlled fake I/O. The review had no working browser executable, so it does not repeat or replace the attributed browser evidence above. No implementation changed in the review documentation PR.
+
+## Follow-up: #66 Cart Builder disposable-folder walkthrough (2026-11-03)
+
+Headless Chrome, driven over the DevTools protocol, ran the real Cart Builder UI against a **disposable Origin Private File System folder**: real `FileSystemDirectoryHandle` reads and writes, private to the test profile. Only `showDirectoryPicker` and the permission calls were replaced by stubs, so the native picker and permission prompt themselves were not shown. The temporary script stayed outside the repo. The demo was a flat project: `main.p8` runs `reload(0x0,0,0x200,"atlas.p8")`, and `atlas.p8` holds a known 0x200-byte sprite pattern. After every step the folder tree was snapshotted and diffed. **14/14 checks pass:**
+
+| Step | Result |
+| --- | --- |
+| Picker cancelled (AbortError) | Nothing opened, no dialog, no file changed. |
+| Open the folder | Analysis only: no file changed. Stage 1 says "Folder read (read-only)", adoption is offered and Write Carts is disabled. |
+| Adopt → preflight → Cancel | The preflight is an `alertdialog` listing *2 added: assets/main_atlas.json, suite.json · 1 changed: main.p8* with "Write 3 files". Cancel writes nothing, and adoption is still offered. |
+| Adopt → confirm | The files actually changed are **exactly** the three listed. |
+| Write Carts → preflight → Cancel | It lists *1 added: d0.p8 · 2 changed: main.p8, suite.json · 1 moved to unused/: atlas.p8*. Cancel writes nothing, the stacks are unchanged and Write stays enabled. |
+| Write with file access denied (creating files and directories, writing and removing all throw `NotAllowedError`) | An `alertdialog`: *"Could not write the recovery journal, nothing was written … Your unsaved changes are still here."* No file changed and no success toast. |
+| Write Carts → confirm | The changes are **exactly** the listed files, including the move (`atlas.p8` removed, `unused/atlas.p8` added). `main.p8` now has `reload(0x0,0x0000,0x0200,"d0.p8") --@data main_atlas.bin`, and the 0x200 bytes it reads from `d0.p8` are **identical** to the original `atlas.p8` bytes. "Wrote 1 carts…" and "Commit (done) Written and verified" appear only after the verified write. |
+| Reopen with folder permission denied (`queryPermission` prompt, `requestPermission` denied) | **Reconnect "proj"** is offered. Denying opens nothing and writes nothing. Reopening with permission shows "Commit (done) Matches the files on disk." |
+
+No exceptions were thrown and no diagnostics were recorded.
+
+**Fixed in this pass:**
+- **The Commit stage claimed "done" right after adoption:** *"✓ 4. Commit (done) Matches the files on disk"*, although `d0.p8` had not been written. The first render took the auto-packed in-memory arrangement as the written baseline. The baseline is now the arrangement recorded in `suite.json` (`diskSig()` in `js/project.js`), so after adoption the stage reads *"Commit (current) Unwritten changes"*. `tests/cartbuilder-stages.test.js` runs the real `renderStages` with the real `P8Preflight` core; the adoption case fails before the fix.
+- **Write failures were plain dialogs:** `commit()`'s failure messages (journal pending, busy, conflict, write error) now use `showMessage(…, 'error')`, and the "could not move to unused/" notice uses `'warn'`, so they are announced as alerts (#65 convention).
+
+**Observed, not changed (transaction core, out of #66's scope):** if creating the journal file succeeds but writing it fails (simulated by failing only `createWritable`), an empty `suite.journal.json` stays behind, as the core intends ("may belong to another write"). Further writes are then refused until the project is reopened. With a real permission denial, creating the file fails as well, so nothing is left behind (verified above).
+
+Not covered: the native folder picker and permission prompt UI, a real user folder on disk, and screen reader or touch input.

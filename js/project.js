@@ -124,7 +124,7 @@
 
   /** runs a transaction; on failure explains what happened and returns null (the in-memory state stays dirty) */
   async function commit(plan, title) {
-    if (pj.journalPending) { showMessage(title, `${inDemo(P.JOURNAL)} from an interrupted write is still there. Reopen the project to restore it first. Nothing was written.`); return null; }
+    if (pj.journalPending) { showMessage(title, `${inDemo(P.JOURNAL)} from an interrupted write is still there. Reopen the project to restore it first. Nothing was written.`, 'error'); return null; }
     // everything the write was computed from must still be on disk as it was read (issue #4)
     const key = (dir, name) => `${dir}/${name}`;
     const writes = plan.writes.map((w) => ({ ...w, expect: pj.disk.has(key(w.dir, w.name)) ? pj.disk.get(key(w.dir, w.name)) : null }));
@@ -140,17 +140,18 @@
       const r = await P.transact(projectDirs(), { ...plan, writes, checks });
       for (const w of writes) pj.disk.set(key(w.dir, w.name), w.text);
       for (const n of r.retired) pj.disk.delete(key('demo', n));
-      if (r.retireErrors.length) showMessage(title, `Everything was written, but some old carts could not be moved to ${inDemo('unused/')} and stay where they are:\n${r.retireErrors.join('\n')}`);
+      if (r.retireErrors.length) showMessage(title, `Everything was written, but some old carts could not be moved to ${inDemo('unused/')} and stay where they are:\n${r.retireErrors.join('\n')}`, 'warn');
       return r;
     } catch (e) {
       if (!(e instanceof P.WriteError)) throw e;
       pj.journalPending = e.journalKept;
-      if (e.stage === 'busy') { showMessage(title, e.message); return null; }
+      // failures are announced as alerts (role="alertdialog", #65 convention)
+      if (e.stage === 'busy') { showMessage(title, e.message, 'error'); return null; }
       if (e.stage === 'conflict') {
-        showMessage(title, `These files changed on disk after Cart Builder read them (in PICO-8, another tab or another program):\n${e.conflicts.join('\n')}\n\nNothing was written: the files on disk keep the external changes and Cart Builder keeps its own changes in memory. To continue from the disk versions, open the folder again (Cart Builder's unsaved changes are then dropped).`);
+        showMessage(title, `These files changed on disk after Cart Builder read them (in PICO-8, another tab or another program):\n${e.conflicts.join('\n')}\n\nNothing was written: the files on disk keep the external changes and Cart Builder keeps its own changes in memory. To continue from the disk versions, open the folder again (Cart Builder's unsaved changes are then dropped).`, 'error');
         return null;
       }
-      showMessage(title, `${e.message}${pj.project ? '\n\nYour unsaved changes are still here.' : ''}`);
+      showMessage(title, `${e.message}${pj.project ? '\n\nYour unsaved changes are still here.' : ''}`, 'error');
       return null;
     }
   }
@@ -299,11 +300,15 @@
 
   /** signature of the arrangement, to tell "written" from "changed since" */
   const layoutSig = () => JSON.stringify(pj.layout.map((c) => [c.name, c.items.map((i) => i.ref)]));
+  /** the same signature for the carts the manifest on disk (suite.json) records */
+  const diskSig = () => JSON.stringify((pj.project?.carts || []).map((c) => [c.name, (c.items || []).map((i) => i.ref)]));
 
   function renderStages() {
     if (!dom.stages) return;
     const chk = pj.project ? P.checkAnchors(anchorFiles(), pj.parts, pj.layout) : { errors: [], warnings: [] };
-    if (pj.project && pj.writtenSig == null) pj.writtenSig = layoutSig();
+    // the baseline is the arrangement the manifest on disk records, not whatever is arranged now: right after
+    // adoption the auto-packed carts are not written yet and must not show as committed (#66)
+    if (pj.project && pj.writtenSig == null) pj.writtenSig = diskSig();
     const list = P8Preflight.stages({
       open: Boolean(pj.root), hasProject: Boolean(pj.root && pj.project), partCount: pj.parts.length,
       unplaced: pj.project ? pj.parts.filter((p) => !placed().has(p.ref)).length : 0,
