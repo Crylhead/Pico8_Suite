@@ -96,6 +96,11 @@
     if (e.key === 'Escape' && active) { e.preventDefault(); e.stopPropagation(); end(false); }
   }
 
+  function progressText(tour, state) {
+    const skipped = state.skipped.length;
+    return `${tour.title} · step ${state.index + 1} of ${tour.steps.length}${skipped ? ` · ${skipped} unavailable area${skipped === 1 ? '' : 's'} skipped` : ''}`;
+  }
+
   function render() {
     if (!active) return;
     const { run, card } = active;
@@ -108,7 +113,7 @@
     card.replaceChildren(
       el('h2', { id: 'tour-title', textContent: s.step.title }),
       el('p', { textContent: text }),
-      el('p', { className: 'muted tour-count', textContent: `${tour.title} · step ${s.index + 1} of ${tour.steps.length}` }),
+      el('p', { className: 'muted tour-count', textContent: progressText(tour, s) }),
       el('div', { className: 'tour-buttons' },
         el('button', { type: 'button', className: 'btn btn-sm', textContent: 'Back', disabled: s.index <= 0, onclick: async () => { await run.back(); if (active?.run === run) render(); } }),
         el('button', { type: 'button', className: 'btn btn-sm btn-primary', textContent: last ? 'Finish' : 'Next', onclick: async () => { await run.next(); if (active?.run === run) render(); } }),
