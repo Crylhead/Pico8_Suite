@@ -79,7 +79,7 @@
     gridSize: saved.gridSize || 8,
     tiled: false,
     onion: !!saved.onion,
-    previewScale: saved.previewScale || 0,
+    previewScale: [1, 2].includes(saved.previewScale) ? saved.previewScale : 0,
     sel: null,              // {x, y, w, h, mask?}: mask = doc-sized Uint8Array for lasso / wand shapes
     floating: null,         // {x, y, w, h, data, lifted}
     xform: null,            // transform of the floating pixels: {src, w, h, cx, cy, sx, sy, angle, kx, ky (shear), orig}
@@ -143,6 +143,8 @@
     palette: $('#psPalette'),
     transp: $('#psTransp'),
     preview: $('#psPreview'),
+    previewBox: $('#psPreviewBox'),
+    previewZoom: $('#psPreviewZoom'),
     previewScale: $('#psPreviewScale'),
     layers: $('#psLayers'),
     frames: $('#psFrames'),
@@ -527,20 +529,18 @@
   function drawPreview() {
     const c = dom.preview;
     const d = ps.doc;
-    const box = 176;
-    const auto = Math.max(1, Math.floor(box / Math.max(d.w, d.h)));
-    const s = ps.previewScale || auto;
-    const fit = Math.min(1, box / (d.w * s), box / (d.h * s));
-    const w = Math.max(1, Math.round(d.w * s * fit));
-    const h = Math.max(1, Math.round(d.h * s * fit));
+    const size = K.previewSize(d.w, d.h, ps.previewScale, dom.previewBox.clientWidth, dom.previewBox.clientHeight);
+    if (!size) return;
+    const { w, h, scale } = size;
     if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
     const g = c.getContext('2d');
-    g.imageSmoothingEnabled = fit < 1;
+    g.imageSmoothingEnabled = scale < 1;
     const t = d.transparent >= 0 ? d.transparent : 0;
     const bg = rgbCache[t];
     g.fillStyle = `rgb(${bg})`;
     g.fillRect(0, 0, w, h);
     g.drawImage(comp, 0, 0, w, h);
+    dom.previewZoom.textContent = `${Number((scale * 100).toFixed(1))}% · ${w}×${h} px`;
   }
 
   // ------------------------------------------------------------------ //
@@ -2876,6 +2876,8 @@
     if (e.type === 'keyup') return;
     if (fullView) { fullViewKey(e); return; }
     if (typing) return;
+    // Leave scrolling keys to the focused preview, even when a drawing selection exists.
+    if (e.target === dom.previewBox && /^(Arrow|Page|Home$|End$| $)/.test(e.key)) return;
     if (e.key === 'Tab' && !mod && !e.altKey && !e.shiftKey && (e.target === dom.canvas || e.target === document.body)) { e.preventDefault(); setTimeline(!ps.timeline); return; }
     if ((e.key === 'f' || e.key === 'F' || e.key === 'F8') && !mod && !e.altKey) { e.preventDefault(); openFullView(); return; }
     // hold Alt with a drawing tool: color picker until Alt is released
@@ -2961,6 +2963,7 @@
     c.addEventListener('contextmenu', (e) => e.preventDefault());
     c.addEventListener('wheel', onWheel, { passive: false });
     new ResizeObserver(() => requestDraw()).observe(dom.stage);
+    new ResizeObserver(() => requestDraw()).observe(dom.previewBox);
 
     buildToolGroups();
     dom.timelineBtn.addEventListener('click', () => setTimeline(!ps.timeline));

@@ -27,6 +27,7 @@ const P8TourData = (() => {
       steps: [
         { id: 'tools', before: { ws: 'studio' }, target: '#psTools', title: 'Drawing tools', text: 'Pencil, shapes, fill, selection and more. Buttons with a small triangle hold more tools; hover, right-click or long-press them.' },
         { id: 'canvas', target: '#psCanvas', title: 'Canvas', text: 'Left button paints with the primary color, right button with the secondary. The canvas can be 1×1 up to 1024×1024.' },
+        { id: 'preview', target: '#psPreviewScale', helpId: 'studio.preview', title: 'Preview scale' },
         { id: 'palette', target: '#psPalette', title: 'Palette slots', text: 'Sixteen slots, each showing one of the 32 PICO-8 colors. Double-click a slot to remap it; slots are what exports keep.' },
         { id: 'transparent', target: '[data-help-id="studio.transparent"]', helpId: 'studio.transparent', title: 'Transparent slot' },
         { id: 'tiled', target: '[data-help-id="studio.tiled"]', helpId: 'studio.tiled', title: 'Tiled view' },

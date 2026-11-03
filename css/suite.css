@@ -493,16 +493,15 @@ body[data-workspace="studio"] { height: 100vh; height: 100dvh; display: flex; fl
 .ps-sw-pick { width: 40px; height: 40px; }
 
 .ps-preview-box {
-  display: grid;
-  place-items: center;
-  min-height: 96px;
-  max-height: 200px;
-  padding: 8px;
+  height: 192px;
+  min-width: 0;
   background: var(--stage-bg);
   border-radius: var(--radius-sm);
-  overflow: hidden;
+  overflow: auto;
 }
-.ps-preview-box canvas { image-rendering: pixelated; max-width: 100%; }
+.ps-preview-content { display: grid; place-items: center; width: max-content; min-width: 100%; min-height: 100%; }
+.ps-preview-box canvas { display: block; image-rendering: pixelated; max-width: none; }
+.ps-preview-zoom { font-size: 12px; color: var(--muted); }
 
 .ps-layers-panel { min-height: 140px; }
 .ps-layers { display: grid; gap: 2px; max-height: 240px; overflow-y: auto; }

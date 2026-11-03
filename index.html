@@ -922,11 +922,12 @@
       </section>
       <section class="card ps-panel">
         <header class="ps-panel-head"><h2>Preview</h2>
-          <div class="seg seg-sm" id="psPreviewScale" role="radiogroup" aria-label="Preview scale">
-            <button role="radio" data-value="0">Auto</button><button role="radio" data-value="1">1×</button><button role="radio" data-value="2">2×</button>
+          <div class="seg seg-sm" id="psPreviewScale" role="radiogroup" aria-label="Preview scale" data-help-id="studio.preview">
+            <button role="radio" data-value="0">Fit</button><button role="radio" data-value="1">1×</button><button role="radio" data-value="2">2×</button>
           </div>
         </header>
-        <div class="ps-preview-box"><canvas id="psPreview" width="128" height="128"></canvas></div>
+        <div class="ps-preview-box" id="psPreviewBox" tabindex="0" role="region" aria-label="Image preview; scroll to see the whole image" aria-describedby="psPreviewZoom"><div class="ps-preview-content"><canvas id="psPreview" width="128" height="128"></canvas></div></div>
+        <div class="ps-preview-zoom" id="psPreviewZoom"></div>
       </section>
       <section class="card ps-panel ps-layers-panel">
         <header class="ps-panel-head"><h2>Layers</h2></header>
@@ -1292,6 +1293,7 @@
           <li><b>Tools</b>: pencil, eraser, line, rectangle, ellipse (filled or outline), fill (contiguous or global), color picker, rectangle and ellipse selection (<kbd>M</kbd>), lasso and polygon lasso (<kbd>Q</kbd>), magic wand (<kbd>W</kbd>), pan. Brush sizes 1–4, or a custom brush. Mirror X / Y.</li>
           <li><b>Ink</b> (pencil, line, rectangle, ellipse and fill): normal, lock alpha, behind, shade (one step brighter with the left button, darker with the right, by brightness) and <i>shade along the fades</i>: the same steps, but along the fade tables. They come from the image when it brought its own fades (data carts), otherwise from Palette &amp; Fades (both directions; a missing one is the other walked backwards).</li>
           <li><b>View</b>: <i>Timeline</i> in the status bar (or <kbd>Tab</kbd>) hides the animation strip for a bigger canvas; <i>View</i> (or <kbd>F</kbd>) shows only the image, full screen, to pan and zoom. <kbd>Esc</kbd> returns.</li>
+          <li><b>Preview</b>: <i>Fit</i> fits the current image to the panel, using whole-number enlargement when possible. <i>1×</i> and <i>2×</i> show exactly one or two CSS pixels per image pixel; scroll the preview to see larger images. The readout shows the actual zoom and displayed dimensions. This does not change the main canvas zoom.</li>
           <li><b>Grouped tools</b>: a button with a small ▸ triangle holds more tools (rectangle / ellipse, and all selection tools: rectangle, ellipse, lasso, polygon lasso, magic wand). Hover it for a moment (or right-click it, or long-press on touch) and pick one from the row that opens; the button then shows that tool. Pressing the group's key again steps to the next tool of the group.</li>
           <li><b>Ink</b> (pencil): <i>Normal</i>; <i>Lock alpha</i> paints only on filled pixels (recolor a shape without leaving it); <i>Behind</i> paints only on empty pixels (draw behind a shape); <i>Shade</i> makes each pixel one step brighter (left button) or darker (right button) along the palette sorted by brightness, once per stroke. <b>Pixel perfect</b> (<kbd>P</kbd>) removes the L-shaped corner pixels of 1-pixel strokes.</li>
           <li><b>Custom brush</b> (Deluxe Paint): select something and press <kbd>Ctrl+B</kbd>. The pencil now stamps it in its own colors (empty pixels stay out), the eraser erases its shape; mirror and tiled view work with it. Edit menu: flip the brush. Brush sizes 1–4 switch back, ◆ selects it again.</li>
