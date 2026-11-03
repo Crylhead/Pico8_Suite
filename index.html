@@ -8,6 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Crect width='2' height='2' fill='%23ff004d'/%3E%3Crect x='2' width='2' height='2' fill='%23ffa300'/%3E%3Crect y='2' width='2' height='2' fill='%2329adff'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%2300e436'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/suite.css">
+  <link rel="stylesheet" href="css/minifier.css">
 </head>
 <body>
   <header class="appbar">
@@ -25,6 +26,7 @@
       <button role="radio" data-value="tiles" aria-checked="false" title="Tile Maker" aria-label="Tile Maker"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg></button>
       <button role="radio" data-value="map" aria-checked="false" title="Map Editor" aria-label="Map Editor"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 5l5-2 5 2 5-2v12l-5 2-5-2-5 2zM7.5 3v12M12.5 5v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg></button>
       <button role="radio" data-value="code" aria-checked="false" title="Code Editor" aria-label="Code Editor"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.5 6L2.5 10l4 4M13.5 6l4 4-4 4M11.5 3.5l-3 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg></button>
+      <button role="radio" data-value="minifier" aria-checked="false" title="Minifier" aria-label="Minifier"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6.5 10 3 15.5"/><path d="M17 4.5 13.5 10 17 15.5"/><path d="M8.3 7h3.4M8.3 10h3.4M8.3 13h3.4"/></svg></button>
       <button role="radio" data-value="cartbuilder" aria-checked="false" title="Cart Builder" aria-label="Cart Builder"><svg viewBox="0 0 20 20" aria-hidden="true"><defs><mask id="p8-cart-builder-wrench-cutout" maskUnits="userSpaceOnUse" x="0" y="0" width="20" height="20" style="mask-type:luminance"><rect width="20" height="20" fill="white"/><path d="M7.6 9.7 6.1 11.2 7.6 12.7 9.1 11.2 9.3 13 7.5 14.5 6 14.3 3.1 18 1.8 16.8 4.5 13.1 4.2 11.5 5.8 9.7 7.6 9.7" fill="none" stroke="black" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/></mask></defs><g fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round" mask="url(#p8-cart-builder-wrench-cutout)"><path d="M4 2.2h11.7l1.4 1.4v10.2h-1.6V18H5.3v-4.2H3.6V2.6l.4-.4z" stroke-width="1.45"/><path d="M6.5 5.2H14" stroke-width="1.3"/><path d="M7.7 15.4v1.4m2.7-1.4v1.4m2.7-1.4v1.4" stroke-width="1"/></g><path d="M7.6 9.7 6.1 11.2 7.6 12.7 9.1 11.2 9.3 13 7.5 14.5 6 14.3 3.1 18 1.8 16.8 4.5 13.1 4.2 11.5 5.8 9.7 7.6 9.7" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" stroke-linecap="round"/></svg></button>
       <button role="radio" data-value="audit" aria-checked="false" title="Project Audit" aria-label="Project Audit"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2 16.9 6v8L10 18l-6.9-4V6L10 2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="m6.5 10 2.5 2.5 4.5-4.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/></svg></button>
       <button role="radio" data-value="datacarts" aria-checked="false" title="Data Carts" aria-label="Data Carts"><svg viewBox="0 0 20 20" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round"><path d="M2.2 12.8V2.2H13v1.2M5.3 5.3h11.4l1.1 1.2v7.2h-1.7V18H6.6v-4.3H5.3V5.3z" stroke-width="1.4"/><path d="M8.2 8.1h6.6" stroke-width="1.3"/><path d="M9 15.4v1.5m2.4-1.5v1.5m2.4-1.5v1.5" stroke-width="1"/></g></svg></button>
@@ -232,6 +234,19 @@
           <hr>
           <button role="menuitem" data-action="code-gfx">Open Sprite Sheet in Pixel Studio</button>
           <button role="menuitem" data-action="code-map">Open Map in Map Editor</button>
+        </div>
+      </div>
+
+      <div class="menu" data-show="minifier">
+        <button class="menu-btn" aria-haspopup="menu" aria-expanded="false">Minifier</button>
+        <div class="menu-pop" role="menu">
+          <button role="menuitem" data-action="mn-optimize" disabled>Optimize</button>
+          <button role="menuitem" data-action="mn-cancel" disabled>Cancel</button>
+          <button role="menuitem" data-action="mn-retry">Load engine</button>
+          <hr>
+          <button role="menuitem" data-action="mn-view-compare">Compare</button>
+          <button role="menuitem" data-action="mn-view-original">Original</button>
+          <button role="menuitem" data-action="mn-view-optimized">Optimized</button>
         </div>
       </div>
 
@@ -1079,6 +1094,94 @@
   <!-- Data Carts                                                       -->
   <!-- ================================================================ -->
   <!-- ================================================================ -->
+  <!-- Minifier: source intake, detailed reporting and exports follow in MIN-04/05/08. -->
+  <main class="layout-minifier" data-ws="minifier" hidden aria-labelledby="mnHeading">
+    <header class="card mn-command">
+      <div class="mn-heading-row">
+        <h2 id="mnHeading">Minifier</h2>
+        <span id="mnSourceName" class="mn-source-name">No source selected</span>
+        <span id="mnProvenance" class="muted"></span>
+        <button class="btn btn-sm" data-action="docs">Help</button>
+      </div>
+      <div class="mn-source-actions" aria-label="Source actions">
+        <button id="mnOpen" class="btn" disabled aria-describedby="mnAvailability">Open file…</button>
+        <button id="mnPaste" class="btn" disabled aria-describedby="mnAvailability">Paste Lua…</button>
+        <button id="mnUseEditor" class="btn" disabled aria-describedby="mnAvailability">Use current editor</button>
+      </div>
+      <p id="mnAvailability" class="notice">File import, paste and Code Editor handoff are not available yet. Copy and download will follow separately.</p>
+    </header>
+
+    <aside class="card mn-options" aria-label="Optimization options">
+      <fieldset class="panel-group">
+        <legend class="panel-heading">Optimization</legend>
+        <span id="mnProfileLabel">Profile</span>
+        <div id="mnProfile" class="seg mn-profiles" role="radiogroup" aria-labelledby="mnProfileLabel" aria-describedby="mnModeText mnSupported" data-help-id="minifier.profile">
+          <button type="button" role="radio" data-value="minimal" aria-checked="true">Minimal</button>
+          <button type="button" role="radio" data-value="safe" aria-checked="false" disabled>Safe</button>
+          <button type="button" role="radio" data-value="aggressive" aria-checked="false" disabled>Aggressive</button>
+        </div>
+        <label class="field" for="mnTarget">Focus
+          <select id="mnTarget" class="select" aria-describedby="mnModeText mnSupported" data-help-id="minifier.target"><option value="tokens">Tokens</option></select>
+        </label>
+        <p id="mnModeText">Minimal keeps variable names and line breaks to make the result easier to debug. It may still change expressions, comments, and spacing. Focusing on tokens may leave character or compressed size unchanged—or increase them.</p>
+        <p id="mnSupported" class="muted">Only Minimal + Tokens is supported by this engine. Safe and Aggressive are unavailable.</p>
+      </fieldset>
+      <div class="mn-run-actions">
+        <button id="mnOptimize" class="btn btn-primary" data-action="mn-optimize" data-help-id="minifier.optimize" disabled>Optimize</button>
+        <button id="mnCancel" class="btn" data-action="mn-cancel" disabled>Cancel</button>
+        <button id="mnRetry" class="btn" data-action="mn-retry">Load engine</button>
+      </div>
+      <p id="mnStatus" class="status-line" role="status" aria-live="polite" aria-atomic="true">No source loaded.</p>
+      <progress id="mnProgress" class="progress" aria-label="Minifier processing" hidden></progress>
+      <p id="mnEngine" class="muted">Engine not loaded.</p>
+      <details id="mnAdvanced">
+        <summary>Advanced settings</summary>
+        <p class="muted">Fixed Minimal + Tokens configuration; custom scripts and compiler transforms are unsupported.</p>
+        <code id="mnFlags"></code>
+      </details>
+    </aside>
+
+    <section class="card mn-results" aria-label="Source and generated output">
+      <div id="mnCompareMode" class="seg" role="radiogroup" aria-label="Code view" data-help-id="minifier.view">
+        <button type="button" role="radio" data-value="compare" aria-checked="true">Compare</button>
+        <button type="button" role="radio" data-value="original" aria-checked="false">Original</button>
+        <button type="button" role="radio" data-value="optimized" aria-checked="false">Optimized</button>
+      </div>
+      <div id="mnCodeViews" class="mn-code-views" data-mode="compare">
+        <section id="mnSourcePane" class="mn-code-pane">
+          <label for="mnSourceCode">Original source · read only</label>
+          <textarea id="mnSourceCode" class="code-out" readonly wrap="off" spellcheck="false" autocomplete="off" placeholder="No source loaded."></textarea>
+        </section>
+        <section id="mnOutputPane" class="mn-code-pane">
+          <label for="mnOutputCode">Optimized output · read only</label>
+          <p id="mnOutputState" class="status-line">No result.</p>
+          <textarea id="mnOutputCode" class="code-out" readonly wrap="off" spellcheck="false" autocomplete="off" aria-describedby="mnOutputState" placeholder="Run Optimize after loading a source."></textarea>
+        </section>
+      </div>
+      <section id="mnMetrics" class="mn-metrics" aria-labelledby="mnMetricsHeading">
+        <h3 id="mnMetricsHeading" class="panel-heading">Code measurements · Shrinko8</h3>
+        <p id="mnMetricsState" class="muted">No measurements.</p>
+        <table>
+          <thead><tr><th scope="col">Measure</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Tokens</th><td id="mnTokensBefore">—</td><td id="mnTokensAfter">—</td></tr>
+            <tr><th scope="row">Characters</th><td id="mnCharsBefore">—</td><td id="mnCharsAfter">—</td></tr>
+            <tr><th scope="row">Compressed bytes</th><td id="mnBytesBefore">—</td><td id="mnBytesAfter">—</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <details id="mnDiagnostics" class="mn-diagnostics">
+        <summary id="mnDiagnosticsSummary">Diagnostics (0)</summary>
+        <ul id="mnDiagnosticList"><li>No diagnostics.</li></ul>
+      </details>
+      <footer class="mn-output-actions">
+        <button id="mnCopy" class="btn" disabled aria-describedby="mnAvailability">Copy optimized Lua</button>
+        <button id="mnDownload" class="btn" disabled aria-describedby="mnAvailability">Download…</button>
+        <span class="muted">Select code to copy it with your keyboard.</span>
+      </footer>
+    </section>
+  </main>
+
   <!-- Cart Builder                                                     -->
   <!-- ================================================================ -->
   <main class="layout-dc" data-ws="cartbuilder" hidden>
@@ -1251,6 +1354,7 @@
         <a href="#doc-studio-keys">Pixel Studio keys</a>
         <a href="#doc-map">Map Editor</a>
         <a href="#doc-code">Code Editor</a>
+        <a href="#doc-minifier">Minifier</a>
         <a href="#doc-data">Data Tools</a>
         <a href="#doc-audit">Project Audit</a>
         <a href="#doc-datacarts">Data Carts</a>
@@ -1279,7 +1383,7 @@
         <h3 id="doc-suite">The suite &amp; library</h3>
         <p>The PICO-8 Dev Suite combines Pixel Studio, Palette &amp; Fades, the Tile Maker, the Map Editor, the Data Tools and the project tools. Switch tools with the icons at the top (the current tool's name is shown left of them); each tool keeps its work while you switch.</p>
         <ul>
-          <li><b>Finding tools</b>: the workspace bar groups the tools as <i>Create</i> (Pixel Studio, Palette &amp; Fades, Tile Maker, Map Editor, Terrain Lab), <i>Develop</i> (Code Editor, Cart Builder), <i>Inspect</i> (Project Audit, Data Carts) and <i>Utilities</i> (Data Tools, Extra Tools); Home lists them the same way. On wide screens the tabs show their names. The magnifier button (or <kbd>Ctrl</kbd>+<kbd>K</kbd>, <kbd>⌘</kbd>+<kbd>K</kbd> on a Mac) opens <b>Find tool</b>: type part of a name or task (e.g. <i>tokens</i>, <i>terrain</i>, <i>fade</i>) to search names and descriptions, including the tools inside Extra Tools; <kbd>↑</kbd> <kbd>↓</kbd> choose, <kbd>Enter</kbd> opens, <kbd>Esc</kbd> closes without switching. On narrow screens the tabs are replaced by this button, which shows the current tool's name.</li>
+          <li><b>Finding tools</b>: the workspace bar groups the tools as <i>Create</i> (Pixel Studio, Palette &amp; Fades, Tile Maker, Map Editor, Terrain Lab), <i>Develop</i> (Code Editor, Minifier, Cart Builder), <i>Inspect</i> (Project Audit, Data Carts) and <i>Utilities</i> (Data Tools, Extra Tools); Home lists them the same way. On wide screens the tabs show their names. The magnifier button (or <kbd>Ctrl</kbd>+<kbd>K</kbd>, <kbd>⌘</kbd>+<kbd>K</kbd> on a Mac) opens <b>Find tool</b>: type part of a name or task (e.g. <i>tokens</i>, <i>terrain</i>, <i>fade</i>) to search names and descriptions, including the tools inside Extra Tools; <kbd>↑</kbd> <kbd>↓</kbd> choose, <kbd>Enter</kbd> opens, <kbd>Esc</kbd> closes without switching. On narrow screens the tabs are replaced by this button, which shows the current tool's name.</li>
           <li><b>Links</b>: the address follows the open tool (e.g. <code>index.html#map</code> or <code>index.html#extras/terrain</code>); open or bookmark such a link to start in that tool. Without one, the Suite reopens the tool you used last.</li>
           <li><b>Library</b> (button at the top right): images, palettes and maps shared by all tools. Click an asset for <i>Open in…</i>, rename, duplicate, PNG download and delete; the trash button next to each entry deletes it directly (after asking). Palette &amp; Fades saves and loads palettes with the <i>Save to Library…</i> / <i>From Library…</i> buttons of the custom palette. Drag an asset thumbnail onto a tool's canvas to load it there. Drop image files onto the library to import them (colors snap to the nearest PICO-8 color).</li>
           <li>Images are stored as palette slots (0–15) plus the screen palette (which of the 32 PICO-8 colors each slot shows) and the transparent slot, just like PICO-8 memory + <code>pal()</code>/<code>palt()</code>.</li>
@@ -1383,6 +1487,11 @@
           <li><b>Project summary</b>: which carts are used (included, loaded or named by another cart, or referencing other carts) and which nothing points to. <i>Copy</i> puts the current view on the clipboard as text.</li>
           <li>Click a column header to sort; the checkboxes hide columns. Exports: CSV and JSON with the same fields as the desktop tool.</li>
         </ul>
+
+        <h3 id="doc-minifier">Minifier</h3>
+        <p>Develop → Minifier compares original source with generated output from locally packaged Shrinko8. The default is <b>Minimal</b> with <b>Tokens</b> focus. Names and line breaks are kept; expressions, comments and spacing may change, and token reduction is not guaranteed. Source and output are read only and selectable. Use Compare, Original or Optimized to change the view; arrow keys select within each option group. Tablet and phone layouts start in Original view.</p>
+        <p>This release adds the workspace shell. File/paste import, Code Editor handoff and dedicated copy/download actions are not available yet. Unavailable actions are disabled. Opening Minifier initializes the local engine only; optimization always requires an explicit Optimize action and a loaded source. Source changes and navigation never optimize or save automatically. Switching tools cancels pending work and retains the source and any earlier result, marked stale.</p>
+        <p>Engine errors show a Retry engine action. Retry loads a fresh worker without submitting source. The generated runtime assets must be packaged before hosting; see <code>docs/MINIFIER_ENGINE.md</code>. For file:// use a localhost HTTP server. Real PICO-8 equivalence testing and validated exports remain separate release steps.</p>
 
         <h3 id="doc-cartbuilder">Cart Builder</h3>
         <p>Manages a demo project's data: assets, the data carts they are packed into, and the <code>--@data</code> anchors that tell the fx code where each piece is. The format is described in <code>docs/PROJECT_MODEL.md</code>.</p>
@@ -1617,6 +1726,10 @@
   <script src="js/audit.js"></script>
   <script src="js/code-core.js"></script>
   <script src="js/code.js"></script>
+  <script src="js/minifier-core.js"></script>
+  <script src="js/minifier-worker-host.js"></script>
+  <script src="js/minifier-engine.js"></script>
+  <script src="js/minifier.js"></script>
   <script src="js/cart-core.js"></script>
   <script src="js/datacarts-core.js"></script>
   <script src="js/datacarts.js"></script>

@@ -129,6 +129,24 @@ const P8HelpData = (() => {
       related: ['audit', 'datacarts', 'project-context'], keywords: ['lua', 'token', 'editor', 'syntax', 'include', 'run'], legacy: 'doc-code',
     },
     {
+      id: 'minifier', kind: 'tool', ws: 'minifier', title: 'Minifier', rev: 1,
+      summary: 'Compares original and generated PICO-8 source with local Shrinko8. Minimal profile and Tokens focus are the defaults. This release provides the workspace shell; file/paste intake, editor handoff and dedicated copy/download actions are not available yet.',
+      inputs: ['plain in-memory .lua / .p8 snapshots supplied to the workspace; user intake follows separately'],
+      outputs: ['read-only original/optimized comparison; no save or download action yet'],
+      tasks: ['inspect original and generated source', 'compare local Minifier results', 'recover from an engine load error'],
+      actions: [
+        { id: 'minifier.optimize', name: 'Optimize', text: 'Runs once on an immutable source snapshot after the engine is ready. Input changes invalidate the result. Cancel stops pending work; switching tools also cancels it. No automatic optimization on typing, navigation, save or Run.' },
+      ],
+      controls: [
+        { id: 'minifier.profile', label: 'Profile', text: 'Minimal keeps names and line breaks. It can change expressions, comments and spacing, and may save zero tokens. Safe and Aggressive are unavailable with this engine.' },
+        { id: 'minifier.target', label: 'Focus', text: 'Tokens is the only supported focus. Character and compressed size can stay the same or increase.' },
+        { id: 'minifier.view', label: 'Code view', text: 'Compare shows both read-only views; Original and Optimized show one. Select text and use your keyboard to copy it. Changing the view never changes source.' },
+      ],
+      shortcuts: [['Arrow keys / Home / End', 'Select a code view within the focused option group']],
+      restrictions: ['Serve over HTTP(S); file:// workers are unsupported. Package the local runtime assets before hosting (docs/MINIFIER_ENGINE.md).', 'Retry engine initializes a fresh worker without resubmitting source.', 'Earlier results are labelled stale and cannot enable dedicated output actions.', 'Includes, PNG export and real PICO-8 equivalence validation remain separate roadmap steps.'],
+      related: ['code', 'cartbuilder'], keywords: ['shrinko8', 'optimize', 'minify', 'tokens'], legacy: 'doc-minifier',
+    },
+    {
       id: 'data', kind: 'tool', ws: 'data', title: 'Data Tools', rev: 1,
       summary: 'Converts binary data and images into PICO-8 string literals and splits greyscale images into nibbles.',
       inputs: ['files', 'text', 'Library images'],
