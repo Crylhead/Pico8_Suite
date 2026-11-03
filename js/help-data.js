@@ -111,14 +111,14 @@ const P8HelpData = (() => {
       related: ['tiles', 'studio', 'cartbuilder', 'library'], keywords: ['level', 'tilemap', 'cells', 'mget', 'mset'], legacy: 'doc-map',
     },
     {
-      id: 'code', kind: 'tool', ws: 'code', title: 'Code Editor', rev: 1,
+      id: 'code', kind: 'tool', ws: 'code', title: 'Code Editor', rev: 2,
       summary: 'Edits the __lua__ section of a .p8 cart or a .lua file with PICO-8 syntax, completion, token count and Run through the optional helper.',
       inputs: ['.p8 or .lua files', 'project folders'],
       outputs: ['the same file (Save)', 'PICO-8 run via the bridge'],
       tasks: ['edit cart code', 'count tokens', 'follow #include', 'run a cart'],
       actions: [
         { id: 'code.save', name: 'Save', text: 'Rechecks the current file, preserves external changes to non-Lua sections, and asks you to resolve concurrent Lua edits before saving.' },
-        { id: 'code.run', name: 'Run', text: 'Saves and starts the cart in PICO-8 through tools/run_pico8_bridge.bat (needs Python). printh() output appears below the code.' },
+        { id: 'code.run', name: 'Run', text: 'Saves and starts the cart in PICO-8 through tools/run_pico8_bridge.bat (needs Python). printh() output appears below the code. A .lua file runs the cart of the open folder that #includes it; after Open Folder switches to another folder, the old cart is never used: open the folder the cart is in to run it.' },
         { id: 'code.include', name: 'Folders and #include', text: 'Open Folder… lists carts; Ctrl+click an #include line to open it.' },
         { id: 'code.tabs', name: 'Code tabs', text: 'Jump to each -->8 tab; Functions lists every function.' },
       ],

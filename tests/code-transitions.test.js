@@ -372,10 +372,13 @@ t('#44 a newer save or another document while Run reads its target stops Run', a
   const hold = deferred();
   let reads = 0;
   const getFile = main.getFile;
-  main.getFile = async () => { if (++reads === 1) await hold; return getFile(); }; // the parent cart read after the save
+  // Run reads the parent cart three times: it checks that the parent includes the document before and after
+  // the save (#83), then reads the text it sends. The hold is on that last read, after the save.
+  const PAYLOAD_READ = 3;
+  main.getFile = async () => { if (++reads === PAYLOAD_READ) await hold; return getFile(); };
   let run = e.ctx.runCart();
-  for (let i = 0; i < 10 && reads < 1; i++) await tick();
-  assert.strictEqual(reads, 1);
+  for (let i = 0; i < 20 && reads < PAYLOAD_READ; i++) await tick();
+  assert.strictEqual(reads, PAYLOAD_READ);
   e.ed.text = 'x=4';
   await e.saver.save(); // saved again while Run reads the parent cart
   hold.open();
@@ -385,14 +388,130 @@ t('#44 a newer save or another document while Run reads its target stops Run', a
 
   const hold2 = deferred();
   reads = 0;
-  main.getFile = async () => { if (++reads === 1) await hold2; return getFile(); };
+  main.getFile = async () => { if (++reads === PAYLOAD_READ) await hold2; return getFile(); };
   run = e.ctx.runCart();
-  for (let i = 0; i < 10 && reads < 1; i++) await tick();
-  assert.strictEqual(reads, 1);
+  for (let i = 0; i < 20 && reads < PAYLOAD_READ; i++) await tick();
+  assert.strictEqual(reads, PAYLOAD_READ);
   e.open(other);
   hold2.open();
   await run;
   assert.deepStrictEqual(e.sent, []);
   assert.strictEqual(e.ed.handle, other);
   assert.ok(e.log.some((l) => /^message Run: Another file was opened before Run could start/.test(l)), e.log.join('; '));
+});
+
+// ---------------------------------------------------------------- #83
+
+/** a FileSystemDirectoryHandle stand-in built from {rel: handle}; `scanHold` delays the next entries() walk */
+function fakeDir(name, files) {
+  const node = () => ({ kind: 'directory', kids: new Map() });
+  const root = node();
+  for (const [rel, h] of Object.entries(files)) {
+    const parts = rel.split('/');
+    let n = root;
+    for (const p of parts.slice(0, -1)) { if (!n.kids.has(p)) n.kids.set(p, node()); n = n.kids.get(p); }
+    n.kids.set(parts.at(-1), h);
+  }
+  const dir = (n, dirName) => ({
+    name: dirName, kind: 'directory',
+    async *entries() {
+      const wait = top.scanHold; top.scanHold = null;
+      if (wait) await wait;
+      for (const [k, v] of n.kids) yield [k, v.kind === 'directory' ? dir(v, k) : v];
+    },
+  });
+  const top = Object.assign(dir(root, name), {
+    scanHold: null,
+    resolve: async (h) => { const hit = Object.entries(files).find(([, x]) => x === h); return hit ? hit[0].split('/') : null; },
+    isSameEntry: async (o) => o === top,
+  });
+  return top;
+}
+
+/** folder A (main.p8 includes src/common.lua) and an unrelated folder B with the same paths */
+function twoFolders() {
+  const aMain = fakeHandle('main.p8', cart('#include src/common.lua'));
+  const aInc = fakeHandle('common.lua', 'a=1');
+  const bMain = fakeHandle('main.p8', cart('#include src/common.lua\nprint("B unrelated")'));
+  const bInc = fakeHandle('common.lua', 'b=1');
+  const A = fakeDir('A', { 'main.p8': aMain, 'src/common.lua': aInc });
+  const B = fakeDir('B', { 'main.p8': bMain, 'src/common.lua': bInc });
+  const e = editor([], { folder: A });
+  for (const name of ['useFolder', 'listFolder']) vm.runInContext(fn(name), e.ctx);
+  return { e, A, B, aMain, aInc, bMain, bInc };
+}
+
+/** in folder A: follow the include from main.p8 and edit it (dirty) */
+async function openIncludeInA(f) {
+  await f.e.ctx.useFolder(f.A, false);
+  f.e.load(f.aInc.text, 'common.lua', f.aInc, { rel: 'src/common.lua', parent: { rel: 'main.p8', name: 'main.p8' } });
+  f.e.ed.text = 'a=2';
+}
+
+t('#83 switching to an unrelated folder (picker or active project) drops the old path/parent and never runs its carts', async () => {
+  for (const resetRel of [false, true]) {
+    const f = twoFolders();
+    await openIncludeInA(f);
+    await f.e.ctx.useFolder(f.B, resetRel);
+    const { ed } = f.e;
+    assert.strictEqual(ed.rel, null, `no path from folder A (resetRel=${resetRel})`);
+    assert.strictEqual(ed.parent, null, `no parent from folder A (resetRel=${resetRel})`);
+    assert.strictEqual(ed.handle, f.aInc, 'the open document keeps its own file');
+    assert.strictEqual(ed.text, 'a=2', 'and its unsaved edit');
+    assert.deepStrictEqual([...ed.files.keys()].sort(), ['main.p8', 'src/common.lua'], 'B is listed');
+    assert.ok([...ed.files.values()].every((x) => x.handle === f.bMain || x.handle === f.bInc));
+    await f.e.ctx.runCart();
+    assert.deepStrictEqual(f.e.sent, [], `B's unrelated main.p8 is never sent (resetRel=${resetRel})`);
+    assert.ok(f.e.log.some((l) => /^message Run: .*not included by a cart in the open folder.*open that folder/.test(l)), f.e.log.join('; '));
+    assert.strictEqual(f.aInc.text, 'a=1', 'nothing was saved by a refused Run');
+    assert.strictEqual(f.bInc.text, 'b=1');
+    assert.strictEqual(f.bMain.writes.length + f.bInc.writes.length, 0, 'nothing is written into folder B');
+  }
+});
+
+t('#83 the same folder again or a folder that contains the document still runs its real parent', async () => {
+  const f = twoFolders();
+  await openIncludeInA(f);
+  await f.e.ctx.useFolder(f.A, false); // re-picked
+  assert.strictEqual(f.e.ed.rel, 'src/common.lua');
+  assert.deepStrictEqual(json(f.e.ed.parent), { rel: 'main.p8', name: 'main.p8' });
+  await f.e.ctx.runCart();
+  assert.strictEqual(f.aInc.text, 'a=2\n', 'saved to its own file');
+  assert.deepStrictEqual(json(f.e.sent), [{ name: 'main.p8', text: f.aMain.text }]);
+  // a folder one level up that contains A: the path is re-resolved and the including cart found
+  const g = twoFolders();
+  await openIncludeInA(g);
+  const P = fakeDir('P', { 'game/main.p8': g.aMain, 'game/src/common.lua': g.aInc });
+  await g.e.ctx.useFolder(P, false);
+  assert.strictEqual(g.e.ed.rel, 'game/src/common.lua');
+  await g.e.ctx.runCart();
+  assert.deepStrictEqual(json(g.e.sent), [{ name: 'main.p8', text: g.aMain.text }]);
+});
+
+t('#83 a folder change while Run reads its target, or during a folder scan, stops the stale work', async () => {
+  const f = twoFolders();
+  await openIncludeInA(f);
+  const hold = deferred();
+  const getFile = f.aMain.getFile;
+  let reads = 0;
+  f.aMain.getFile = async () => { if (++reads === 1) await hold; return getFile(); };
+  const run = f.e.ctx.runCart();
+  for (let i = 0; i < 20 && reads < 1; i++) await tick();
+  assert.strictEqual(reads, 1, 'Run is reading its target');
+  await f.e.ctx.useFolder(f.B, false);
+  hold.open();
+  await run;
+  assert.deepStrictEqual(f.e.sent, [], 'no payload from either folder');
+  assert.ok(f.e.log.some((l) => /^message Run: Another folder was opened before Run could start, so nothing was run/.test(l)), f.e.log.join('; '));
+  // a scan of A overtaken by B never replaces B's list
+  const g = twoFolders();
+  const scan = deferred();
+  g.A.scanHold = scan;
+  const slow = g.e.ctx.useFolder(g.A, false);
+  await tick();
+  await g.e.ctx.useFolder(g.B, false);
+  scan.open();
+  await slow;
+  assert.strictEqual(g.e.ed.folder, g.B);
+  assert.ok([...g.e.ed.files.values()].every((x) => x.handle === g.bMain || x.handle === g.bInc), 'B keeps its own file list');
 });

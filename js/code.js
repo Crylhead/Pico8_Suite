@@ -890,10 +890,15 @@
    * meaningless in a different one, so it is recomputed (used when adopting the active project, #56).
    */
   async function useFolder(h, resetRel) {
+    const prev = ed.folder;
+    // a path or parent cart from another folder means nothing here (#83): only the same folder keeps them
+    const same = Boolean(prev) && (prev === h || Boolean(await prev.isSameEntry?.(h).catch(() => false)));
     ed.folder = h;
     ed.folderReady = true;
-    if (resetRel) ed.rel = null;
+    if (resetRel || !same) { ed.rel = null; ed.parent = null; }
+    if (!same) ed.fileCache = new Map();
     await listFolder();
+    if (ed.folder !== h) return; // another folder was chosen meanwhile
     // the open file may live in this folder
     if (ed.handle && !ed.rel) {
       const { doc, loc, handle } = ed;
@@ -925,18 +930,22 @@
   }
 
   async function listFolder() {
-    ed.files = new Map();
+    // bound to the folder it scans (#83): a scan overtaken by another folder never replaces that folder's list
+    const folder = ed.folder;
+    const files = new Map();
+    ed.files = files;
     const walk = async (dir, prefix, depth) => {
       for await (const [name, h] of dir.entries()) {
-        if (ed.files.size > 3000) return;
+        if (ed.folder !== folder) return;
+        if (files.size > 3000) return;
         if (h.kind === 'directory') {
           if (depth < 5 && !name.startsWith('.') && !['node_modules', 'backup', 'bbs'].includes(name.toLowerCase())) await walk(h, `${prefix}${name}/`, depth + 1);
         } else if (/\.(p8|lua)$/i.test(name)) {
-          ed.files.set(`${prefix}${name}`.toLowerCase(), { rel: `${prefix}${name}`, handle: h });
+          files.set(`${prefix}${name}`.toLowerCase(), { rel: `${prefix}${name}`, handle: h });
         }
       }
     };
-    try { await walk(ed.folder, '', 0); } catch (err) { toast(`Could not read the folder: ${err.message}`, 'warn'); }
+    try { await walk(folder, '', 0); } catch (err) { if (ed.folder === folder) toast(`Could not read the folder: ${err.message}`, 'warn'); }
   }
 
   function renderFiles() {
@@ -962,12 +971,13 @@
   async function readRel(rel) {
     const f = ed.files.get(rel.toLowerCase());
     if (!f) return null;
+    const cache = ed.fileCache; // per folder (#83): a read finishing after a folder change fills the old one
     const file = await f.handle.getFile();
     const stamp = `${file.lastModified}:${file.size}`;
-    const c = ed.fileCache.get(f.rel);
+    const c = cache.get(f.rel);
     if (c && c.stamp === stamp) return c.text;
     const text = await file.text();
-    ed.fileCache.set(f.rel, { stamp, text });
+    cache.set(f.rel, { stamp, text });
     return text;
   }
 
@@ -1058,15 +1068,21 @@
   /** the cart to run: this one, or for an included .lua file the cart that includes it; text(lua) gets the Lua to send for the open file */
   async function runTarget() {
     if (/\.p8$/i.test(ed.name) || ed.parts.head != null) return { name: ed.name, text: (lua) => K.joinCart(ed.parts, lua) };
+    // a .p8 of the open folder that really #includes this document at its path there (#83: a remembered
+    // parent is checked too, so a parent path from another folder can never pick an unrelated cart)
+    if (!(ed.folder && ed.folderReady && ed.rel)) return null;
+    const folder = ed.folder;
+    const rel = ed.rel.toLowerCase();
+    const includesDoc = async (f) => {
+      const t = await readRel(f.rel);
+      return t != null && K.includes(K.splitCart(t).lua).some((i) => K.joinPath(dirOf(f.rel), i.path).toLowerCase() === rel);
+    };
     const parent = ed.parent && ed.files.get(ed.parent.rel.toLowerCase());
-    if (parent) return { name: parent.handle.name, text: () => readRel(parent.rel) };
-    // a .p8 in the folder that includes this file
-    if (ed.folder && ed.folderReady && ed.rel) {
-      for (const f of ed.files.values()) {
-        if (!/\.p8$/i.test(f.rel)) continue;
-        const t = await readRel(f.rel);
-        if (K.includes(K.splitCart(t).lua).some((i) => K.joinPath(dirOf(f.rel), i.path).toLowerCase() === ed.rel.toLowerCase())) return { name: f.handle.name, text: () => readRel(f.rel) };
-      }
+    if (parent && /\.p8$/i.test(parent.rel) && (await includesDoc(parent))) return ed.folder === folder ? { name: parent.handle.name, text: () => readRel(parent.rel) } : null;
+    for (const f of ed.files.values()) {
+      if (ed.folder !== folder) return null;
+      if (!/\.p8$/i.test(f.rel) || f === parent) continue;
+      if (await includesDoc(f)) return ed.folder === folder ? { name: f.handle.name, text: () => readRel(f.rel) } : null;
     }
     return null;
   }
@@ -1074,11 +1090,16 @@
   async function runCart() {
     App.setWorkspace('code');
     const doc = ed.doc;
-    const { loc, name, rel, parent } = ed;
-    const notIncluded = () => showMessage('Run', 'This .lua file is not included by a cart in the open folder, so there is nothing to run. Open the cart instead.');
-    // Run is bound to the document, the location it was asked for and (after saving) the saved revision
-    const here = () => ed.doc === doc && ed.loc === loc && ed.name === name && ed.rel === rel && ed.parent === parent;
-    if (!(await runTarget())) { if (here()) notIncluded(); return; }
+    const { loc, name, rel, parent, folder } = ed;
+    const notIncluded = () => showMessage('Run', 'This .lua file is not included by a cart in the open folder, so there is nothing to run. Open the cart instead: if it belongs to a cart in another folder, open that folder (Open Folder…) and then the file from its file list, or open the cart itself.');
+    // Run is bound to the document, the location it was asked for, the open folder (#83) and (after
+    // saving) the saved revision
+    const here = () => ed.doc === doc && ed.loc === loc && ed.name === name && ed.rel === rel && ed.parent === parent && ed.folder === folder;
+    if (!(await runTarget())) {
+      if (here()) notIncluded();
+      else if (ed.doc === doc && ed.folder !== folder) showMessage('Run', 'Another folder was opened before Run could start, so nothing was run. Run again.');
+      return;
+    }
     // PICO-8 runs what is on disk: save first (includes are read by PICO-8 itself) and send exactly the
     // saved code, so newer unsaved edits are never presented as the cart on disk
     const r = await transitions.ready(doc);
@@ -1093,6 +1114,7 @@
     // checked again, so neither another document, a moved file nor a newer save can be substituted
     const stale = () => {
       if (ed.doc !== doc) showMessage('Run', 'Another file was opened before Run could start. Run again.');
+      else if (ed.folder !== folder) showMessage('Run', 'Another folder was opened before Run could start, so nothing was run. Run again.');
       else if (!here()) showMessage('Run', `${name} was saved into another file or folder before Run could start. Run again.`);
       else if (r.inPlace && ed.savedLua !== r.lua) showMessage('Run', `${name} was saved again while Run was starting. Run again to run the newest version.`);
       else return false;
