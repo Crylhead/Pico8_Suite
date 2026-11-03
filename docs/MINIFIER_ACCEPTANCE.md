@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-03. **Integrated baseline:** `b92d03cab15de6c237d9963eaf7cf5528986becd` (MIN-01–MIN-09 merged). This change adds fixtures, combined regressions and this record, and fixes the export focus-return defect found by the keyboard acceptance check.
 
-**Release status: BLOCKED — real installed PICO-8 verification is still required.** Do not close #128 or the core roadmap tracker #130 based on parser, Node or headless-browser checks alone. PNG export remains optional MIN-11 / #129 and is not implemented.
+**Core release gate: PASSED for the representative cart.** On 2026-11-03 the user confirmed matching original and optimized behavior, including the startup tone, in installed Windows PICO-8 0.2.7. This completes the outstanding runtime requirement for #128 and core tracker #130 together with the previously merged implementation and automated/browser checks. PNG export remains optional MIN-11 / #129 and is not implemented. This result does not guarantee equivalence for arbitrary cartridges.
 
 ## Environment and scope of evidence
 
@@ -14,7 +14,7 @@
 | Native comparison | Same pinned Shrinko8 modules, Python 3.12.14 |
 | Other browsers / OS | Firefox, WebKit, native Windows/macOS browser sessions not exercised here |
 | Accessibility | Browser labels/roles, keyboard interactions, focus and forced-colors checked; no NVDA/VoiceOver user session |
-| PICO-8 | Not installed on PATH or in the accessible runtime/workspace locations checked; no executable or console version to report |
+| PICO-8 | User-run Windows PICO-8 0.2.7; version visible in the supplied console screenshot. No executable path was supplied. PICO-8 remains unavailable in the assistant environment. |
 
 All processing requests in the browser checks were same-origin GETs; no source upload or external processing was used. The worker crash, delayed replies and rare increased-budget values were explicit test injections, described below. Those injections are not Suite features and are not included in production scripts.
 
@@ -64,7 +64,7 @@ The keyboard-only journey found that Cancel/Escape in Download left focus on the
 
 ## Browser acceptance scenarios
 
-Use `python tools/serve_suite.py` and its localhost URL. The following actions describe reproducible browser checks and their evidence boundaries. For full equivalence, the installed-console gate below must still pass.
+Use `python tools/serve_suite.py` and its localhost URL. The following actions describe reproducible browser checks and their evidence boundaries. The installed-console comparison below supplies the additional runtime evidence for the representative cart.
 
 | Scenario | Reproduction / observation | Status |
 | --- | --- | --- |
@@ -85,7 +85,7 @@ Use `python tools/serve_suite.py` and its localhost URL. The following actions d
 
 The Minifier remains Minimal + Tokens only. Output is an optimized build copy, source-only directives may be removed, and there is no automatic Run/Save/Cart Builder transformation. Asset checks do not prove visual/audio/runtime equivalence. See [the user guide](MINIFIER.md) for includes, storage, hosting and export limitations.
 
-## Required installed PICO-8 gate — NOT RUN
+## Installed PICO-8 gate — PASSED via user comparison
 
 Fixtures ready for this check:
 
@@ -99,7 +99,9 @@ Delivered SHA-256 values (verify these before recording console results):
 | `representative.p8` | `d1df75ae3df0f61ee034727044ae058d9ec825f380fbad48a8bb1ede6a3e65b8` |
 | `representative.min.p8` | `2f65d52ca92ed5bc9b81a0060892ba4bcc5d32dc1c6dddcf2c94809b7dfb1b34` |
 
-Both contain a short startup SFX, a white/red two-tile map, a moving sprite, an animated yellow line and `minifier ♥` text. These are **intended observations**, not behavior observed in PICO-8 here. The graphics, map, flags, SFX, music and label sections carry explicit data for preservation checks. The two code tabs are authoring structure; minified output may merge code tabs while retaining executable behavior.
+Both contain a short startup SFX, a white/red two-tile map, a moving sprite, an animated yellow line and `minifier ♥` text. Both recordings show the expected visual elements and animation. The user explicitly confirmed matching behavior and startup tone; audio is reported by the user, not inferred from silent GIFs. The graphics, map, flags, SFX, music and label sections carry explicit data for preservation checks. The two code tabs are authoring structure; minified output may merge code tabs while retaining executable behavior.
+
+### Procedure for future repetitions
 
 1. Record OS, executable path and exact installed PICO-8 version from its startup/help screen. Record browser/version used for the build if regenerating it.
 2. Place both carts in an accessible PICO-8 cart folder. In the console, `load representative.p8`, then `run`. Observe for at least 20 seconds, including several animation wraps. Note visual errors, startup tone, Unicode text and runtime errors.
@@ -109,8 +111,15 @@ Both contain a short startup SFX, a white/red two-tile map, a moving sprite, an 
 
 | Required evidence | Result |
 | --- | --- |
-| Installed executable/version | Unavailable in this environment |
-| Authoring cart observed in PICO-8 | Not run |
-| Optimized cart observed in PICO-8 | Not run |
-| Visual/audio/runtime comparison | Pending |
-| Core release decision | Blocked pending the above evidence |
+| Installed executable/version | User-run Windows PICO-8 0.2.7; screenshot confirms version; full executable path not supplied |
+| Authoring cart observed in PICO-8 | User-supplied recording and confirmation; expected sprite/map/line/text visible |
+| Optimized cart observed in PICO-8 | User-supplied recording and confirmation; expected sprite/map/line/text visible, no runtime error reported |
+| Visual/audio/runtime comparison | User confirms “exactly the same .. with startup tone and everything” |
+| Core release decision | Required representative-cart gate passed; optional PNG #129 remains open |
+
+
+### Evidence provenance and limits
+
+The optimized-cart recording (`PICO-8_0.gif`) and original-cart recording (`PICO-8_1.gif`) each contain 479 frames / 14.37 seconds. Inspected frames show the expected animation and heart glyph. The user first confirmed that the optimized cart runs, then tested the supplied original cart and explicitly confirmed matching behavior including the startup tone. This is installed-console evidence supplied by the user; the assistant did not execute PICO-8 locally. No longer test duration, local executable path, console `info` readout or audio recording is claimed. The earlier syntax error came from treating cartridge text as code and was resolved by loading the `.p8` file as a cartridge.
+
+The fixture SHA-256 values above identify the delivered repository files; the user did not independently report local hashes. The independent parser/data checks and all 317 JavaScript / 9 native-engine checks remain the evidence recorded earlier. Runtime confirmation applies to these representative carts in PICO-8 0.2.7. Other cartridges, OS/browser engines and PNG output need their own appropriate validation.
