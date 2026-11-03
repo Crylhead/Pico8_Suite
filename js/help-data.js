@@ -130,11 +130,13 @@ const P8HelpData = (() => {
     },
     {
       id: 'minifier', kind: 'tool', ws: 'minifier', title: 'Minifier', rev: 1,
-      summary: 'Compares original and generated PICO-8 source with local Shrinko8. Minimal profile and Tokens focus are the defaults. This release provides the workspace shell; file/paste intake, editor handoff and dedicated copy/download actions are not available yet.',
-      inputs: ['plain in-memory .lua / .p8 snapshots supplied to the workspace; user intake follows separately'],
+      summary: 'Open a .p8 / .lua file or paste Lua, then compare original and generated code with local Shrinko8. Minimal profile and Tokens focus are the defaults. Editor handoff and dedicated copy/download actions are not available yet.',
+      inputs: ['UTF-8 .p8 text cartridges', 'UTF-8 .lua files', 'pasted Lua'],
       outputs: ['read-only original/optimized comparison; no save or download action yet'],
       tasks: ['inspect original and generated source', 'compare local Minifier results', 'recover from an engine load error'],
       actions: [
+        { id: 'minifier.open', name: 'Open file…', text: 'Reads a .p8 or .lua file into an unsaved page-only snapshot. Text carts retain their entire original text and non-Lua data; the comparison shows Lua. Empty, malformed or unreadable input keeps the current source/result. Replacing a snapshot asks first. No write permission is requested.' },
+        { id: 'minifier.paste', name: 'Paste Lua…', text: 'Paste nonempty Lua into the dialog and choose Load Lua. Cancel or Escape keeps the current source. It becomes a page-only snapshot named pasted.lua; Lua syntax is checked only when you explicitly Optimize.' },
         { id: 'minifier.optimize', name: 'Optimize', text: 'Runs once on an immutable source snapshot after the engine is ready. Input changes invalidate the result. Cancel stops pending work; switching tools also cancels it. No automatic optimization on typing, navigation, save or Run.' },
       ],
       controls: [

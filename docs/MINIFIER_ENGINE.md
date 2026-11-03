@@ -1,6 +1,6 @@
 # Minifier engine foundation and job adapter — MIN-01 / #119, MIN-02 / #120
 
-Real Shrinko8 runs in a local browser **module Web Worker**. The DOM-free model and adapter below manage application jobs, revisions and cancellation. MIN-03 adds the native Develop → Minifier comparison shell. User source intake, editor handoff and validated output actions remain subsequent roadmap steps.
+Real Shrinko8 runs in a local browser **module Web Worker**. The DOM-free model and adapter below manage application jobs, revisions and cancellation. The native Develop → Minifier workspace accepts standalone UTF-8 `.p8` / `.lua` files and pasted Lua. Editor handoff, includes and validated output actions remain subsequent roadmap steps.
 
 ## Pins and package scope
 
@@ -142,6 +142,8 @@ One monotonic clock supplies `sourceRevision`, `optionsRevision` and job identit
 Validation: 18 focused Node regressions cover immutable snapshots, all state categories, preset flags, stale/cancelled callbacks, malformed replies, crash-after-reply races, timeouts and fresh-worker retry. A real Chromium 153.0.8010.0 adapter check matched both CLI fixtures below, retained the invalid fixture's file/line/column, cancelled after an optimize message was posted, then initialized a second worker and accepted a zero-token-saving `cls()` result (2 → 2 tokens). It used only same-origin GET requests. Real PICO-8 validation remains #128.
 
 ## Hosting and offline behavior
+
+MIN-04 intake proof: **286 JS regressions passed**, including new structural/encoding and transactional intake cases. Actual Chromium 153.0.8010.0 on Linux imported both CLI fixtures through the file picker and produced matching engine output. A CRLF cartridge retained exact original/header/non-Lua text; a CRLF Lua view kept its selection across an input-error render. Empty paste, unsupported/malformed input, picker Cancel, declined replacement and Escape retained current work. Pasted heart P8SCII/code tabs survived the real engine, invalid Lua reported file/line/column on explicit Optimize, and a 375px paste dialog/long filename did not overflow. Reload returned to empty, confirming page-only storage. No browser errors, foreign runtime requests or source uploads occurred. Intake validates text/structure; Lua parsing stays with the engine on explicit Optimize.
 
 MIN-03 workspace verification: **277 Node regressions passed**, including five presenter tests, plus static HTML and changed-JS syntax checks. Actual Chromium 153.0.8010.0 checks covered 1440 / 900 / 375 px in Light / Dark / System (light OS preference), with no page overflow or clipped buttons; forced-colors/reduced-motion presentation and visible keyboard focus were also inspected. A fixture supplied through `Suite.minifier.load` produced the exact CLI reference through the real Optimize button. Home, Find tool, `#minifier`, workspace arrows, view arrows, read-only selection, menus, F1 and missing-runtime Retry worked without browser errors. The initial page did not fetch runtime assets before Minifier entry. This does not substitute for screen-reader speech testing, other browsers or the PICO-8 release gate.
 

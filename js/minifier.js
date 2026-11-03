@@ -6,9 +6,14 @@ const P8Minifier = (() => {
     const $ = (id) => root.querySelector('#' + id);
     const radios = (id) => [...$(id).querySelectorAll('[role=radio]')];
     let mode = media.matches ? 'compare' : 'original', explicitMode = false;
-    let origin = 'In-memory source', previousDiagnostics = null;
+    let origin = 'In-memory source', previousDiagnostics = null, input = null;
+    let intakeSerial = 0, intakePending = false, disposed = false;
     const needsLocalSetup = (s) => protocol === 'file:' || s.diagnostics.some((d) => d.code === 'E_LOCAL_HTTP');
-    const setValue = (node, value) => { if (node.value !== value) node.value = value; };
+    const setValue = (node, value) => {
+      // Textareas expose LF even after assigning CRLF. Compare display text so renders keep selection/scroll.
+      const display = value.replace(/\r\n?/g, '\n');
+      if (node.value !== display) node.value = display;
+    };
     const actionButtons = (action, disabled) => {
       for (const button of root.ownerDocument.querySelectorAll(`[data-action="${action}"]`)) button.disabled = disabled;
     };
@@ -46,16 +51,18 @@ const P8Minifier = (() => {
       root.dataset.state = s.status;
       $('mnSourceName').textContent = s.source ? s.source.entryPath.split('/').pop() : 'No source selected';
       $('mnProvenance').textContent = s.source ? origin : '';
-      setValue($('mnSourceCode'), s.source?.files.find((f) => f.path === s.source.entryPath)?.text || '');
-      setValue($('mnOutputCode'), s.result ? (s.result.job.kind === 'p8' ? s.result.cartText : s.result.lua) : '');
+      setValue($('mnSourceCode'), input?.lua || '');
+      setValue($('mnOutputCode'), s.result?.lua || '');
+      $('mnSourceStorage').textContent = s.source ? 'In-memory snapshot · not saved to a file or Library. Original files unchanged.' : 'Open a .p8 / .lua file or paste Lua to begin.';
       $('mnOutputState').textContent = !s.result ? 'No result.' : current ? 'Current result · generated build copy.' : 'Stale result · this is an earlier snapshot.';
       $('mnOutputState').dataset.tone = s.result && !current ? 'warn' : '';
       $('mnOutputPane').dataset.stale = String(!!s.result && !current);
       $('mnStatus').textContent = statusText(s);
       $('mnStatus').dataset.tone = localSetup ? 'warn' : ['error', 'unsupported'].includes(s.status) ? 'error' : ['cancelled', 'stale'].includes(s.status) ? 'warn' : ['success', 'unchanged'].includes(s.status) ? 'ok' : '';
-      actionButtons('mn-optimize', localSetup || !controls.canOptimize);
-      actionButtons('mn-cancel', !controls.busy);
-      actionButtons('mn-retry', controls.busy || localSetup);
+      actionButtons('mn-optimize', intakePending || localSetup || !controls.canOptimize);
+      actionButtons('mn-cancel', !controls.busy && !intakePending);
+      for (const b of root.ownerDocument.querySelectorAll('[data-action="mn-cancel"]')) b.textContent = intakePending ? 'Cancel input' : 'Cancel';
+      actionButtons('mn-retry', intakePending || controls.busy || localSetup);
       $('mnOptimize').setAttribute('aria-busy', String(controls.busy));
       $('mnProgress').hidden = !controls.busy;
       $('mnTarget').disabled = controls.busy;
@@ -92,11 +99,83 @@ const P8Minifier = (() => {
       // Dedicated output actions await MIN-08 content/preservation validation.
       $('mnCopy').disabled = true; $('mnDownload').disabled = true;
     }
+    const provenance = (value) => ['In-memory source', 'Local file', 'Pasted Lua', 'Code Editor', 'Project folder'].includes(value) ? value : 'In-memory source';
+    const inputStatus = (text, tone = '') => { $('mnInputStatus').textContent = text; $('mnInputStatus').dataset.tone = tone; };
+    function commit(prepared, from) {
+      const previous = input, previousOrigin = origin;
+      input = prepared; origin = provenance(from);
+      try { adapter.setSource(prepared?.source || null); }
+      catch (err) { input = previous; origin = previousOrigin; throw err; }
+      render(adapter.getState());
+    }
+    function cancelIntake() {
+      intakeSerial++;
+      if (intakePending) {
+        intakePending = false;
+        inputStatus('Source intake cancelled. Current source and result kept.');
+        render(adapter.getState());
+      }
+    }
+    async function replaceFrom(prepare, from) {
+      const ticket = ++intakeSerial, sourceRevision = adapter.getState().sourceRevision;
+      const live = () => !disposed && ticket === intakeSerial && sourceRevision === adapter.getState().sourceRevision;
+      intakePending = true;
+      inputStatus('Waiting for input. Current source and result kept.'); render(adapter.getState());
+      try {
+        const prepared = await prepare(() => live());
+        if (!live()) return;
+        if (!prepared) { inputStatus('No source imported. Current source and result kept.'); return; }
+        const before = adapter.getState();
+        if (before.source) {
+          const accepted = await app.confirmDialog('Replace Minifier source?', `Replace “${before.source.entryPath}” with “${prepared.source.entryPath}”?\n\nThe current snapshot is not saved to a file or Library.${before.result ? ' Its result has not been exported and will be marked stale.' : ''} Original files are unchanged.`, 'Replace source', 'Keep current');
+          if (!live()) return;
+          const now = adapter.getState();
+          if (!accepted) { inputStatus('Current source and result kept.'); return; }
+          if (now.revision !== before.revision || now.result !== before.result || now.activeJob !== before.activeJob) {
+            inputStatus('The source or result changed while confirming. Open or paste again to replace it.', 'warn'); return;
+          }
+        }
+        commit(prepared, from);
+        inputStatus(`Loaded ${prepared.source.entryPath} · ${from}. Lua syntax is checked when you choose Optimize.`);
+      } catch (err) {
+        if (live()) inputStatus(`Input not loaded: ${err.code ? err.message : 'The file could not be read. Choose it again.'} Current source and result kept.`, 'error');
+      } finally {
+        if (ticket === intakeSerial) { intakePending = false; render(adapter.getState()); }
+      }
+    }
+    function openFile() {
+      return replaceFrom(async (live) => {
+        const file = await app.pickFile('.p8,.lua');
+        if (!file || !live()) return null;
+        Core.inputKind(file.name); // Refuse unsupported names before reading any bytes.
+        inputStatus('Reading source… Current source and result kept.');
+        const bytes = await file.arrayBuffer();
+        if (!live()) return null;
+        return Core.textInput(file.name, Core.decodeText(bytes));
+      }, 'Local file');
+    }
+    function pasteLua() {
+      return replaceFrom(async () => {
+        const text = app.el('textarea', { id: 'mnPasteText', className: 'code-out', spellcheck: false, attrs: { 'aria-describedby': 'mnPasteHint mnPasteError' } });
+        const problem = app.el('p', { id: 'mnPasteError', className: 'status-line', hidden: true, dataset: { tone: 'error' }, attrs: { role: 'alert' } });
+        let prepared;
+        return app.modal({ title: 'Paste Lua', wide: true,
+          body: app.el('div', {}, app.el('label', { htmlFor: 'mnPasteText', textContent: 'Lua source' }),
+            app.el('p', { id: 'mnPasteHint', textContent: 'Loads a page-only snapshot named pasted.lua. Lua syntax is checked on Optimize; nothing is saved or run.' }), text, problem),
+          buttons: [{ label: 'Cancel', value: null }, { label: 'Load Lua', primary: true, value: () => prepared,
+            validate() {
+              try { prepared = Core.textInput('pasted.lua', text.value); text.setAttribute('aria-invalid', 'false'); problem.hidden = true; problem.textContent = ''; return true; }
+              catch (err) { text.setAttribute('aria-invalid', 'true'); problem.hidden = false; problem.textContent = err.message; text.focus(); return false; }
+            } }], onOpen: () => text.focus(),
+        });
+      }, 'Pasted Lua');
+    }
     const swallow = (fn) => { try { return Promise.resolve(fn()).catch(() => {}); } catch (_) { return Promise.resolve(); } };
     const actions = {
-      'mn-optimize': () => { if (Core.describe(adapter.getState()).canOptimize) return swallow(() => adapter.optimize()); },
-      'mn-cancel': () => adapter.cancel(),
-      'mn-retry': () => { const s = adapter.getState(); if (!Core.describe(s).busy && !needsLocalSetup(s)) return swallow(() => adapter.retry()); },
+      'mn-open': openFile, 'mn-paste': pasteLua,
+      'mn-optimize': () => { if (!intakePending && Core.describe(adapter.getState()).canOptimize) return swallow(() => adapter.optimize()); },
+      'mn-cancel': () => { if (intakePending) cancelIntake(); else adapter.cancel(); },
+      'mn-retry': () => { const s = adapter.getState(); if (!intakePending && !Core.describe(s).busy && !needsLocalSetup(s)) return swallow(() => adapter.retry()); },
       ...Object.fromEntries(['compare', 'original', 'optimized'].map((view) => ['mn-view-' + view, () => setMode(view)])),
     };
     app.registerActions(actions);
@@ -118,13 +197,15 @@ const P8Minifier = (() => {
     setMode(mode, false); render(adapter.getState());
     return Object.freeze({
       load(snapshot, { provenance = 'In-memory source' } = {}) {
-        adapter.setSource(snapshot);
-        origin = ['In-memory source', 'Local file', 'Pasted Lua', 'Code Editor', 'Project folder'].includes(provenance) ? provenance : 'In-memory source';
-        render(adapter.getState());
+        const prepared = Core.prepareInput(snapshot);
+        cancelIntake(); commit(prepared, provenance);
+        inputStatus(snapshot ? 'Source snapshot loaded. Original files unchanged.' : 'Source cleared.');
       },
+      getInput: () => input ? Object.freeze({ ...input, sourceRevision: adapter.getState().sourceRevision }) : null,
       getState: adapter.getState, initialize: () => swallow(() => adapter.initialize()), setMode,
-      cancel: adapter.cancel,
+      cancel() { cancelIntake(); return adapter.cancel(); },
       dispose() {
+        disposed = true; cancelIntake();
         unsubscribe(); media.removeEventListener('change', onResize);
         $('mnCompareMode').removeEventListener('click', onView);
         $('mnProfile').removeEventListener('click', onProfile);
@@ -141,7 +222,7 @@ if (typeof window !== 'undefined' && window.Suite && window.P8App) (() => {
   const App = window.P8App, S = window.Suite;
   const root = document.querySelector('main[data-ws="minifier"]');
   S.registerTool({ ws: 'minifier', category: 'develop', name: 'Minifier',
-    desc: 'Compare original and generated PICO-8 code with local Shrinko8, Minimal profile and Tokens focus. Source import and exports are not available yet.',
+    desc: 'Open .p8 / .lua files or paste Lua, then compare local Shrinko8 output with Minimal profile and Tokens focus. Original files are unchanged; dedicated exports follow separately.',
     tags: ['minify', 'optimize', 'tokens', 'shrinko8', 'lua', 'cartridge'] });
   const view = P8Minifier.mount({ root, adapter: P8MinifierEngine.create(), app: App, media: matchMedia('(min-width: 1200px)') });
   let attempted = false;
