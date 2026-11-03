@@ -25,7 +25,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 BUNDLE = ROOT / 'vendor/shrinko8/runtime/engine.zip'
 ENCODER = ROOT / 'vendor/shrinko8/suite_png.py'
 # Update deliberately when real-engine tests are added or removed.
-EXPECTED = {'test_minifier_native': 9, 'test_minifier_png': 4}
+EXPECTED = {'test_minifier_native': 12, 'test_minifier_png': 5}
 
 
 def verify_bundle():
@@ -127,7 +127,8 @@ def run_negative_controls():
     with tempfile.TemporaryDirectory() as directory:
         controls = [
             ('optimizer disabled', {'P8_MINIFIER_ENGINE_ZIP': str(broken_engine(directory))},
-             ['test_minifier_native.NativeMinifierTests.test_release_integration_goldens_match_the_pinned_real_engine']),
+             ['test_minifier_native.NativeMinifierTests.test_release_integration_goldens_match_the_pinned_real_engine',
+              'test_minifier_native.NativeMinifierTests.test_corpus_matches_goldens_cli_and_is_deterministic']),
             ('PNG payload corrupted', {'P8_MINIFIER_PNG_ENCODER': str(broken_encoder(directory))},
              ['test_minifier_png.PngTests.test_independent_upstream_png_reader_retains_rom_version_code_and_label']),
         ]

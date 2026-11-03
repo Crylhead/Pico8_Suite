@@ -10,6 +10,8 @@ import sys
 import unittest
 from unittest import mock
 
+import minifier_corpus
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 # Overrides are only for tests/run_minifier_native.py negative controls (broken engine/encoder copies).
 BUNDLE = pathlib.Path(os.environ.get('P8_MINIFIER_ENGINE_ZIP') or ROOT / 'vendor/shrinko8/runtime/engine.zip')
@@ -72,3 +74,26 @@ class PngTests(unittest.TestCase):
             result = self.encode(text)
             self.assertFalse(result['ok'])
             self.assertNotIn('base64', result)
+
+    @unittest.skipUnless(importlib.util.find_spec('PIL'), 'Independent PNG reader test requires local test-only Pillow')
+    def test_corpus_png_eligible_builds_keep_rom_code_label_and_version(self):
+        # #148: each PNG-eligible corpus build, exported as the browser does, decodes back to the
+        # same ROM, code, label and version through Shrinko8's independent image reader.
+        from pico_cart import read_cart_from_image, read_cart_from_source
+        golden = minifier_corpus.goldens()
+        cases = [c for c in minifier_corpus.manifest()['cases'] if c['png']]
+        self.assertGreaterEqual(len(cases), 4)
+        for case in cases:
+            with self.subTest(case=case['name']):
+                files = minifier_corpus.files_for(case)
+                built = minifier_corpus.export(minifier_corpus.job(case['entry'], files), golden['cases'][case['name']])['cart']['text']
+                expected = read_cart_from_source(built)
+                result = self.encode(built)
+                self.assertTrue(result['ok'], result)
+                parsed = read_cart_from_image(base64.b64decode(result['base64']))
+                self.assertEqual(parsed.rom, expected.rom)
+                self.assertEqual(parsed.code, expected.code)
+                self.assertEqual(parsed.version_id, expected.version_id)
+                # A .p8.png always holds a label image: a cart without __label__ gets a blank one.
+                self.assertEqual(parsed.label.array, expected.label.array if expected.label else [0] * len(parsed.label.array))
+                self.assertLess(result['compressedBytes'], 15360)

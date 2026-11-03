@@ -1,0 +1,20 @@
+{
+  "about": "Minifier compatibility corpus (#148). Every source here is self-authored for these tests and dedicated to the public domain (CC0); assets.p8 reuses the data sections of release/representative.p8. No proprietary PICO-8 engine, ROM or third-party cart is included. Results are recorded in engine-results.json from the engine pinned in vendor/minifier-lock.json.",
+  "cases": [
+    { "name": "shorthand", "root": ".", "entry": "shorthand.p8", "png": true, "runtime": true, "covers": ["?", "if (...)", "while (...)", "compound assignment", "\\ and \\=", "^^", ">>>", "<<>", "~", "@ % $ peek", "..=", "!="] },
+    { "name": "strings", "root": ".", "entry": "strings.p8", "png": true, "runtime": true, "covers": ["multiline [[ ]]", "[==[ ]==] containing ]] and --", "escapes", "P8SCII glyphs", "\\^ control code", "#include and --[[ inside strings"] },
+    { "name": "scopes", "root": ".", "entry": "scopes.p8", "png": true, "runtime": true, "covers": ["code tabs", "local/global shadowing", "closures", "varargs", "goto", "metatables", "cartdata/dset/dget", "multi-value poke"] },
+    { "name": "assets", "root": ".", "entry": "assets.p8", "png": true, "runtime": true, "covers": ["__gfx__", "__map__", "__gff__", "__sfx__", "__music__", "__label__", "__meta:title__"] },
+    { "name": "includes", "root": "inc", "entry": "main.p8", "png": false, "runtime": true, "covers": ["repeated #include", "#include from two folders"] },
+    { "name": "plain", "root": ".", "entry": "plain.lua", "png": false, "runtime": false, "covers": [".lua entry", "constant folding", "local function"] }
+  ],
+  "negative": [
+    { "name": "directive", "entry": "main.lua", "code": "E_TRANSFORM_UNSUPPORTED", "files": { "main.lua": "--$switch-compiler:parens8\nprint(1)" } },
+    { "name": "compile_directive", "entry": "main.lua", "code": "E_DIRECTIVE_UNSUPPORTED", "files": { "main.lua": "#compile test\ncls()" } },
+    { "name": "missing_include", "entry": "main.lua", "code": "E_INCLUDE_MISSING", "files": { "main.lua": "#include nothere.lua\nprint(1)" } },
+    { "name": "ambiguous_include", "entry": "main.lua", "code": "E_INCLUDE_AMBIGUOUS", "files": { "main.lua": "#include lib.lua", "LIB.lua": "cls()", "lib.lua": "flip()" } },
+    { "name": "missing_tab", "entry": "main.lua", "code": "E_INCLUDE_TAB", "files": { "main.lua": "#include tabs.p8:9", "tabs.p8": "pico-8 cartridge // http://www.pico-8.com\nversion 42\n__lua__\ncls()" } },
+    { "name": "syntax_error", "entry": "main.lua", "code": "E_SHRINKO8", "files": { "main.lua": "local = 1" } },
+    { "name": "bad_header", "entry": "main.p8", "code": "E_CART_INVALID", "files": { "main.p8": "pico-8 cartridge // http://www.pico-8.com\n__lua__\ncls()\n" } }
+  ]
+}
