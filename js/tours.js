@@ -45,14 +45,17 @@
     if (!active) return;
     const { ring, card } = active;
     const node = active.run.state.ctx && active.run.state.ctx.el;
+    // the card beside its target when it fits whole; P8Tips.place may answer null or a shortened spot
+    // (#60), which would hide the card's buttons, so the card then takes the centered spot instead
+    const p = node && visible(node) ? P8Tips.place(node.getBoundingClientRect(), card.offsetWidth, card.offsetHeight, document.documentElement.clientWidth, document.documentElement.clientHeight, 12) : null;
     if (node && visible(node)) {
       const r = node.getBoundingClientRect();
       Object.assign(ring.style, { display: 'block', top: `${r.top - 3}px`, left: `${r.left - 3}px`, width: `${r.width + 6}px`, height: `${r.height + 6}px` });
-      const p = P8Tips.place(r, card.offsetWidth, card.offsetHeight, document.documentElement.clientWidth, document.documentElement.clientHeight, 12);
+    } else ring.style.display = 'none';
+    if (p && !p.maxHeight) {
       card.style.top = `${p.top}px`;
       card.style.left = `${p.left}px`;
     } else {
-      ring.style.display = 'none';
       card.style.top = `${Math.max(8, (document.documentElement.clientHeight - card.offsetHeight) / 3)}px`;
       card.style.left = `${Math.max(8, (document.documentElement.clientWidth - card.offsetWidth) / 2)}px`;
     }
