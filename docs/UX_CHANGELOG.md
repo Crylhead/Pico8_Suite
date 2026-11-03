@@ -103,7 +103,7 @@ Keep these issues open rather than treating a green model test as full acceptanc
 
 | Issue | Remaining acceptance evidence/work |
 | --- | --- |
-| #56 | Real folder-adoption/permission walkthrough. Data Carts currently delegates adoption to Project Audit and therefore replaces its scan too; independence between those tools needs review. |
+| #56 | Addressed in the follow-up below (walkthrough; Data Carts keeps its own opened files when Project Audit scans). |
 | #57 | Addressed in the follow-up below (browser journey; prompt buttons fixed). |
 | #59 | Addressed in the follow-up below (browser F1/search/legacy/keyboard walkthrough). |
 | #60 | Addressed in the follow-up below (browser walkthrough; placement fallback fixed). |
@@ -252,3 +252,20 @@ Headless Chrome, driven over the DevTools protocol with real keyboard and pointe
 - No exceptions were thrown and no diagnostics were recorded.
 
 Not covered: a screen reader announcing the non-modal card, a physical touch device and non-Chromium browsers.
+
+## Follow-up: #56 Project context walkthrough (2026-11-03)
+
+Headless Chrome, driven over the DevTools protocol. The temporary script, outside the repo, used disposable Origin Private File System folders (real directory handles) as active projects. Data Carts' **Open .p8 Files…** was driven through Chrome's file-chooser interception with real files on disk. **12/12 checks pass after one fix.**
+
+**Fixed (the independence gap noted above):** Data Carts replaced its cart list on **every** Project Audit scan. That included the .p8 files the user had opened in Data Carts itself, and nothing said so. Data Carts now *follows* the shared project folder only until the user opens .p8 files there. After that, an Audit scan leaves those carts in place, and the status line says *"Project Audit scanned "projQ". Your opened files stay here; use Open Project Folder… to show that project instead."*
+
+Following resumes only through an explicit request in Data Carts, when the resulting scan arrives while Data Carts is still the open tool. The requests are **Open Project Folder…** (Project Audit's picker) and **Use** the active project. A cancelled picker therefore changes nothing. Using the active project in Data Carts says that Project Audit now shows the folder too, because Data Carts reads it through Audit. Run against the old `js/datacarts.js`, three of these checks fail: the opened files were replaced silently.
+
+**Results:**
+- **Adoption without re-picking:** Code Editor, Project Audit and Data Carts each adopt the active project (Data Carts through Audit's scan). The strip reads *"Working on the active project "projP". Independent of other tools' documents."* The Code Editor lists `data.p8`, `lib/a.lua` and `main.p8`.
+- **Project switch:** with `main.p8` open and an unsaved edit, the Code Editor's strip offers *Use "projQ"*. Using it switches the folder list to projQ, with no dialog, and keeps the open document and its unsaved text.
+- **Permission denied:** the strip offers *Reconnect and use "projP"*. Denying shows *"Folder access was denied or revoked. Reconnect to use the project again."* and changes nothing: the Code Editor keeps projQ and its unsaved edit.
+- **Without the File System Access API:** Code Editor › Open Folder explains *"This browser cannot open folders. Use Chrome or Edge."*, and Data Carts' .p8 file import still works.
+- No exceptions were thrown and no diagnostics were recorded.
+
+Not covered: the native folder picker and permission prompt UI (stubbed), and a real folder on disk.

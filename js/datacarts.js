@@ -32,6 +32,10 @@
     onlyData: true,
     view: { start: 0, len: 0x2000, as: 'img4', width: 128 },
     pack: [],             // {label, bytes, lz, src}
+    // #56: the cart list follows Project Audit's scans (the shared project folder) until the user opens
+    // .p8 files here; then a scan elsewhere never replaces them. Open Project Folder / Use resume following.
+    followProject: true,
+    followRequested: false, // Open Project Folder / Use pressed here: the next scan arriving while Data Carts is open
     packName: 'pack.p8',
     packStart: 0,
     secs: [],             // sections of the selected cart (datacarts-core)
@@ -120,6 +124,7 @@
       const files = new Map();
       for (const f of input.files) files.set(f.name, await f.text());
       if (!files.size) return;
+      dc.followProject = false;
       loadProject(files, `${files.size} file${files.size === 1 ? '' : 's'}`);
     });
     input.click();
@@ -668,7 +673,9 @@ Set Start to the address where the palette table begins (the “palette table”
   const parseHex = (s) => C.parseNum(s.startsWith('0x') || /^\d+$/.test(s) ? s : `0x${s}`);
 
   function bind() {
-    dom.open.addEventListener('click', () => window.P8Project?.choose());
+    // the picker belongs to Project Audit and gives no cancel signal: following resumes only when its scan
+    // arrives while Data Carts is still open, so a cancelled picker changes nothing
+    dom.open.addEventListener('click', () => { dc.followRequested = true; window.P8Project?.choose(); });
     dom.files.addEventListener('click', openFiles);
     dom.only.addEventListener('change', () => { dc.onlyData = dom.only.checked; renderList(); });
     dom.modeSeg.addEventListener('click', (e) => { const b = e.target.closest('[data-value]'); if (b) { dc.mode = b.dataset.value; renderAll(); } });
@@ -789,13 +796,22 @@ Set Start to the address where the palette table begins (the “palette table”
       // the folder arrives a moment later (analyse() fills it); load on the next tick
       setTimeout(() => {
         const P = window.P8Project;
-        if (P?.files) { loadProject(P.files, P.root); projectLink?.setMode(P.adopted ? 'adopted' : 'independent', P.root); }
+        if (!P?.files) return;
+        if (dc.followRequested && document.body.dataset.workspace === 'datacarts') dc.followProject = true;
+        dc.followRequested = false;
+        if (!dc.followProject) {
+          // carts the user opened here stay; say how to switch instead of replacing them (#56)
+          dom.status.textContent = `Project Audit scanned “${P.root}”. Your opened files stay here; use Open Project Folder… to show that project instead.`;
+          return;
+        }
+        loadProject(P.files, P.root);
+        projectLink?.setMode(P.adopted ? 'adopted' : 'independent', P.root);
       }, 0);
     });
     document.addEventListener('p8:workspace', () => {
-      if (document.body.dataset.workspace !== 'datacarts') return;
+      if (document.body.dataset.workspace !== 'datacarts') { dc.followRequested = false; return; }
       const P = window.P8Project;
-      if (P?.files && !dc.carts.size) loadProject(P.files, P.root);
+      if (P?.files && !dc.carts.size && dc.followProject) loadProject(P.files, P.root);
     });
   }
 
@@ -805,7 +821,15 @@ Set Start to the address where the palette table begins (the “palette table”
   if (window.P8ProjectAdapter) {
     projectLink = window.P8ProjectAdapter.mount(document.querySelector('main[data-ws="datacarts"] .dc-top'), {
       tool: 'Data Carts',
-      adopt: async (h) => (window.P8Project?.use ? window.P8Project.use(h) : false),
+      // adopting here scans the folder in Project Audit (Data Carts reads it from there), and says so
+      adopt: async (h) => {
+        if (!window.P8Project?.use) return false;
+        dc.followRequested = true;
+        const ok = await window.P8Project.use(h);
+        if (!ok) dc.followRequested = false;
+        if (ok) toast(`Data Carts and Project Audit now show “${h.name}” (Data Carts reads the project folder through Project Audit).`, 'info', 4200);
+        return ok;
+      },
     });
   }
 
