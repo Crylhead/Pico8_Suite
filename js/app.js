@@ -1565,10 +1565,15 @@
   // Help (#59, js/help-core.js + js/help-data.js)                      //
   // ------------------------------------------------------------------ //
 
-  /** F1: the topic of the current workspace with a route to the searchable index and the full documentation. */
+  /** F1: focused feature, selected subtool, then workspace; explicit topics take precedence. */
   function showHelp({ topic: startTopic, query = '' } = {}) {
     const ws = document.body.dataset.workspace;
-    const first = (startTopic && P8Help.topic(startTopic)) || P8Help.forWorkspace(ws);
+    const initial = P8Help.context({ topicId: startTopic, ws,
+      controlId: document.activeElement?.closest('[data-help-id]')?.dataset.helpId,
+      sub: ws === 'extras' ? document.querySelector('#exTabs [aria-checked="true"]')?.dataset.value : null,
+    });
+    const first = initial.topic;
+    let active = initial;
     const searchId = `help-search-${++modalSeq}`;
     const input = el('input', { type: 'search', id: searchId, placeholder: 'Search tools, controls, tasks, shortcuts', value: query, attrs: { 'aria-label': 'Search Help', autocomplete: 'off' } });
     const view = el('div', { className: 'help-view', attrs: { 'aria-live': 'polite' } });
@@ -1576,25 +1581,35 @@
       el('li', {}, el('a', { href: `#help-${t.id}`, textContent: t.title, dataset: { topic: t.id } }), el('span', { className: 'muted', textContent: ` ${t.summary}` }))));
     const section = (title, items) => (items.length ? [el('h4', { textContent: title }), ...items] : []);
     const kb = (keys) => el('kbd', { textContent: keys });
+    const contextLink = () => first ? el('p', {}, el('a', { href: '#help-context', textContent: `Return to ${first.title}` })) : '';
+    const feature = (c, name) => el('li', { dataset: { helpControl: c.id }, attrs: { tabindex: '-1' } },
+      el('b', { textContent: `${name}. ` }), document.createTextNode(c.text),
+      c.detail ? el('p', { textContent: c.detail }) : '');
+    const focusTopic = () => {
+      const node = (active.controlId && view.querySelector(`[data-help-control="${CSS.escape(active.controlId)}"]`)) || view.querySelector('h3');
+      node?.focus({ preventScroll: true });
+      node?.scrollIntoView({ block: 'nearest' });
+    };
 
     function showIndex() {
       const { tools, guides, reference } = P8Help.toc();
-      view.replaceChildren(el('h3', { textContent: 'Help index', attrs: { tabindex: '-1' } }),
+      view.replaceChildren(el('h3', { textContent: 'Help index', attrs: { tabindex: '-1' } }), contextLink(),
         el('h4', { textContent: 'Tools' }), list(tools), el('h4', { textContent: 'Guides' }), list(guides), el('h4', { textContent: 'Reference' }), list(reference));
     }
 
     function showResults(q) {
       const found = P8Help.search(q);
       if (!found.length) {
-        view.replaceChildren(el('h3', { textContent: 'No results', attrs: { tabindex: '-1' } }),
+        view.replaceChildren(el('h3', { textContent: 'No results', attrs: { tabindex: '-1' } }), contextLink(),
           el('p', { textContent: `Nothing in Help matches “${q}”. Try a tool name (Pixel Studio), a task (count tokens) or a control (tile reduction), or browse the index.` }),
           el('p', {}, el('a', { href: '#help-index', textContent: 'Browse the Help index' }), document.createTextNode(' · '), el('a', { href: '#help-full', textContent: 'Open the full documentation' })));
         return;
       }
-      view.replaceChildren(el('h3', { textContent: `${found.length} result${found.length === 1 ? '' : 's'}`, attrs: { tabindex: '-1' } }), list(found.map((r) => r.topic)));
+      view.replaceChildren(el('h3', { textContent: `${found.length} result${found.length === 1 ? '' : 's'}`, attrs: { tabindex: '-1' } }), contextLink(), list(found.map((r) => r.topic)));
     }
 
-    function showTopic(t) {
+    function showTopic(t, controlId = null) {
+      active = { topic: t, controlId };
       const kids = [
         el('p', { className: 'muted' }, el('a', { href: '#help-index', textContent: '← Help index' })),
         el('h3', { textContent: t.title, attrs: { tabindex: '-1' } }),
@@ -1603,8 +1618,8 @@
       if (t.inputs.length) kids.push(el('p', {}, el('b', { textContent: 'Inputs: ' }), document.createTextNode(t.inputs.join(', '))));
       if (t.outputs.length) kids.push(el('p', {}, el('b', { textContent: 'Outputs: ' }), document.createTextNode(t.outputs.join(', '))));
       if (t.tasks.length) kids.push(el('p', {}, el('b', { textContent: 'Typical tasks: ' }), document.createTextNode(t.tasks.join('; '))));
-      kids.push(...section('Key actions', [el('ul', {}, ...t.actions.map((a) => el('li', {}, el('b', { textContent: `${a.name}. ` }), document.createTextNode(a.text))))].filter(() => t.actions.length)));
-      kids.push(...section('Controls', [el('ul', {}, ...t.controls.map((c) => el('li', {}, el('b', { textContent: `${c.label}. ` }), document.createTextNode(c.text))))].filter(() => t.controls.length)));
+      kids.push(...section('Key actions', [el('ul', {}, ...t.actions.map((a) => feature(a, a.name)))].filter(() => t.actions.length)));
+      kids.push(...section('Controls', [el('ul', {}, ...t.controls.map((c) => feature(c, c.label)))].filter(() => t.controls.length)));
       kids.push(...section('Shortcuts', [el('table', { className: 'keys' }, ...t.shortcuts.map(([k, d]) => el('tr', {}, el('td', {}, kb(k)), el('td', { textContent: d }))))].filter(() => t.shortcuts.length)));
       kids.push(...section('Restrictions', [el('ul', {}, ...t.restrictions.map((r) => el('li', { textContent: r })))].filter(() => t.restrictions.length)));
       const rel = t.related.map((id) => P8Help.topic(id)).filter(Boolean);
@@ -1617,13 +1632,13 @@
       view.replaceChildren(...kids);
     }
 
-    const render = () => { const q = input.value.trim(); if (q) showResults(q); else showIndex(); };
+    const render = () => { const q = input.value.trim(); if (q) showResults(q); else if (active.topic) showTopic(active.topic, active.controlId); else showIndex(); };
     function go(href) {
-      if (href === '#help-index') { input.value = ''; showIndex(); } else if (href === '#help-full') { closeAnd(() => showDocs()); return; } else if (href.startsWith('#help-full:')) { closeAnd(() => showDocs(href.slice(11))); return; } else {
-        const t = P8Help.topic(href.slice(6));
-        if (t) showTopic(t);
+      if (href === '#help-index') { input.value = ''; showIndex(); } else if (href === '#help-context') { input.value = ''; if (first) showTopic(first, initial.controlId); } else if (href === '#help-full') { closeAnd(() => showDocs()); return; } else if (href.startsWith('#help-full:')) { closeAnd(() => showDocs(href.slice(11))); return; } else {
+        const next = P8Help.context({ topicId: href.slice(6) });
+        if (next.topic) { input.value = ''; showTopic(next.topic, next.controlId); }
       }
-      view.querySelector('h3')?.focus();
+      if (href === '#help-index') view.querySelector('h3')?.focus(); else focusTopic();
     }
     const closeAnd = (fn) => { document.querySelector('dialog.modal[open] button[aria-label="Close"]')?.click(); setTimeout(fn, 0); };
 
@@ -1635,12 +1650,12 @@
       go(a.getAttribute('href'));
     });
     const body = el('div', { className: 'help' }, el('label', { className: 'help-search', htmlFor: searchId }, el('span', { textContent: 'Search' }), input), view);
-    if (query.trim()) showResults(query.trim()); else if (first) showTopic(first); else showIndex();
+    if (query.trim()) showResults(query.trim()); else if (first) showTopic(first, initial.controlId); else showIndex();
     modal({
       title: 'Help', body, wide: true,
-      actions: [{ label: 'Full documentation', onClick: () => closeAnd(() => showDocs(first?.legacy)) }],
+      actions: [{ label: 'Full documentation', onClick: () => closeAnd(() => showDocs(active.topic?.legacy)) }],
       buttons: [{ label: 'Close', value: null, primary: true }],
-      onOpen: () => input.focus(),
+      onOpen: () => { if (!query.trim() && initial.controlId) focusTopic(); else input.focus(); },
     });
   }
 

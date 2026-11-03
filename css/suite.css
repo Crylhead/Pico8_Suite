@@ -1087,7 +1087,7 @@ body[data-workspace="datacarts"] { height: 100vh; height: 100dvh; display: flex;
 .help { display: grid; gap: 10px; }
 .help-search { display: grid; gap: 4px; font-size: 13px; }
 .help-search input { width: 100%; box-sizing: border-box; font: inherit; padding: 6px 8px; }
-.help-view h3:focus { outline: 2px solid currentColor; outline-offset: 2px; }
+.help-view h3:focus, .help-view [data-help-control]:focus { outline: 2px solid currentColor; outline-offset: 2px; }
 .help-view h4 { margin: 14px 0 4px; }
 .help-list { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 4px; }
 

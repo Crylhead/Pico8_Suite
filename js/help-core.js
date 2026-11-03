@@ -3,7 +3,8 @@
 // js/help-data.js. Tooltips (#60) and tours (#61) look text up by stable id:
 //
 //   P8Help.topic(id)              -> topic | null (aliases resolved)
-//   P8Help.forWorkspace(ws)       -> the tool topic of a workspace | null
+//   P8Help.forWorkspace(ws, sub)  -> subtool topic, else workspace topic | null
+//   P8Help.context(options)      -> { topic, controlId } explicit > focused control > subtool > workspace
 //   P8Help.control(controlId)     -> { topic, control } | null
 //   P8Help.search(query)          -> [{ topic, score, matches[] }] best first
 //   P8Help.toc()                  -> topics grouped for the index
@@ -29,6 +30,19 @@ const P8Help = (() => {
     return null;
   }
 
+  function forWorkspace(ws, sub) {
+    return (sub && TOPICS.find((t) => t.ws === ws && t.sub === sub))
+      || TOPICS.find((t) => t.kind === 'tool' && t.ws === ws && !t.sub) || null;
+  }
+
+  function context({ topicId, controlId, ws, sub } = {}) {
+    const explicit = resolve(topicId);
+    if (explicit) return { topic: explicit, controlId: null };
+    const hit = control(topicId) || control(controlId);
+    if (hit) return { topic: hit.topic, controlId: hit.control.id };
+    return { topic: forWorkspace(ws, sub), controlId: null };
+  }
+
   /** Fields searched, with weights: control and task names are what users type. */
   function fields(t) {
     return [
@@ -39,7 +53,7 @@ const P8Help = (() => {
       [(t.actions || []).map((a) => a.name).join(' '), 5, 'action'],
       [(t.shortcuts || []).map((s) => `${s[0]} ${s[1]}`).join(' '), 3, 'shortcut'],
       [t.summary, 3, 'summary'],
-      [[...(t.actions || []).map((a) => a.text), ...(t.controls || []).map((c) => c.text), ...(t.restrictions || []), ...(t.inputs || []), ...(t.outputs || [])].join(' '), 1, 'text'],
+      [[...(t.actions || []).flatMap((a) => [a.text, a.detail]), ...(t.controls || []).flatMap((c) => [c.text, c.detail]), ...(t.restrictions || []), ...(t.inputs || []), ...(t.outputs || [])].join(' '), 1, 'text'],
     ];
   }
 
@@ -75,8 +89,7 @@ const P8Help = (() => {
   return {
     topics: () => TOPICS.slice(),
     topic: resolve,
-    forWorkspace: (ws) => TOPICS.find((t) => t.kind === 'tool' && t.ws === ws) || null,
-    control, search, toc,
+    forWorkspace, context, control, search, toc,
   };
 })();
 
