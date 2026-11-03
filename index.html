@@ -232,6 +232,9 @@
           <button role="menuitem" data-action="code-stop">Stop PICO-8</button>
           <button role="menuitem" data-action="code-run-setup">Set Up Run…</button>
           <hr>
+          <button id="ceMinify" role="menuitem" data-action="code-minify" data-help-id="code.minify" aria-describedby="ceMinifyReason" disabled>Minify…</button>
+          <div id="ceMinifyReason" class="menu-label">Open or type nonempty source first.</div>
+          <hr>
           <button role="menuitem" data-action="code-gfx">Open Sprite Sheet in Pixel Studio</button>
           <button role="menuitem" data-action="code-map">Open Map in Map Editor</button>
         </div>
@@ -1109,11 +1112,14 @@
       <div class="mn-source-actions" aria-label="Source actions">
         <button id="mnOpen" class="btn" data-action="mn-open" data-help-id="minifier.open">Open file…</button>
         <button id="mnPaste" class="btn" data-action="mn-paste" data-help-id="minifier.paste">Paste Lua…</button>
-        <button id="mnUseEditor" class="btn" disabled aria-describedby="mnAvailability">Use current editor</button>
+        <button id="mnUseEditor" class="btn" data-action="mn-use-editor" data-help-id="minifier.editor" disabled aria-describedby="mnEditorAvailability">Use current editor</button>
+        <button id="mnReturn" class="btn" data-action="mn-return-editor" data-help-id="minifier.editor" hidden>Back to Code Editor</button>
       </div>
       <p id="mnSourceStorage" class="muted">Open a .p8 / .lua file or paste Lua to begin.</p>
+      <p id="mnEditorAvailability" class="muted">Open or type nonempty source in Code Editor to use its current buffer.</p>
+      <p id="mnEditorState" class="status-line" hidden></p>
       <p id="mnInputStatus" class="status-line" role="status" aria-live="polite" aria-atomic="true"></p>
-      <p id="mnAvailability" class="notice">Code Editor handoff and dedicated Copy / Download actions are not available yet. Imported sources are page-only snapshots.</p>
+      <p id="mnAvailability" class="notice">Dedicated Copy / Download actions are not available yet. Sources are page-only snapshots; optimized output is never applied to the editor.</p>
       <section id="mnLocalSetup" class="notice" data-tone="warn" hidden aria-labelledby="mnLocalSetupHeading">
         <h3 id="mnLocalSetupHeading">Local setup required</h3>
         <p>Minifier needs a local web address. On Windows, double-click <b>Start_Pico8_Suite.bat</b> in the Suite folder (Python 3.9+). Or run <code>python tools/serve_suite.py</code>. The launcher verifies/prepares the pinned assets and opens the browser. First setup needs Internet or the pinned dependency archives; later starts can be offline.</p>
@@ -1170,19 +1176,28 @@
         </section>
       </div>
       <section id="mnMetrics" class="mn-metrics" aria-labelledby="mnMetricsHeading">
-        <h3 id="mnMetricsHeading" class="panel-heading">Code measurements · Shrinko8</h3>
+        <h3 id="mnMetricsHeading" class="panel-heading" data-help-id="minifier.metrics">Code measurements · Shrinko8</h3>
         <p id="mnMetricsState" class="muted">No measurements.</p>
-        <table>
-          <thead><tr><th scope="col">Measure</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
+        <table aria-label="Lua code measurements" aria-describedby="mnMetricsState mnMetricReasons">
+          <thead><tr><th scope="col">Measure</th><th scope="col">Before</th><th scope="col">After</th><th scope="col">Saved / increased</th></tr></thead>
           <tbody>
-            <tr><th scope="row">Tokens</th><td id="mnTokensBefore">—</td><td id="mnTokensAfter">—</td></tr>
-            <tr><th scope="row">Characters</th><td id="mnCharsBefore">—</td><td id="mnCharsAfter">—</td></tr>
-            <tr><th scope="row">Compressed bytes</th><td id="mnBytesBefore">—</td><td id="mnBytesAfter">—</td></tr>
+            <tr class="mn-primary-metric"><th scope="row">Tokens<span class="mn-limit-state">Limit 8,192</span></th><td><span id="mnTokensBefore">—</span><span id="mnTokensBeforeLimit" class="mn-limit-state"></span></td><td><span id="mnTokensAfter">—</span><span id="mnTokensAfterLimit" class="mn-limit-state"></span></td><td id="mnTokensChange">—</td></tr>
+            <tr><th scope="row">Characters<span class="mn-limit-state">Limit 65,535</span></th><td><span id="mnCharsBefore">—</span><span id="mnCharsBeforeLimit" class="mn-limit-state"></span></td><td><span id="mnCharsAfter">—</span><span id="mnCharsAfterLimit" class="mn-limit-state"></span></td><td id="mnCharsChange">—</td></tr>
+            <tr><th scope="row">Compressed code bytes</th><td id="mnBytesBefore">—</td><td id="mnBytesAfter">—</td><td id="mnBytesChange">—</td></tr>
           </tbody>
         </table>
+        <p id="mnMetricReasons" class="muted" hidden></p>
       </section>
       <details id="mnDiagnostics" class="mn-diagnostics">
         <summary id="mnDiagnosticsSummary">Diagnostics (0)</summary>
+        <div id="mnDiagnosticFilter" class="seg mn-diag-filters" role="radiogroup" aria-label="Diagnostic severity" data-help-id="minifier.diagnostics">
+          <button type="button" role="radio" data-value="all" aria-checked="true">All (0)</button>
+          <button type="button" role="radio" data-value="error" aria-checked="false">Errors (0)</button>
+          <button type="button" role="radio" data-value="warning" aria-checked="false">Warnings (0)</button>
+          <button type="button" role="radio" data-value="info" aria-checked="false">Info (0)</button>
+        </div>
+        <p id="mnDiagnosticsShown" class="status-line" role="status" aria-live="polite" aria-atomic="true">No diagnostics.</p>
+        <p class="muted">Location buttons select the corresponding line in the original Lua snapshot. Reported positions are file coordinates.</p>
         <ul id="mnDiagnosticList"><li>No diagnostics.</li></ul>
       </details>
       <footer class="mn-output-actions">
@@ -1502,7 +1517,9 @@
         <h3 id="doc-minifier">Minifier</h3>
         <p>Develop → Minifier compares original source with generated output from locally packaged Shrinko8. The default is <b>Minimal</b> with <b>Tokens</b> focus. Names and line breaks are kept; expressions, comments and spacing may change, and token reduction is not guaranteed. Source and output are read only and selectable. Use Compare, Original or Optimized to change the view; arrow keys select within each option group. Tablet and phone layouts start in Original view.</p>
         <p><b>Open file…</b> reads a UTF-8 <code>.p8</code> text cartridge or <code>.lua</code> file. <b>Paste Lua…</b> opens a labelled dialog; Load Lua creates a snapshot named <code>pasted.lua</code>. File and paste inputs are unsaved page-only snapshots: no file writes, Library saves or folder permissions. A cartridge retains its full original text and non-Lua sections, while the code views show Lua. Empty/corrupt input and picker/dialog Cancel keep the current source and result. Replacing a snapshot asks first. Closing/reloading the page loses the snapshot.</p>
-        <p>Import validates UTF-8 text and cartridge structure; Shrinko8 checks Lua syntax when you choose <b>Optimize</b>. Opening Minifier initializes the engine only, and importing never optimizes automatically. Source changes, navigation, Save and Run never auto-optimize or save. Switching tools cancels pending intake/work and retains the current source and any earlier output, marked stale when appropriate. Code Editor handoff and dedicated Copy / Download actions remain unavailable; includes and PNG import are unsupported.</p>
+        <p>Import validates UTF-8 text and cartridge structure; Shrinko8 checks Lua syntax when you choose <b>Optimize</b>. Opening Minifier initializes the engine only, and importing never optimizes automatically. Source changes, navigation, Save and Run never auto-optimize or save. Switching tools cancels pending intake/work and retains the current source and any earlier output, marked stale when appropriate. In Code Editor, <b>Cart → Minify…</b> copies the live buffer, including unsaved changes; Minifier also offers <b>Use current editor</b>. <b>Back to Code Editor</b> preserves the existing content, caret, save state and undo history. Later editor changes mark the captured source earlier and cancel its job; refresh before optimizing. Nothing is saved or applied back, and no folder rescan or permission request is needed. Dedicated Copy / Download actions remain unavailable; includes and PNG import are unsupported.</p>
+        <p><b>Measurements</b> compare actual Shrinko8 counts from the same job: tokens (8,192 budget), characters (65,535) and compressed code bytes when provided. Change shows saved/increased counts and a real percentage; zero saving is <b>0 (0%)</b>, and a zero baseline cannot produce a percentage for an increase. <b>Over limit</b> is shown separately. Missing values remain — with a visible reason, and no compressed saving is calculated without both counts. These are code counts, not whole-file/PNG sizes; no editor estimate is substituted. Stale measurements name the earlier source.</p>
+        <p><b>Diagnostics</b> filter by All, Errors, Warnings or Info; a new diagnostic set resets to All. A location button selects the corresponding whole line in the current original Lua view without editing or opening files. Reported cart line numbers include the header, and reported columns are engine coordinates. Unknown files, invalid positions and stale jobs stay plain text. A larger output is a valid Minifier result, labelled Increased; it is not a promise that the cartridge fits or runs correctly.</p>
         <p>Engine errors show a Retry engine action. Retry loads a fresh worker without submitting source. For direct file:// opening, the workspace shows <b>Local setup required</b> and disables futile Retry. On Windows, double-click <b>Start_Pico8_Suite.bat</b> (Python 3.9+), or run <code>python tools/serve_suite.py</code>. The optional launcher verifies/prepares the pinned runtime assets, starts localhost and opens Minifier; keep its window open. First setup needs Internet or the pinned dependency archives. Library/browser sessions are separate for file:// and localhost: export/import a backup when switching. Hosted browser use needs no Python service. See <code>docs/MINIFIER_ENGINE.md</code> for manual packaging and offline setup. Real PICO-8 equivalence testing and validated exports remain separate release steps.</p>
 
         <h3 id="doc-cartbuilder">Cart Builder</h3>

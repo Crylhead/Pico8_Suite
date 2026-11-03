@@ -93,6 +93,7 @@ function editor(files, { discard = true, pick = null, folder = null } = {}) {
   const sent = [];
   ctx = vm.createContext({
     ed, K, saver, save, dirty, confirmDiscard, transitions, load, sent, log, Promise,
+    sourceBridge: K.createSourceBridge({ read: () => ({ ...ed, ready: true }) }),
     readRel: async (rel) => (await ed.files.get(rel.toLowerCase()).handle.getFile()).text(),
     showMessage: (title, msg) => log.push(`message ${title}: ${msg}`),
     toast: (msg) => log.push(`toast ${msg}`),
