@@ -281,3 +281,36 @@ t('#107 the real adapter applies Off live to authored titles and restores them w
   f.setLevel('off'); f.setLevel('concise');
   assert.strictEqual(disabled.getAttribute('title'), null, 'a claimed control is left to the registry tip');
 });
+
+// #110: built-in JavaScript builders that set help ids, and contextual help per workspace.
+function builderHelpIds() {
+  const dir = path.join(__dirname, '..', 'js');
+  const skip = new Set(['help-data.js', 'help-core.js', 'ux-tooltips.js', 'tours-data.js', 'tours-core.js', 'tours.js']);
+  const found = [];
+  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.js') && !skip.has(f))) {
+    const src = fs.readFileSync(path.join(dir, file), 'utf8');
+    for (const m of src.matchAll(/helpId(?:\s*:\s*|\s*=\s*)'([\w.-]+)'/g)) found.push({ file, id: m[1] });
+  }
+  return found;
+}
+
+t('#110 help ids set by built-in JavaScript builders resolve in the help registry', () => {
+  const found = builderHelpIds();
+  assert.ok(found.length >= 6, `builders carry help ids: ${found.map((x) => x.id)}`);
+  for (const { file, id } of found) assert.ok(Tips.resolveTip(Help, id, 'concise'), `${file}: no help text for ${id}`);
+});
+
+t('#110 every built-in workspace exposes contextual help for its own controls', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  // Home is itself the task overview (cards and Continue/Tasks/Tools sections); its help is F1.
+  const exempt = { home: 'overview page; its own cards and F1 explain it' };
+  const mains = [...html.matchAll(/<main\b[^>]*\sdata-ws="([\w-]+)"[^>]*>([\s\S]*?)<\/main>/g)];
+  assert.ok(mains.length >= 12, 'all workspaces found');
+  const builders = builderHelpIds().map((x) => x.id);
+  for (const [, ws, body] of mains) {
+    if (exempt[ws]) continue;
+    const ids = [...[...body.matchAll(/data-help-id="([^"]+)"/g)].map((m) => m[1]), ...builders];
+    const own = ids.filter((id) => Help.control(id)?.topic.ws === ws);
+    assert.ok(own.length >= 1, `workspace "${ws}" has no control marked with one of its help ids`);
+  }
+});

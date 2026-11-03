@@ -45,6 +45,7 @@
       attrs: { role: 'separator', 'aria-orientation': 'vertical', 'aria-label': `Resize ${p.name} side panel`, 'aria-controls': side.id, 'aria-keyshortcuts': 'ArrowLeft ArrowRight Home End Enter' },
       title: 'Drag to resize · arrow keys · Enter hides · double-click resets',
     });
+    if (p.ws === 'extras') sep.dataset.helpId = 'extras.panel'; // Extra Tools splitter registry text (#110)
     const toggle = el('button', { type: 'button', className: 'panel-toggle btn btn-sm btn-ghost', attrs: { 'aria-controls': side.id } });
     layout.append(sep, toggle);
 

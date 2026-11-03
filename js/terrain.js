@@ -959,6 +959,7 @@
 
     // ---- side panel
     ui.mode = seg([['simple', 'Simple'], ['advanced', 'Advanced']], st.mode, (v) => { st.mode = v; App.store.set(MODE_KEY, v); applyMode(); });
+    ui.mode.dataset.helpId = 'extras.terrain.workflow';
 
     ui.preset = select('Type', [['custom', 'Custom'], ...Object.entries(PRESETS).map(([k, p]) => [k, p.label])], st.preset, (v) => { if (v !== 'custom') applyPreset(v); });
     ui.seed = H.numberField({ label: 'Seed', min: 0, max: 99999999, value: st.params.seed, width: 96, onChange: (v) => { st.params.seed = v; changed(); } });

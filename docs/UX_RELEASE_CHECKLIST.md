@@ -62,6 +62,10 @@ For each tour, start it from its tool with Help › Tour this tool, and once fro
 2. Select each Extra Tools tab (LUT, Wave, Line, Terrain), focus a control without a help ID and press F1. Each opens its own subject. Check a known focused help ID takes precedence, and an unknown ID or an extension without a subtopic falls back safely.
 3. Search for another tool, clear the query, browse the index and use Return to the original context. Follow a related topic, then Full documentation: the reference must follow the topic being read. Repeat keyboard-only and at 320 CSS px; help remains local/offline.
 
+## Contextual help on primary controls (#110)
+
+With Help detail Concise, hover and keyboard-focus one marked control per workspace and check that exactly one tooltip appears (no browser tooltip beside it) and that it matches F1: Pixel Studio Ink, Sieve, Remap…, Layers; Palette & Fades Normal/Ramp, Dark/Bright, Auto Fill, Gamma, fade slider; Tile Maker Import Image…, threshold, Rebuild, view switch, Edit Tiles…; Map Editor Size…, Reload tileset; Code Editor Run, Save, token meter; Data Tools Convert, Image File…; Project Audit Choose Project Folder…, columns, details view; Data Carts Inspect/Pack, Show as; Cart Builder stages and a part’s Move…; Extra Tools LUT type, Wave Export waves.p8, Line Export Lua…, Terrain Simple/Advanced and the Terrain splitter. Switch to Off: none of these tips appears and every control keeps its name. Switch to Detailed: the same text plus the F1 pointer.
+
 ## Pixel Studio preview scale (#102)
 
 On disposable images sized 64×64, 128×128 (including the default sheet), 256×256, 128×256 and 1024×512:

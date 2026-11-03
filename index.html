@@ -386,7 +386,7 @@
         <h2 id="customTitle">Custom palette <span class="muted">(16 colors)</span></h2>
         <div class="head-tools">
           <span class="label">Mode</span>
-          <div class="seg" id="modeSeg" role="radiogroup" aria-label="Palette mode">
+          <div class="seg" id="modeSeg" data-help-id="palette.mode" role="radiogroup" aria-label="Palette mode">
             <button role="radio" data-value="normal" aria-checked="true">Normal</button>
             <button role="radio" data-value="ramp" aria-checked="false">Ramp</button>
           </div>
@@ -415,12 +415,12 @@
           <span class="label">Fade to</span>
           <div class="sw sw-target" id="fadeTarget" data-role="fade_target" tabindex="0"></div>
           <span class="label">Direction</span>
-          <div class="seg" id="dirSeg" role="radiogroup" aria-label="Fade direction">
+          <div class="seg" id="dirSeg" data-help-id="palette.side" role="radiogroup" aria-label="Fade direction">
             <button role="radio" data-value="dark" aria-checked="true">Dark</button>
             <button role="radio" data-value="bright" aria-checked="false">Bright</button>
           </div>
           <span class="spacer"></span>
-          <button class="btn" id="autoFillBtn" title="Fill fade stops by matching ramp presets to the palette">Auto Fill</button>
+          <button class="btn" id="autoFillBtn" data-help-id="palette.ramps" title="Fill fade stops by matching ramp presets to the palette">Auto Fill</button>
         </div>
       </header>
 
@@ -440,7 +440,7 @@
               <button class="btn" id="orientationBtn">↔ Horizontal</button>
             </div>
             <div class="params">
-              <label class="field"><span>Gamma</span><input type="number" id="gammaInput" min="0.2" max="5" step="0.1" value="1.00" inputmode="decimal"></label>
+              <label class="field"><span>Gamma</span><input type="number" id="gammaInput" data-help-id="palette.fades" min="0.2" max="5" step="0.1" value="1.00" inputmode="decimal"></label>
               <label class="field"><span>Cov min</span><input type="number" id="covMinInput" min="0" max="16" step="1" value="0" inputmode="numeric"></label>
               <label class="field"><span>Cov max</span><input type="number" id="covMaxInput" min="0" max="16" step="1" value="16" inputmode="numeric"></label>
             </div>
@@ -461,7 +461,7 @@
               <button class="btn" data-action="preview-from-library">From Library…</button>
             </div>
 
-            <div class="grey-controls" id="greyControls" hidden>
+            <div class="grey-controls" id="greyControls" data-help-id="palette.greyscale" hidden>
               <div class="grey-row">
                 <span class="label">Input range</span>
                 <label class="field"><span>Black</span><input type="number" id="greyInBlack" min="0" max="255" value="0" inputmode="numeric"></label>
@@ -475,7 +475,7 @@
             </div>
 
             <div class="fade-slider">
-              <input type="range" id="fadeSlider" min="0" max="31" step="1" value="16" aria-label="Fade position" aria-describedby="sliderReadout">
+              <input type="range" id="fadeSlider" data-help-id="palette.slider" min="0" max="31" step="1" value="16" aria-label="Fade position" aria-describedby="sliderReadout">
               <div class="slider-scale"><span>Darkest</span><span id="sliderReadout">Normal</span><span>Brightest</span></div>
             </div>
           </figure>
@@ -492,7 +492,7 @@
       <header class="card-head">
         <h2 id="tmTitle">Tile Maker <span class="muted">8×8 tile packing · VRAM streaming analysis</span></h2>
         <div class="head-tools">
-          <button class="btn" data-action="tiles-import">Import Image…</button>
+          <button class="btn" data-action="tiles-import" data-help-id="tiles.import">Import Image…</button>
           <button class="btn" data-action="tiles-from-library">From Library…</button>
           <button class="btn" data-action="tiles-open">Open…</button>
           <button class="btn" data-action="tiles-save">Save…</button>
@@ -515,13 +515,13 @@
         <div class="tm-group tm-threshold">
           <span class="label">Tile reduction (MAE)</span>
           <input type="range" id="tmThresholdRange" min="0" max="1000" step="1" value="0" aria-label="Threshold slider">
-          <input type="number" id="tmThreshold" class="num" min="0" max="100" step="0.1" value="0.0" inputmode="decimal" aria-label="Threshold">
-          <button class="btn" id="tmRebuild">Rebuild</button>
+          <input type="number" id="tmThreshold" data-help-id="tiles.mae" class="num" min="0" max="100" step="0.1" value="0.0" inputmode="decimal" aria-label="Threshold">
+          <button class="btn" id="tmRebuild" data-help-id="tiles.reduce">Rebuild</button>
         </div>
         <div class="tm-group">
           <button class="btn" id="tmAutoGen" data-action="tiles-auto" data-help-id="tiles.autogen" disabled
                   title="Re-derive every tile from all its uses in the image (per-pixel median, snapped to the image colors)">Auto Generate Tiles</button>
-          <button class="btn" id="tmEditTiles" data-action="tiles-edit" disabled>Edit Tiles…</button>
+          <button class="btn" id="tmEditTiles" data-help-id="tiles.edit" data-action="tiles-edit" disabled>Edit Tiles…</button>
         </div>
       </div>
       <p class="tm-notice" id="tmNotice" hidden></p>
@@ -529,7 +529,7 @@
 
     <section class="card tm-views" aria-label="Tile views">
       <header class="card-head tm-view-head">
-        <div class="seg" id="tmViewSeg" role="radiogroup" aria-label="Right view">
+        <div class="seg" id="tmViewSeg" data-help-id="tiles.viewport" role="radiogroup" aria-label="Right view">
           <button role="radio" data-value="reconstructed" aria-checked="true">Reconstructed</button>
           <button role="radio" data-value="heatmap" aria-checked="false">Viewport heatmap</button>
         </div>
@@ -696,7 +696,7 @@
         <input class="ps-name" id="meName" value="map" spellcheck="false" aria-label="Map name">
         <span id="meDocStatus"></span>
         <span class="badge" id="meFit" title="Where this map fits in a PICO-8 cart"></span>
-        <button class="btn btn-sm" data-action="map-resize">Size…</button>
+        <button class="btn btn-sm" data-action="map-resize" data-help-id="map.sizes">Size…</button>
         <span class="ps-sep"></span>
         <label class="check" title="Cell grid (8×8 pixels)"><input type="checkbox" id="meGrid" checked><span>Grid</span></label>
         <label class="check" title="Screen grid: 16×16 cells = one 128×128 screen"><input type="checkbox" id="meScreens" checked><span>Screens</span></label>
@@ -726,7 +726,7 @@
         <div class="ps-panel-actions">
           <button class="btn btn-sm" data-action="map-sheet-library" title="A 128-pixel-wide image from the library (sprite sheet)">From Library…</button>
           <button class="btn btn-sm" data-action="map-sheet-p8" title="The __gfx__ of a .p8 cart">From .p8…</button>
-          <button class="btn btn-sm" data-action="map-sheet-reload" id="meSheetReload" title="Read the tileset image from the library again (after editing it in Pixel Studio)">Reload</button>
+          <button class="btn btn-sm" data-action="map-sheet-reload" id="meSheetReload" data-help-id="map.tileset" title="Read the tileset image from the library again (after editing it in Pixel Studio)">Reload</button>
         </div>
       </section>
       <section class="card ps-panel">
@@ -753,10 +753,10 @@
         <strong class="ce-file" id="ceFile">untitled.p8</strong>
         <nav class="ce-tabs" id="ceTabs" aria-label="Code tabs"></nav>
         <span class="spacer"></span>
-        <button class="btn btn-sm ce-run" data-action="code-run" id="ceRun" title="Save and run in PICO-8 (Ctrl+R)">▶ Run</button>
+        <button class="btn btn-sm ce-run" data-action="code-run" id="ceRun" data-help-id="code.run" title="Save and run in PICO-8 (Ctrl+R)">▶ Run</button>
         <button class="btn btn-sm" data-action="code-stop" id="ceStop" hidden title="Close PICO-8">■ Stop</button>
         <button class="btn btn-sm" data-action="code-open" title="Open a .p8 or .lua file (Ctrl+O)">Open…</button>
-        <button class="btn btn-sm btn-primary" data-action="code-save" id="ceSave" title="Save into the file (Ctrl+S)">Save</button>
+        <button class="btn btn-sm btn-primary" data-action="code-save" id="ceSave" data-help-id="code.save" title="Save into the file (Ctrl+S)">Save</button>
       </header>
       <div class="ce-find" id="ceFind" hidden>
         <input type="search" id="ceFindIn" placeholder="Find" spellcheck="false" aria-label="Find">
@@ -794,7 +794,7 @@
         <span id="cePos">Ln 1, Col 1</span>
         <span id="ceTabInfo"></span>
         <span class="spacer"></span>
-        <span class="ce-meter" id="ceTokens" title="Tokens (PICO-8 counts them like this; the limit is 8192)"></span>
+        <span class="ce-meter" id="ceTokens" data-help-id="code.tokens" title="Tokens (PICO-8 counts them like this; the limit is 8192)"></span>
         <span class="ce-meter" id="ceChars" title="Characters of code (the limit is 65535)"></span>
       </footer>
     </section>
@@ -858,7 +858,7 @@
             <button role="radio" data-value="1">1</button><button role="radio" data-value="2">2</button><button role="radio" data-value="3">3</button><button role="radio" data-value="4">4</button><button role="radio" data-value="0" id="psBrushCustom" hidden>&#9670;</button>
           </div>
         </div>
-        <div class="ps-opt" id="psInkWrap" title="Ink: how the pencil, line, shapes and fill put their color down">
+        <div class="ps-opt" id="psInkWrap" data-help-id="studio.ink" title="Ink: how the pencil, line, shapes and fill put their color down">
           <span class="label">Ink</span>
           <select id="psInk" class="select select-sm" aria-label="Ink">
             <option value="normal">Normal</option>
@@ -894,7 +894,7 @@
           <code class="ps-code" id="psPatternCode"></code>
         </div>
         <div class="ps-opt" title="Sieve: drawing only changes the pixels the sieve pattern lets through">
-          <button class="btn btn-sm" id="psSieve" aria-pressed="false" title="Sieve on/off (V)">Sieve</button>
+          <button class="btn btn-sm" id="psSieve" data-help-id="studio.sieve" aria-pressed="false" title="Sieve on/off (V)">Sieve</button>
           <select id="psSieveSel" class="select select-sm" aria-label="Sieve pattern"></select>
           <button class="btn btn-sm" id="psSieveEdit" title="Edit sieve patterns">✎</button>
         </div>
@@ -935,7 +935,7 @@
         </header>
         <div class="ps-palette" id="psPalette" aria-label="Palette slots"></div>
         <div class="ps-panel-actions">
-          <button class="btn btn-sm" id="psPalEdit" title="Change the screen color of the primary slot (or double-click a slot)">Remap…</button>
+          <button class="btn btn-sm" id="psPalEdit" data-help-id="studio.slot" title="Change the screen color of the primary slot (or double-click a slot)">Remap…</button>
           <button class="btn btn-sm" id="psPalFromTool" title="Use the custom palette of Palette &amp; Fades">From Palette &amp; Fades</button>
           <button class="btn btn-sm" id="psPalFromLib">Library…</button>
           <button class="btn btn-sm" id="psPalSave" title="Save this palette to the library">Save</button>
@@ -953,7 +953,7 @@
       </section>
       <section class="card ps-panel ps-layers-panel">
         <header class="ps-panel-head"><h2>Layers</h2></header>
-        <div class="ps-layers" id="psLayers"></div>
+        <div class="ps-layers" id="psLayers" data-help-id="studio.layers"></div>
         <div class="ps-panel-actions">
           <button class="btn btn-sm" id="psLayerAdd" title="New layer">＋</button>
           <button class="btn btn-sm" id="psLayerDup" title="Duplicate layer">⧉</button>
@@ -1017,7 +1017,7 @@
         </div>
         <div class="dt-row">
           <label class="field"><span>Lua variable</span><input type="text" id="bdVar" value="data" spellcheck="false" data-auto="1"></label>
-          <button class="btn btn-primary" id="bdConvert">Convert</button>
+          <button class="btn btn-primary" id="bdConvert" data-help-id="data.string">Convert</button>
         </div>
         <textarea id="bdOut" class="code-out" readonly spellcheck="false" placeholder="Generated PICO-8 code"></textarea>
         <div class="dt-row">
@@ -1034,7 +1034,7 @@
       <header class="card-head">
         <h2 id="nbTitle">Nibble split <span class="muted">port of nibble_converter</span></h2>
         <div class="head-tools">
-          <button class="btn" id="nbFile">Image File…</button>
+          <button class="btn" id="nbFile" data-help-id="data.nibble">Image File…</button>
           <button class="btn" id="nbLibrary">From Library…</button>
         </div>
       </header>
@@ -1064,7 +1064,7 @@
   <main class="layout-audit" data-ws="audit" id="auStage" hidden>
     <section class="card au-top">
       <div class="dt-row">
-        <button class="btn btn-primary" id="auOpen" title="Ctrl+O">Choose Project Folder…</button>
+        <button class="btn btn-primary" id="auOpen" data-help-id="audit.scan" title="Ctrl+O">Choose Project Folder…</button>
         <button class="btn" id="auRescan" disabled title="Read the folder again (F5). A folder chosen with the button has to be chosen again; a dropped folder is reread directly.">Rescan</button>
         <strong id="auRoot" class="au-root"></strong>
         <span class="muted" id="auStatus">Choose a folder or drop it here. Nothing is uploaded; the files are read in this browser.</span>
@@ -1073,7 +1073,7 @@
         <button class="btn" id="auCsv" disabled>Export CSV</button>
         <button class="btn" id="auJson" disabled>Export JSON</button>
       </div>
-      <div class="dt-row au-cols" id="auCols"></div>
+      <div class="dt-row au-cols" id="auCols" data-help-id="audit.columns"></div>
       <progress id="auProgress" hidden></progress>
       <input type="file" id="auDirInput" webkitdirectory multiple hidden>
     </section>
@@ -1086,7 +1086,7 @@
     </section>
     <aside class="card au-side">
       <header class="ps-panel-head">
-        <div class="seg seg-sm" id="auView" role="radiogroup" aria-label="Details view">
+        <div class="seg seg-sm" id="auView" data-help-id="audit.summary" role="radiogroup" aria-label="Details view">
           <button role="radio" data-value="file" aria-checked="true">Cart</button>
           <button role="radio" data-value="summary" aria-checked="false">Project summary</button>
         </div>
@@ -1234,7 +1234,7 @@
       <div class="cb-parts" id="cbParts"></div>
     </aside>
     <section class="card dc-main">
-      <ol class="cb-stages" id="cbStages" aria-label="Cart Builder workflow: Analyze, Plan, Validate, Commit"></ol>
+      <ol class="cb-stages" id="cbStages" data-help-id="cartbuilder.stages" aria-label="Cart Builder workflow: Analyze, Plan, Validate, Commit"></ol>
       <div class="cb-adopt" id="cbAdopt" hidden></div>
       <div class="cb-stacks" id="cbStacks"></div>
       <div class="cb-report" id="cbReport"></div>
@@ -1249,7 +1249,7 @@
         <strong id="dcRoot"></strong>
         <span class="muted" id="dcStatus"></span>
         <span class="spacer"></span>
-        <div class="seg" id="dcMode" role="radiogroup" aria-label="Mode">
+        <div class="seg" id="dcMode" data-help-id="datacarts.pack" role="radiogroup" aria-label="Mode">
           <button role="radio" data-value="inspect" aria-checked="true">Inspect</button>
           <button role="radio" data-value="pack" aria-checked="false">Pack</button>
         </div>
@@ -1278,7 +1278,7 @@
           <div class="dt-row">
             <label class="field"><span>Start</span><input type="text" id="dcStart" spellcheck="false" style="width:72px"></label>
             <label class="field"><span>Length</span><input type="text" id="dcLen" spellcheck="false" style="width:72px"></label>
-            <select id="dcAs" class="select select-sm" aria-label="Show as">
+            <select id="dcAs" data-help-id="datacarts.view" class="select select-sm" aria-label="Show as">
               <option value="img4">Image, 4 bits/pixel</option>
               <option value="img4g">Image, 4 bits/pixel (values as grey)</option>
               <option value="img8">Image, 1 byte/pixel (grey)</option>
