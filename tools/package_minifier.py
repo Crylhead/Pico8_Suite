@@ -63,6 +63,16 @@ def prepare(lock, shrinko_archive, pyodide_archive):
     return assets
 
 
+def install(assets, root=ROOT):
+    """Install a fully verified asset set; shared by packaging and the local launcher."""
+    for name, data in assets.items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(path.suffix + '.tmp')
+        temporary.write_bytes(data)
+        temporary.replace(path)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--shrinko-archive', help='Use the pinned .tar.gz from disk instead of downloading')
@@ -71,12 +81,7 @@ def main():
     lock = json.loads((ROOT / 'vendor/minifier-lock.json').read_text())
     assets = prepare(lock, archive_bytes(lock['shrinko8'], args.shrinko_archive),
                      archive_bytes(lock['pyodide'], args.pyodide_archive))
-    for name, data in assets.items():
-        path = ROOT / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(path.suffix + '.tmp')
-        temporary.write_bytes(data)
-        temporary.replace(path)
+    install(assets)
     print(f"Installed {len(assets)} verified assets ({sum(map(len, assets.values())):,} bytes).")
 
 

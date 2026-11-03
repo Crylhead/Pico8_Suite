@@ -9,7 +9,7 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const markup = html.slice(html.indexOf('<main class="layout-minifier"'), html.indexOf('</main>', html.indexOf('<main class="layout-minifier"')));
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-function fixture(wide = true) {
+function fixture(wide = true, protocol) {
   const nodes = new Map(), actions = {}, workers = [];
   const doc = { activeElement: null, createElement: () => node(), querySelectorAll(selector) { return [...nodes.values()].filter((n) => n.action && selector.includes(`"${n.action}"`)); } };
   function node(id) {
@@ -28,13 +28,14 @@ function fixture(wide = true) {
   const root = node('root'); root.querySelector = (selector) => { const n = nodes.get(selector.slice(1)); assert.ok(n, selector); return n; };
   const media = { matches: wide, addEventListener(_, fn) { this.change = fn; }, removeEventListener() { this.change = null; } };
   const adapter = Engine.create({ workerFactory() {
+    if (protocol === 'file:') return require('../js/minifier-worker-host.js').create({ protocol });
     const listeners = {};
     const w = { requests: [], addEventListener(type, fn) { listeners[type] = fn; }, removeEventListener(type) { delete listeners[type]; }, terminate() { this.terminated = true; },
       postMessage(message) { this.requests.push(message); },
       reply(extra = {}) { const req = this.requests.at(-1); listeners.message({ data: { protocol: 1, requestId: req.requestId, type: req.type === 'init' ? 'ready' : 'result', engine: engine(), ...(req.job ? { jobId: req.job.jobId, sourceRevision: req.job.sourceRevision, optionsRevision: req.job.optionsRevision, result: result() } : {}), ...extra } }); } };
     workers.push(w); return w;
   } });
-  const view = UI.mount({ root, adapter, media, app: { registerActions(more) { Object.assign(actions, more); } } });
+  const view = UI.mount({ root, adapter, media, protocol, app: { registerActions(more) { Object.assign(actions, more); } } });
   return { view, adapter, nodes, actions, root, workers, media, doc, $: (id) => nodes.get(id),
     async initialize() { const p = view.initialize(); await flush(); workers.at(-1).reply(); await p; },
     async finish(extra) { const p = actions['mn-optimize'](); await flush(); workers.at(-1).reply(extra); await p; },
@@ -105,4 +106,17 @@ t('MIN-03 cancellation is explicit, leaves source intact and releases presenter 
   assert.strictEqual(f.root.dataset.state, 'cancelled'); assert.match(f.$('mnStatus').textContent, /cancelled/);
   assert.strictEqual(f.$('mnSourceCode').value, 'cls()'); assert.ok(f.$('mnOptimize').disabled);
   f.view.dispose(); assert.strictEqual(f.media.change, null); assert.strictEqual(f.$('mnCompareMode').listeners.click, undefined);
+});
+
+t('#134 file launch shows setup rather than a failed job, suppresses futile Retry and retains input', async () => {
+  const f = fixture(true, 'file:');
+  assert.strictEqual(f.$('mnLocalSetup').hidden, false);
+  f.view.load(source()); await f.view.initialize();
+  assert.strictEqual(f.view.getState().status, 'unsupported');
+  assert.strictEqual(f.workers.length, 0); assert.ok(f.$('mnRetry').disabled); assert.ok(f.$('mnOptimize').disabled);
+  assert.match(f.$('mnStatus').textContent, /Local setup required/); assert.doesNotMatch(f.$('mnStatus').textContent, /failed/);
+  await f.actions['mn-retry']();
+  f.view.load(source('flip()')); // A different input cannot repair the hosting origin.
+  assert.strictEqual(f.$('mnLocalSetup').hidden, false); assert.ok(f.$('mnRetry').disabled);
+  assert.strictEqual(f.$('mnSourceCode').value, 'flip()'); f.view.dispose();
 });

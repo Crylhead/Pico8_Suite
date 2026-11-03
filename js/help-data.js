@@ -143,7 +143,7 @@ const P8HelpData = (() => {
         { id: 'minifier.view', label: 'Code view', text: 'Compare shows both read-only views; Original and Optimized show one. Select text and use your keyboard to copy it. Changing the view never changes source.' },
       ],
       shortcuts: [['Arrow keys / Home / End', 'Select a code view within the focused option group']],
-      restrictions: ['Serve over HTTP(S); file:// workers are unsupported. Package the local runtime assets before hosting (docs/MINIFIER_ENGINE.md).', 'Retry engine initializes a fresh worker without resubmitting source.', 'Earlier results are labelled stale and cannot enable dedicated output actions.', 'Includes, PNG export and real PICO-8 equivalence validation remain separate roadmap steps.'],
+      restrictions: ['For file:// opening, use Start_Pico8_Suite.bat on Windows or python tools/serve_suite.py (Python 3.9+). The optional launcher verifies/prepares pinned assets and opens localhost; first setup needs Internet or the pinned archives. Hosted use needs no Python service.', 'File:// shows Local setup required; Retry cannot change the page origin and is disabled. Library/session data is separate for each address: export/import a Library backup before switching. See docs/MINIFIER_ENGINE.md.', 'Retry engine initializes a fresh worker without resubmitting source.', 'Earlier results are labelled stale and cannot enable dedicated output actions.', 'Includes, PNG export and real PICO-8 equivalence validation remain separate roadmap steps.'],
       related: ['code', 'cartbuilder'], keywords: ['shrinko8', 'optimize', 'minify', 'tokens'], legacy: 'doc-minifier',
     },
     {

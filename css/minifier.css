@@ -7,6 +7,8 @@ body[data-workspace="minifier"] { height: 100vh; height: 100dvh; display: flex; 
 .layout-minifier [hidden] { display: none !important; }
 .layout-minifier p { margin: 0; font-size: var(--fs-md); }
 .mn-command { grid-column: 1 / -1; display: grid; gap: var(--space-4); }
+#mnLocalSetup { display: grid; gap: var(--space-4); overflow-wrap: anywhere; }
+#mnLocalSetup h3 { font-size: var(--fs-md); }
 .mn-heading-row, .mn-source-actions, .mn-run-actions, .mn-output-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-4); }
 .mn-heading-row h2 { margin-right: var(--space-4); }
 .mn-heading-row > .btn { margin-left: auto; }

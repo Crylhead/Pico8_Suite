@@ -27,6 +27,16 @@ These are decoded local asset sizes, excluding the small bridge/worker/manifest 
 
 ## Package, serve and verify
 
+For local use, double-click `Start_Pico8_Suite.bat` on Windows (Python 3.9+) or run `python tools/serve_suite.py`. The optional helper binds only to loopback at port 8000, validates existing assets against the lock, prepares missing/outdated assets with the same verified packager, then opens `http://127.0.0.1:8000/index.html#minifier`. It serves static files; source still goes only to the browser worker. Hosted deployments do not require this Python helper.
+
+Valid assets need no download, so subsequent starts can be offline. First setup can use the existing `--shrinko-archive` / `--pyodide-archive` flags with pinned archives. `--no-browser` prints the URL without launching a browser. A busy port or failed verification stops startup; no unrelated server is opened and the port never changes silently. `--port 8001` is an explicit alternative and creates a different browser storage origin. Module MIME types are fixed for `.js`, `.mjs` and `.wasm`, including Windows MIME registry differences. The server refuses unrelated Host headers, directory listings, hidden files and paths resolving outside the Suite folder.
+
+Direct `file://` is still unsupported by this engine contract. The workspace shows **Local setup required**, with launcher instructions and futile Retry disabled, instead of presenting a failed optimization. The file tab and its source are retained. Library/session data belongs to each address: export/import a Library backup when switching to localhost; no silent migration is attempted.
+
+Local startup proof (#134): actual Chromium 153.0.8010.0 on Linux showed setup at file:// (900/375 px, no page overflow), then opened the real helper's localhost link. Cold setup used the pinned local archives; the real engine became ready and matched the Lua CLI fixture. Restart with inaccessible archive paths reused installed assets without downloading. The file tab's source remained intact and localhost did not silently inherit its storage. No browser errors, cross-origin runtime requests or source uploads occurred. The Windows batch wrapper was reviewed but not executed on Windows in this environment.
+
+For manual packaging/hosting instead of the launcher:
+
 From the repository root, with Python 3.9+ for the packaging utility:
 
 ```sh

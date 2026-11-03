@@ -8,7 +8,7 @@ t('MIN-01 host is lazy, creates a module worker, and diagnoses file URLs before 
   let constructed = 0;
   class WorkerCtor { constructor(url, options) { constructed++; this.url = url; this.options = options; } }
   assert.strictEqual(constructed, 0);
-  assert.throws(() => Host.create({ protocol: 'file:', WorkerCtor, url: 'unused' }), (e) => e.code === 'E_LOCAL_HTTP' && /http.server/.test(e.message));
+  assert.throws(() => Host.create({ protocol: 'file:', WorkerCtor, url: 'unused' }), (e) => e.code === 'E_LOCAL_HTTP' && /Start_Pico8_Suite.bat/.test(e.message) && /serve_suite\.py/.test(e.message));
   assert.strictEqual(constructed, 0);
   const worker = Host.create({ protocol: 'https:', WorkerCtor, url: '/js/minifier-worker.js' });
   assert.strictEqual(constructed, 1);
