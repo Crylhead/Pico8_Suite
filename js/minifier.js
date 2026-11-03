@@ -123,6 +123,10 @@ const P8Minifier = (() => {
       $('mnEditorState').hidden = !input?.editor;
       setText($('mnEditorState'), editorStale ? 'Earlier snapshot: Code Editor or its file context changed. Back returns to the current editor document; no output has been applied.' : input?.editor ? 'Editor snapshot is current. Back to Code Editor preserves its existing editing context.' : '');
       $('mnEditorState').dataset.tone = editorStale ? 'warn' : '';
+      const project = input?.project;
+      $('mnProjectState').hidden = !project;
+      setText($('mnProjectState'), project ? `${input.source.files.length} source file(s) captured${project.edges.length ? ' · includes resolved in source order' : ''}. Measurements use the resolved build copy. ${project.buildCopy ? 'Source-only directives may be removed; keep the original project.' : ''}` : '');
+      $('mnProjectState').dataset.tone = project?.diagnostics.length ? 'warn' : '';
       setValue($('mnSourceCode'), input?.lua || '');
       setValue($('mnOutputCode'), s.result?.lua || '');
       $('mnSourceStorage').textContent = s.source ? 'In-memory snapshot · not saved to a file or Library. Original files unchanged.' : 'Open a .p8 / .lua file or paste Lua to begin.';
@@ -228,10 +232,12 @@ const P8Minifier = (() => {
         return false;
       }
       let captured = null, problem = null;
-      const loaded = await replaceFrom(() => {
+      const loaded = await replaceFrom(async (live) => {
         try {
           captured = editorSource.getSnapshot();
-          return captured ? Object.freeze({ ...Core.prepareInput(captured.source), editor: captured }) : null;
+          if (!captured) return null;
+          const project = await editorSource.getProjectSnapshot(captured, { live });
+          return Object.freeze({ ...Core.prepareInput(project.source), editor: captured, project });
         } catch (err) { problem = err; throw err; }
       }, 'Code Editor');
       if (loaded) {

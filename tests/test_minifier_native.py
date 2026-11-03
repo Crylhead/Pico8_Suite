@@ -65,12 +65,59 @@ class NativeMinifierTests(unittest.TestCase):
             self.assertEqual(self.run_source(text)['diagnostics'][0]['code'], 'E_TRANSFORM_UNSUPPORTED')
         self.assertTrue(self.run_source('local s="--$switch-compiler:parens8"\nprint(s)')['ok'])
 
-    def test_single_file_scope_and_options_fail_explicitly(self):
-        self.assertEqual(self.run_source('#include missing.lua\nprint(1)')['diagnostics'][0]['code'], 'E_INCLUDE_UNSUPPORTED')
+    def test_missing_include_and_options_fail_explicitly(self):
+        self.assertEqual(self.run_source('#include missing.lua\nprint(1)')['diagnostics'][0]['code'], 'E_INCLUDE_MISSING')
         self.assertTrue(self.run_source('print("#include missing.lua")')['ok'])
         self.assertEqual(self.run_source('print(1)', '../escape.lua')['diagnostics'][0]['code'], 'E_INPUT_INVALID')
         self.assertEqual(self.run_source('print(1)', profile='aggressive')['diagnostics'][0]['code'], 'E_OPTIONS_UNSUPPORTED')
         self.assertEqual(self.run_source('print(1)', target='chars')['diagnostics'][0]['code'], 'E_OPTIONS_UNSUPPORTED')
+
+    def run_tree(self, files, entry='main.lua'):
+        job = {'entryPath': entry, 'kind': entry.rsplit('.', 1)[1], 'files': [{'path': path, 'text': text} for path, text in files.items()]}
+        return json.loads(self.bridge.optimize(json.dumps(job)))
+
+    def test_builtin_include_tree_matches_cli_counts_and_output(self):
+        folder = FIXTURES / 'project'
+        files = {p.relative_to(folder).as_posix(): p.read_bytes().decode('utf-8') for p in folder.rglob('*') if p.is_file() and p.suffix in ('.lua', '.p8')}
+        result = self.run_tree(files, 'main.p8')
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(result['lua'].count('repeat'), 2)
+        self.assertIn('selected', result['lua'])
+        self.assertNotIn('not_selected', result['lua'])
+        self.assertIn('♥', result['lua'])
+        self.assertRegex(result['cartText'], r'version 42\n')
+        self.assertTrue(any(d['code'] == 'W_BUILD_DIRECTIVE' for d in result['diagnostics']))
+        with tempfile.TemporaryDirectory() as directory:
+            output = pathlib.Path(directory) / 'result.p8'
+            command = [sys.executable, '-c', 'import sys;sys.path.insert(0,sys.argv.pop(1));import shrinko8;sys.exit(shrinko8.main())', str(BUNDLE), str(folder / 'main.p8'), str(output), *self.bridge.FLAGS, *self.bridge.COUNT_FLAGS]
+            cli = subprocess.run(command, text=True, capture_output=True, check=True)
+            self.assertEqual(result['cartText'], output.read_text())
+            for side, prefix in [('original', 'input'), ('optimized', 'None')]:
+                self.assertIn(f'count:{prefix}:tokens:{result["metrics"][side]["tokens"]}:8192', cli.stdout)
+                self.assertIn(f'count:{prefix}:chars:{result["metrics"][side]["characters"]}:65535', cli.stdout)
+
+    def test_unsafe_trees_never_return_output(self):
+        cart = 'pico-8 cartridge // http://www.pico-8.com\nversion 42\n__lua__\n'
+        cases = [
+            ({'main.lua': '#include lib.lua', 'lib.lua': '#include main.lua'}, 'E_INCLUDE_CYCLE'),
+            ({'main.lua': '#include ../outside.lua'}, 'E_INCLUDE_MISSING'),
+            ({'main.lua': '#include x.lua', 'X.lua': 'cls()'}, 'E_INCLUDE_MISSING'),
+            ({'main.lua': 'cls()', 'LIB.lua': 'cls()', 'lib.lua': 'flip()'}, 'E_INCLUDE_AMBIGUOUS'),
+            ({'main.lua': '#include "space name.lua"', 'space name.lua': 'cls()'}, 'E_INCLUDE_PATH'),
+            ({'main.lua': '#include tabs.p8:9', 'tabs.p8': cart + 'cls()'}, 'E_INCLUDE_TAB'),
+            ({'main.lua': '#include tabs.p8:1', 'tabs.p8': cart + '#include lib.lua\n-->8\ncls()', 'lib.lua': 'cls()'}, 'E_INCLUDE_SEMANTICS'),
+            ({'main.lua': '#compile test\ncls()'}, 'E_DIRECTIVE_UNSUPPORTED'),
+            ({'main.lua': '--$unknown-compiler:foo\ncls()'}, 'E_TRANSFORM_UNSUPPORTED'),
+            # Real upstream discrepancy: level-one long string is mistaken for an include by its preprocessor.
+            ({'main.lua': 'local s=[=[\n#include lib.lua\n]=]\nprint(s)', 'lib.lua': 'print(1)'}, 'E_INCLUDE_SEMANTICS'),
+        ]
+        for files, code in cases:
+            with self.subTest(files=files):
+                result = self.run_tree(files)
+                self.assertFalse(result['ok'], result)
+                self.assertEqual(result['diagnostics'][0]['code'], code, result)
+                self.assertNotIn('lua', result)
+                self.assertNotIn('cartText', result)
 
     def test_zero_improvement_and_p8scii_are_valid_results(self):
         zero = self.run_source('cls()')

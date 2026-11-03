@@ -1,6 +1,6 @@
 # Minifier engine foundation and job adapter — MIN-01 / #119, MIN-02 / #120
 
-Real Shrinko8 runs in a local browser **module Web Worker**. The DOM-free model and adapter below manage application jobs, revisions and cancellation. The native Develop → Minifier workspace accepts standalone UTF-8 `.p8` / `.lua` files, pasted Lua and immutable live Code Editor snapshots (including unsaved edits). The handoff returns to the existing editor without applying output; later editor changes invalidate its job/result. Includes and validated output actions remain subsequent roadmap steps. See [the handoff API](../EXTENDING.md#minifier-jobs).
+Real Shrinko8 runs in a local browser **module Web Worker**. The DOM-free model and adapter below manage application jobs, revisions and cancellation. The native Develop → Minifier workspace accepts standalone UTF-8 `.p8` / `.lua` files, pasted Lua and immutable live Code Editor snapshots (including unsaved edits). The handoff returns to the existing editor without applying output; later editor changes invalidate its job/result. Project includes are supported through already-authorized Code Editor folder handles; validated output actions remain a subsequent roadmap step. See [the handoff API](../EXTENDING.md#minifier-jobs).
 
 ## Pins and package scope
 
@@ -66,7 +66,7 @@ The fixed CLI argument array is input, output, explicit input/output format, the
 --input-count --count --parsable-count --error-format common
 ```
 
-No submitted source is interpolated into Python or a shell command. The bridge calls `shrinko8.main(argv)`; native tests invoke the CLI separately with the identical flags. Only **Minimal + Tokens**, standalone `.lua` / `.p8` and one relative entry file are accepted at this stage. Other profiles/targets/formats and includes return explicit unsupported diagnostics rather than ignored options or partial success.
+No submitted source is interpolated into Python or a shell command. The bridge calls `shrinko8.main(argv)`; native tests invoke the CLI separately with the identical flags. Only **Minimal + Tokens** and `.lua` / `.p8` trees with a matching relative entry file are accepted. MIN-07 supplies reachable dependencies as plain paths/text; missing, ambiguous or unsupported includes fail explicitly. Other profiles/targets/formats return unsupported diagnostics rather than ignored options or partial success.
 
 **Important measured behavior:** `--no-minify-transform` alone does not reject compiler requests. On the pinned engine, `--$switch-compiler:parens8` followed by ordinary Lua succeeds with the transform disabled, ignoring the requested compilation. Therefore the bridge uses Shrinko8's actual tokenizer to find compiler/dynamic-include/alias/sublanguage/placeholder comments and refuses them before optimization. Compiler-looking strings are accepted as strings. The upstream compiler scripts and Parens-8 runtime are not packaged.
 
@@ -131,7 +131,7 @@ Callers must handle rejected promises. Cancellation rejects with `E_CANCELLED`, 
 | `retry()` | Replaces the worker and initializes it; a new Optimize action is still required |
 | `dispose()` | Terminates work and clears observers; terminal, create another adapter to reuse |
 
-Only Minimal + Tokens is mapped, to the five flags documented above. Unsupported names produce `unsupported`, and unknown settings keys are rejected rather than silently passed to the CLI. The current engine refuses multiple-file/include jobs explicitly; the immutable file-map contract is ready for MIN-07, but does not claim to resolve includes now.
+Only Minimal + Tokens is mapped, to the five flags documented above. Unsupported names produce `unsupported`, and unknown settings keys are rejected rather than silently passed to the CLI. The current engine advertises `includes: true`; MIN-07 validates the immutable file map and upstream preprocessing before accepting output. Older workers advertising `includes: false` continue to reject multi-file jobs.
 
 One monotonic clock supplies `sourceRevision`, `optionsRevision` and job identities. A source/options change invalidates the active job immediately. During bootstrap, the source-free initialization can finish for the newly loaded input; after source has been posted, the worker is terminated. Replaced workers' saved callbacks and out-of-order request replies cannot make old output current.
 
@@ -176,3 +176,25 @@ Additional actual browser checks: zero runtime requests before explicit initiali
 No `pico8.dat`, Pillow or Lua execution package is needed by the verified `.lua` / `.p8` pipeline. The pinned standard PNG writer uses Pillow plus `template.png` / `font.png` resources; none are packaged here. Its ordinary PNG path does not itself require `pico8.dat`; that is used by other upstream export-runtime workflows. PNG remains explicitly unsupported until #129 packages and verifies the appropriate dependencies/assets and tests output in real PICO-8. No proprietary runtime data is requested or distributed by this foundation.
 
 Upstream references: [Shrinko8 pinned source](https://github.com/thisismypassport/shrinko8/tree/fb6e66827d481020857d7548fdd9dd0171315a86), [pinned CLI flags/processing](https://github.com/thisismypassport/shrinko8/blob/fb6e66827d481020857d7548fdd9dd0171315a86/run_shrinko.py), [PNG writer](https://github.com/thisismypassport/shrinko8/blob/fb6e66827d481020857d7548fdd9dd0171315a86/pico_cart.py), [Pyodide distribution/deployment](https://pyodide.org/en/stable/usage/downloading-and-deploying.html).
+
+
+## Project includes — MIN-07
+
+The editor handoff captures a complete, immutable virtual input tree. It reads reachable dependencies from the existing exact-case folder index, queries granted read access only, decodes UTF-8 strictly and rechecks the editor/folder/intake identity after awaits. No folder enumeration, permission request, save or Run is part of the handoff. Missing, denied, ambiguous, cyclic or stale dependencies preserve the prior Minifier source/result. Standalone Open/Paste have no neighboring-file authority; use the Code Editor folder workflow. Disk changes after capture require explicit refresh.
+
+The unchanged pinned Shrinko8 handles actual expansion. The Suite bridge creates an isolated file tree, confines all recursive reads to its allowlist, bounds expansion and compares its preprocessing notifications with directives identified by the real tokenizer. Unknown compiler/preprocessor requests block builds. `--@data` and other `--@` comments emit a build-copy warning; generated code may remove source directives and is never applied to authoring files. Before and After counts use exactly the same resolved job tree; the editor estimate is not used.
+
+| Input form | Verified behavior / boundary |
+| --- | --- |
+| Nested and repeated includes | Resolve in source order; repeated code expands each time, file text is read once |
+| Relative paths, spaces, `./`, `../` within project | Exact paths with explicit `.lua` / `.p8` extensions; no URL decoding or source rewrite |
+| Case mismatch, case-colliding files | Refused; Suite lookup is case-insensitive, but the worker filesystem is case-sensitive |
+| Root fallback or inferred extension | Refused; Audit can find a fallback that upstream does not use |
+| Quoted, backslash, drive/absolute or escaping paths | Refused; upstream does not remove quotes and no file outside the supplied tree is authorized |
+| `.p8:0–9` | Supported for ordinary nonempty tab boundaries in carts without includes; actual fixture selects tab 1 |
+| Hex `:a–f`, decimal `:10+`, missing tabs | Refused: Suite parses decimal tab suffixes, upstream parses one hexadecimal digit |
+| Tab carts with includes, recursive tabs, unusual separators | Refused: upstream preprocesses whole carts before selecting tabs, unlike Suite’s selected-unit traversal |
+| `#include` text in comments/strings | Shared lexer ignores it. Upstream’s preprocessor mishandles a level-one long string in a tested case; notifier mismatch blocks that build |
+| Cartridge version, P8SCII, LF/CRLF | Raw inputs remain unchanged in the snapshot; actual fixture retains version 42 and heart glyph, with CLI-identical output/counts |
+
+`tests/fixtures/minifier/project` exercises nested/repeated paths, spaces, `../`, CRLF, P8SCII, tab selection and `--@data`. Native tests compare actual CLI output and both counts with the bridge, plus refusal cases. Browser verification uses the real packaged Pyodide worker. These checks do not replace #128’s real PICO-8 release validation.
