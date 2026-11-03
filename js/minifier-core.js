@@ -129,7 +129,7 @@ const P8MinifierCore = (() => {
       if (e.job && !sameJob(s.activeJob, e.job)) return s;
       n.activeJob = null; n.diagnostics = normalizeDiagnostics(e.diagnostics);
       if (e.engineReset) { n.enginePhase = 'cold'; n.engine = null; }
-      n.status = n.diagnostics.some((d) => /UNSUPPORTED/.test(d.code)) ? 'unsupported' : 'error';
+      n.status = n.diagnostics.some((d) => /UNSUPPORTED/.test(d.code) || d.code === 'E_LOCAL_HTTP') ? 'unsupported' : 'error';
     } else if (e.type === 'cancel' || e.type === 'reset') {
       n.revision++; n.activeJob = null; n.latestJobId = null; n.engine = null; n.enginePhase = 'cold'; n.diagnostics = [];
       n.status = e.type === 'cancel' ? 'cancelled' : idle(n);

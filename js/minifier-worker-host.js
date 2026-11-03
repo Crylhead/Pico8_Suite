@@ -4,7 +4,7 @@ const P8MinifierWorkerHost = (() => {
   const script = typeof document !== 'undefined' ? document.currentScript?.src : null;
   function create({ protocol = globalThis.location?.protocol, WorkerCtor = globalThis.Worker, url } = {}) {
     if (!['http:', 'https:'].includes(protocol)) {
-      const error = new Error('Minifier needs HTTP(S). Serve the Suite with python -m http.server 8000 --bind 127.0.0.1 and open http://127.0.0.1:8000; file:// workers are unsupported.');
+      const error = new Error('Local setup required: run Start_Pico8_Suite.bat or python tools/serve_suite.py from the Suite folder. The launcher prepares the pinned assets and opens http://127.0.0.1:8000/index.html#minifier. Direct file:// use is unsupported.');
       error.code = 'E_LOCAL_HTTP';
       throw error;
     }

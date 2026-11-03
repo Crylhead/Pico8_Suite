@@ -2,11 +2,12 @@
 'use strict';
 const P8Minifier = (() => {
   const Core = typeof P8MinifierCore !== 'undefined' ? P8MinifierCore : require('./minifier-core.js');
-  function mount({ root, adapter, app, media }) {
+  function mount({ root, adapter, app, media, protocol = globalThis.location?.protocol }) {
     const $ = (id) => root.querySelector('#' + id);
     const radios = (id) => [...$(id).querySelectorAll('[role=radio]')];
     let mode = media.matches ? 'compare' : 'original', explicitMode = false;
     let origin = 'In-memory source', previousDiagnostics = null;
+    const needsLocalSetup = (s) => protocol === 'file:' || s.diagnostics.some((d) => d.code === 'E_LOCAL_HTTP');
     const setValue = (node, value) => { if (node.value !== value) node.value = value; };
     const actionButtons = (action, disabled) => {
       for (const button of root.ownerDocument.querySelectorAll(`[data-action="${action}"]`)) button.disabled = disabled;
@@ -25,6 +26,7 @@ const P8Minifier = (() => {
       }
     }
     function statusText(s) {
+      if (needsLocalSetup(s)) return 'Local setup required. Start the local Suite launcher to use Minifier.';
       if (s.status === 'ready' && s.enginePhase === 'cold') return 'Source loaded. Engine not ready. Load the engine to optimize.';
       const messages = {
         empty: 'No source loaded.', loading: 'Loading Minifier engine…', running: 'Optimizing tokens…',
@@ -39,6 +41,8 @@ const P8Minifier = (() => {
     }
     function render(s) {
       const controls = Core.describe(s), current = controls.canExport;
+      const localSetup = needsLocalSetup(s);
+      $('mnLocalSetup').hidden = !localSetup;
       root.dataset.state = s.status;
       $('mnSourceName').textContent = s.source ? s.source.entryPath.split('/').pop() : 'No source selected';
       $('mnProvenance').textContent = s.source ? origin : '';
@@ -48,10 +52,10 @@ const P8Minifier = (() => {
       $('mnOutputState').dataset.tone = s.result && !current ? 'warn' : '';
       $('mnOutputPane').dataset.stale = String(!!s.result && !current);
       $('mnStatus').textContent = statusText(s);
-      $('mnStatus').dataset.tone = ['error', 'unsupported'].includes(s.status) ? 'error' : ['cancelled', 'stale'].includes(s.status) ? 'warn' : ['success', 'unchanged'].includes(s.status) ? 'ok' : '';
-      actionButtons('mn-optimize', !controls.canOptimize);
+      $('mnStatus').dataset.tone = localSetup ? 'warn' : ['error', 'unsupported'].includes(s.status) ? 'error' : ['cancelled', 'stale'].includes(s.status) ? 'warn' : ['success', 'unchanged'].includes(s.status) ? 'ok' : '';
+      actionButtons('mn-optimize', localSetup || !controls.canOptimize);
       actionButtons('mn-cancel', !controls.busy);
-      actionButtons('mn-retry', controls.busy);
+      actionButtons('mn-retry', controls.busy || localSetup);
       $('mnOptimize').setAttribute('aria-busy', String(controls.busy));
       $('mnProgress').hidden = !controls.busy;
       $('mnTarget').disabled = controls.busy;
@@ -62,7 +66,7 @@ const P8Minifier = (() => {
       }
       const retryText = s.status === 'error' ? 'Retry engine' : 'Load engine';
       for (const b of root.ownerDocument.querySelectorAll('[data-action="mn-retry"]')) b.textContent = retryText;
-      $('mnRetry').hidden = s.enginePhase === 'ready' && s.status !== 'error';
+      $('mnRetry').hidden = localSetup || (s.enginePhase === 'ready' && s.status !== 'error');
       $('mnEngine').textContent = s.engine ? `Shrinko8 ${s.engine.shrinko8Version} · Pyodide ${s.engine.pyodideVersion}` : s.enginePhase === 'loading' ? 'Engine initializing locally…' : 'Engine not ready.';
       $('mnFlags').textContent = Core.validateSettings(s.options).ok ? Core.flagsFor(s.options).join(' ') : 'Unsupported settings.';
       // Only actual engine measurements are shown. Limits, deltas and filtering belong to MIN-05.
@@ -92,7 +96,7 @@ const P8Minifier = (() => {
     const actions = {
       'mn-optimize': () => { if (Core.describe(adapter.getState()).canOptimize) return swallow(() => adapter.optimize()); },
       'mn-cancel': () => adapter.cancel(),
-      'mn-retry': () => { if (!Core.describe(adapter.getState()).busy) return swallow(() => adapter.retry()); },
+      'mn-retry': () => { const s = adapter.getState(); if (!Core.describe(s).busy && !needsLocalSetup(s)) return swallow(() => adapter.retry()); },
       ...Object.fromEntries(['compare', 'original', 'optimized'].map((view) => ['mn-view-' + view, () => setMode(view)])),
     };
     app.registerActions(actions);
