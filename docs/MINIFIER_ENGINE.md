@@ -1,6 +1,6 @@
 # Minifier engine foundation and job adapter — MIN-01 / #119, MIN-02 / #120
 
-Real Shrinko8 runs in a local browser **module Web Worker**. The DOM-free model and adapter below manage application jobs, revisions and cancellation. There is no production workspace, editor handoff or download UI yet; subsequent roadmap issues build those workflows.
+Real Shrinko8 runs in a local browser **module Web Worker**. The DOM-free model and adapter below manage application jobs, revisions and cancellation. MIN-03 adds the native Develop → Minifier comparison shell. User source intake, editor handoff and validated output actions remain subsequent roadmap steps.
 
 ## Pins and package scope
 
@@ -91,7 +91,7 @@ The MIN-02 adapter owns immutable application snapshots, stale-result rejection,
 
 ## Shared model and adapter — MIN-02
 
-Load classic scripts in this order: `js/minifier-core.js`, `js/minifier-worker-host.js`, `js/minifier-engine.js`. They export `P8MinifierCore`, `P8MinifierWorkerHost` and `P8MinifierEngine`; core and adapter also support CommonJS for Node tests. Loading them, changing source/settings or subscribing never constructs a worker. They are not wired into `index.html` until MIN-03.
+Load classic scripts in this order: `js/minifier-core.js`, `js/minifier-worker-host.js`, `js/minifier-engine.js`. They export `P8MinifierCore`, `P8MinifierWorkerHost` and `P8MinifierEngine`; core and adapter also support CommonJS for Node tests. Loading them, changing source/settings or subscribing never constructs a worker. `index.html` now loads these small scripts and `js/minifier.js`; the runtime starts only when Minifier is first opened. Other tools do not load Python/WASM. The workspace reuses one adapter; [EXTENDING.md](../EXTENDING.md#minifier-jobs) describes its intake API and unavailable workflows.
 
 ```js
 const minifier = P8MinifierEngine.create();
@@ -132,6 +132,8 @@ One monotonic clock supplies `sourceRevision`, `optionsRevision` and job identit
 Validation: 18 focused Node regressions cover immutable snapshots, all state categories, preset flags, stale/cancelled callbacks, malformed replies, crash-after-reply races, timeouts and fresh-worker retry. A real Chromium 153.0.8010.0 adapter check matched both CLI fixtures below, retained the invalid fixture's file/line/column, cancelled after an optimize message was posted, then initialized a second worker and accepted a zero-token-saving `cls()` result (2 → 2 tokens). It used only same-origin GET requests. Real PICO-8 validation remains #128.
 
 ## Hosting and offline behavior
+
+MIN-03 workspace verification: **277 Node regressions passed**, including five presenter tests, plus static HTML and changed-JS syntax checks. Actual Chromium 153.0.8010.0 checks covered 1440 / 900 / 375 px in Light / Dark / System (light OS preference), with no page overflow or clipped buttons; forced-colors/reduced-motion presentation and visible keyboard focus were also inspected. A fixture supplied through `Suite.minifier.load` produced the exact CLI reference through the real Optimize button. Home, Find tool, `#minifier`, workspace arrows, view arrows, read-only selection, menus, F1 and missing-runtime Retry worked without browser errors. The initial page did not fetch runtime assets before Minifier entry. This does not substitute for screen-reader speech testing, other browsers or the PICO-8 release gate.
 
 - All runtime, source-bundle and bridge requests use fixed same-origin paths. No `loadPackage`, micropip, CDN execution, source upload or remote processing is used.
 - Serve the complete packaged folder over HTTP(S), preferably localhost or HTTPS. `file://` is rejected by the host helper before Worker construction, with the existing localhost setup command. Asset SHA verification requires a secure context (`https://` or loopback HTTP).

@@ -404,7 +404,7 @@ No direct mutation of Code Editor private `ed` state from `minifier.js`. Expose 
 
 **Minimum acceptance checks:** render at 20 × 20 CSS pixels at 100%, 125%, and 200% browser zoom; verify visible shape in dark and light themes and high-contrast/forced-colors mode; confirm the `Minifier` accessible name is announced once; ensure adding the icon does not change existing workspace icons or render a non-functional Minifier tab before the tool is implemented. Asset validation may be performed independently of a functional workspace.
 
-The icon is an **approved proposed asset**, not an installed workspace. Runtime navigation integration belongs to MIN-03 alongside the actual Minifier tool.
+The approved icon is installed inline by MIN-03 in the native Minifier tab. Its path geometry, inherited theme color and single accessible name follow this contract. The complete v1 workflows described above still depend on the remaining roadmap issues.
 
 ---
 
