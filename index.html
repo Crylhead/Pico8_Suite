@@ -1168,12 +1168,18 @@
       <div id="mnCodeViews" class="mn-code-views" data-mode="compare">
         <section id="mnSourcePane" class="mn-code-pane">
           <label for="mnSourceCode">Original source · read only</label>
+          <div class="mn-code-box">
+          <pre id="mnSourceHl" class="code-out mn-hl" aria-hidden="true"></pre>
           <textarea id="mnSourceCode" data-help-id="minifier.source" class="code-out" readonly wrap="off" spellcheck="false" autocomplete="off" placeholder="No source loaded."></textarea>
+          </div>
         </section>
         <section id="mnOutputPane" class="mn-code-pane">
           <label for="mnOutputCode">Optimized output · read only</label>
           <p id="mnOutputState" class="status-line">No result.</p>
+          <div class="mn-code-box">
+          <pre id="mnOutputHl" class="code-out mn-hl" aria-hidden="true"></pre>
           <textarea id="mnOutputCode" data-help-id="minifier.output" class="code-out" readonly wrap="off" spellcheck="false" autocomplete="off" aria-describedby="mnOutputState" placeholder="Run Optimize after loading a source."></textarea>
+          </div>
         </section>
       </div>
       <section id="mnMetrics" class="mn-metrics" aria-labelledby="mnMetricsHeading">

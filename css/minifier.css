@@ -63,3 +63,20 @@ body[data-workspace="minifier"] { height: 100vh; height: 100dvh; display: flex; 
   .mn-results #mnMetrics { order: -1; }
   .mn-heading-row { align-items: flex-start; }
 }
+
+/* #147 syntax view: an aria-hidden highlighted copy (same .code-out metrics) sits behind the
+   read-only textarea, which stays the real, selectable and accessible control. Its text is drawn
+   transparent only while the copy is current (data-syntax="on"); otherwise plain text shows. */
+.mn-code-box { position: relative; display: flex; flex: 1 1 auto; min-height: 0; }
+.mn-code-box > textarea.code-out { flex: 1 1 auto; }
+.mn-code-pane .code-out.mn-hl { position: absolute; inset: 0; width: auto; height: auto; min-height: 0; max-height: none; margin: 0; overflow: hidden; resize: none; pointer-events: none; white-space: pre; tab-size: 2; border-color: transparent; }
+.mn-hl > code { display: block; font: inherit; white-space: inherit; will-change: transform; }
+.mn-code-pane:not([data-syntax="on"]) .mn-hl { display: none; }
+.mn-code-pane[data-syntax="on"] textarea.code-out { position: relative; background: transparent; color: transparent; -webkit-text-fill-color: transparent; caret-color: var(--text); }
+.mn-code-pane[data-syntax="on"] textarea.code-out::placeholder { color: var(--muted); -webkit-text-fill-color: var(--muted); }
+/* stale output: dashed border (above) plus dimmed highlighting, never color alone */
+.mn-code-pane[data-stale="true"] .mn-hl > code { opacity: 0.55; }
+@media (forced-colors: active) {
+  .mn-hl { display: none !important; }
+  .mn-code-pane[data-syntax="on"] textarea.code-out { color: CanvasText; -webkit-text-fill-color: CanvasText; background: Canvas; }
+}
