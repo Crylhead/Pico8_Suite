@@ -31,6 +31,15 @@ const P8MinifierExport = (() => {
     if (a.version !== b.version || !sameRom(a.rom, b.rom) || JSON.stringify(a.label) !== JSON.stringify(b.label) || JSON.stringify([...a.present]) !== JSON.stringify([...b.present])) fail('Independent cartridge validation found changed assets or version.', 'E_EXPORT_PRESERVATION');
     return candidate;
   }
+  function budgetStatus(result) {
+    const rows = C.metricRows(result).filter((row) => row.limit !== null && row.afterOver);
+    const number = (value) => value.toLocaleString('en-US');
+    const warnings = rows.map((row) => `${row.label}: ${number(row.after)}; limit ${number(row.limit)}; exceeds by ${number(row.after - row.limit)}.`);
+    const compressed = result.metrics.optimized.compressedBytes;
+    const compressionOver = compressed !== null && compressed >= 15360;
+    if (compressionOver) warnings.push(`PNG compressed code: ${number(compressed)} bytes; required <15,360 bytes (maximum 15,359); exceeds by ${number(compressed - 15359)}. This compressed-code restriction applies to PNG, not text .p8/.lua.`);
+    return Object.freeze({ textOver: rows.length > 0, pngBlocked: rows.length > 0 || compressionOver, warnings: Object.freeze(warnings) });
+  }
   function build(state, input) {
     if (!C.canExport(state)) fail('A current successful result is required. Optimize the current source again.', 'E_EXPORT_STALE');
     const result = state.result, job = result.job;
@@ -58,7 +67,7 @@ const P8MinifierExport = (() => {
       const text = verifyCart(original.original.text, header + body.replace(/\n/g, newline) + nonLua, lua);
       cart = Object.freeze({ text, filename: C.outputFilename(job.entryPath, 'p8'), type: 'text/plain;charset=utf-8' });
     }
-    return Object.freeze({ lua: Object.freeze({ text: lua, filename: C.outputFilename(job.entryPath, 'lua'), type: 'text/plain;charset=utf-8' }), cart, warnings: Object.freeze(warnings), buildCopy: true });
+    return Object.freeze({ lua: Object.freeze({ text: lua, filename: C.outputFilename(job.entryPath, 'lua'), type: 'text/plain;charset=utf-8' }), cart, warnings: Object.freeze(warnings), budgets: budgetStatus(result), buildCopy: true });
   }
   function inspect(state, input) {
     try { return Object.freeze({ ok: true, artifacts: build(state, input) }); }

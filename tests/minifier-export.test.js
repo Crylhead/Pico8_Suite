@@ -64,3 +64,25 @@ t('MIN-08 stale, cancelled, failed and unsupported jobs cannot export; zero savi
   const named = complete(source('cls()', 'demo.min.lua'), result(2, 2));
   assert.strictEqual(E.build(named.state, named.input).lua.filename, 'demo.min.min.lua');
 });
+
+t('MIN-08 preservation permits inspection copies while budgets distinguish exact boundaries and increases', () => {
+  const text = K.NEW_CART + 'cls()\n';
+  for (const [tokens, characters, over] of [[0, 0, false], [8192, 65535, false], [8193, 65535, true], [8192, 65536, true]]) {
+    const raw = result(0, tokens); raw.cartText = text; raw.metrics.optimized.characters = characters;
+    const { state, input } = complete(cartSource(text), raw), before = JSON.stringify({ state, input });
+    const checked = E.inspect(state, input); assert.ok(checked.ok, 'budget excess must not be confused with preservation failure');
+    const { budgets, cart, lua } = checked.artifacts;
+    assert.strictEqual(budgets.textOver, over); assert.strictEqual(budgets.pngBlocked, over);
+    assert.strictEqual(cart.text, text); assert.strictEqual(lua.text, 'cls()');
+    if (tokens > 8192) assert.ok(budgets.warnings.some((s) => /Tokens: 8,193; limit 8,192; exceeds by 1/.test(s)));
+    if (characters > 65535) assert.ok(budgets.warnings.some((s) => /Characters: 65,536; limit 65,535; exceeds by 1/.test(s)));
+    assert.strictEqual(JSON.stringify({ state, input }), before);
+  }
+  for (const bytes of [null, 15359, 15360]) {
+    const raw = result(); raw.metrics.optimized.compressedBytes = bytes;
+    if (bytes === null) raw.metrics.optimized.compressedReason = 'Unavailable in fixture.';
+    const { state, input } = complete(source(), raw), { budgets } = E.build(state, input);
+    assert.strictEqual(budgets.textOver, false); assert.strictEqual(budgets.pngBlocked, bytes === 15360);
+    if (bytes === 15360) assert.match(budgets.warnings.join(' '), /PNG compressed code: 15,360 bytes;.*maximum 15,359.*exceeds by 1.*not text/);
+  }
+});
