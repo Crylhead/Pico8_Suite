@@ -23,7 +23,10 @@ function tooltipFixture(source = fs.readFileSync(path.join(__dirname, '../js/ux-
     setAttribute(k, v) { this.attrs.set(k, v); }, getAttribute(k) { return this.attrs.get(k) ?? null; },
     removeAttribute(k) { this.attrs.delete(k); }, hasAttribute(k) { return this.attrs.has(k); },
     contains(n) { return !!n && (n === this || this.contains(n.parent)); },
-    closest() { return this.dataset.helpId ? this : this.parent?.closest() || null; }, matches() { return true; },
+    closest(selector) {
+      if (selector === '[title]') return this.hasAttribute('title') ? this : this.parent?.closest(selector) || null;
+      return this.dataset.helpId ? this : this.parent?.closest(selector) || null;
+    }, matches() { return true; },
     offsetWidth: 200, offsetHeight: 60,
     getBoundingClientRect() { return this.rect || box(parseFloat(this.style.left), parseFloat(this.style.top), this.offsetWidth, Math.min(this.offsetHeight, parseFloat(this.style.maxHeight) || Infinity)); },
   });
@@ -274,12 +277,38 @@ t('#107 the real adapter applies Off live to authored titles and restores them w
   // title so it never shows both a native and a registry tooltip.
   f.doc.emit('pointerover', { target: disabled });
   assert.strictEqual(disabled.getAttribute('title'), 'Re-derive every tile from all its uses');
+  f.flush(); assert.strictEqual(f.tip.hidden, true, 'disabled native explanation must not get a second registry tooltip');
   disabled.disabled = false;
   f.doc.emit('pointerover', { target: disabled });
   assert.strictEqual(disabled.getAttribute('title'), null);
   assert.strictEqual(disabled.dataset.titleOrig, 'Re-derive every tile from all its uses');
+  f.flush(); assert.strictEqual(f.tip.hidden, false, 'enabled control uses its single registry tooltip');
   f.setLevel('off'); f.setLevel('concise');
   assert.strictEqual(disabled.getAttribute('title'), null, 'a claimed control is left to the registry tip');
+});
+
+t('#107 a native-titled child suppresses inherited group help, including an already visible tip', () => {
+  const f = tooltipFixture(); f.enter(); f.flush(); assert.strictEqual(f.tip.hidden, false);
+  f.child.setAttribute('title', 'Pixel perfect (P): no L-shaped corners.');
+  f.doc.emit('pointerover', { target: f.child }); f.flush();
+  assert.strictEqual(f.tip.hidden, true);
+  assert.strictEqual(f.child.getAttribute('title'), 'Pixel perfect (P): no L-shaped corners.');
+  f.doc.activeElement = f.child; f.doc.emit('focusin', { target: f.child }); f.flush();
+  assert.strictEqual(f.tip.hidden, true);
+  f.child.setAttribute('title', ''); f.doc.emit('pointerover', { target: f.child }); f.flush();
+  assert.strictEqual(f.tip.hidden, false, 'empty builder titles are not native tooltips and must allow group help');
+});
+
+t('#107 a control disabled during the hover delay keeps its new native reason without a custom tip', () => {
+  const f = tooltipFixture();
+  f.enter();
+  f.control.disabled = true;
+  f.control.setAttribute('title', 'Build unavailable: source changed.');
+  f.flush();
+  assert.strictEqual(f.tip.hidden, true);
+  assert.strictEqual(f.control.getAttribute('title'), 'Build unavailable: source changed.');
+  f.setLevel('off'); f.setLevel('detailed');
+  assert.strictEqual(f.control.getAttribute('title'), 'Build unavailable: source changed.', 'module-owned reason survives preference changes');
 });
 
 // #110: built-in JavaScript builders that set help ids, and contextual help per workspace.
