@@ -183,3 +183,31 @@ t('MIN-02 observers cannot break cleanup and can invalidate a start before sourc
   assert.strictEqual(r.workers[0].requests.length, 1);
   off(); a.dispose();
 });
+
+t('MIN-11 optional PNG replies are identity-bound; failure/stale output keeps text results safe', async () => {
+  const fs = require('fs'), path = require('path'), K = require('../js/code-core.js');
+  const bytes = fs.readFileSync(path.join(__dirname, 'fixtures/minifier/release/representative.min.p8.png'));
+  const png = { ok: true, base64: bytes.toString('base64'), pngBytes: bytes.length, compressedBytes: 136, compressedBudgetExclusive: 15360, codeRegionBytes: 15616, width: 160, height: 205 };
+  const r = rig(), a = r.adapter;
+  const text = K.NEW_CART + 'cls()\n';
+  a.setSource({ kind: 'p8', entryPath: 'cart.p8', files: [{ path: 'cart.p8', text }] });
+  const init = a.initialize(); await flush(); r.workers.at(-1).reply(undefined, { engine: { ...engine(), capabilities: { ...engine().capabilities, png: true } } }); await init;
+  let run = a.optimize(); await flush(); r.workers.at(-1).reply(undefined, { result: { ...result(), cartText: text } }); await run;
+  const state = a.getState();
+  let pending = a.exportPng(text); await flush(); assert.strictEqual(r.workers.at(-1).requests.at(-1).type, 'png');
+  r.workers.at(-1).reply(undefined, { type: 'png', result: png }); assert.strictEqual((await pending).pngBytes, bytes.length); assert.strictEqual(a.getState(), state);
+  pending = a.exportPng(text); const invalid = failure(pending, 'E_PNG_INVALID'); await flush();
+  r.workers.at(-1).reply(undefined, { type: 'png', result: { ...png, pngBytes: png.pngBytes + 1 } }); await invalid;
+  assert.strictEqual(a.getState(), state);
+  pending = a.exportPng(text); const refused = failure(pending, 'E_PNG_CAPACITY'); await flush();
+  r.workers.at(-1).reply(undefined, { type: 'error', result: { diagnostics: [{ severity: 'error', code: 'E_PNG_CAPACITY', message: 'PNG capacity exceeded' }] } }); await refused;
+  assert.strictEqual(a.getState(), state); assert.ok(C.canExport(a.getState()));
+  pending = a.exportPng(text); const stale = failure(pending, 'E_EXPORT_STALE'); await flush();
+  const worker = r.workers.at(-1); a.setSource(source('newer()')); worker.reply(undefined, { type: 'png', result: png }); await stale;
+  assert.strictEqual(C.canExport(a.getState()), false);
+  a.setSource({ kind: 'p8', entryPath: 'cart.p8', files: [{ path: 'cart.p8', text }] });
+  run = a.optimize(); await flush(); r.workers.at(-1).reply(undefined, { result: { ...result(), cartText: text } }); await run;
+  pending = a.exportPng(text); const cancelled = failure(pending, 'E_CANCELLED'); await flush();
+  assert.ok(a.cancel(), 'navigation/cancel must stop an active PNG request'); await cancelled;
+  assert.ok(r.workers.at(-1).terminated); assert.strictEqual(a.getState().status, 'cancelled'); a.dispose();
+});

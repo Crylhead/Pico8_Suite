@@ -11,7 +11,7 @@ const P8Minifier = (() => {
     let diagnosticFilter = 'all', renderedDiagnostics = null, renderedFilter = null, renderedDiagnosticJob = null;
     let intakeSerial = 0, intakePending = false, disposed = false;
     let editorStale = false;
-    let validationState = null, validationInput = null, validation = null, exportPending = false, exportReport = null;
+    let validationState = null, validationInput = null, validation = null, exportPending = false, pngPending = false, exportReport = null;
     function exportCheck(s = adapter.getState()) {
       if (validationState !== s || validationInput !== input) {
         validationState = s; validationInput = input; validation = Export.inspect(s, currentInput(s));
@@ -145,11 +145,11 @@ const P8Minifier = (() => {
       setText($('mnStatus'), statusText(s, rows));
       $('mnStatus').dataset.tone = localSetup || editorStale || reportWarning ? 'warn' : ['error', 'unsupported'].includes(s.status) ? 'error' : ['cancelled', 'stale'].includes(s.status) ? 'warn' : ['success', 'unchanged'].includes(s.status) ? 'ok' : '';
       actionButtons('mn-optimize', editorStale || intakePending || localSetup || !controls.canOptimize);
-      actionButtons('mn-cancel', !controls.busy && !intakePending);
+      actionButtons('mn-cancel', !controls.busy && !intakePending && !pngPending);
       for (const b of root.ownerDocument.querySelectorAll('[data-action="mn-cancel"]')) b.textContent = intakePending ? 'Cancel input' : 'Cancel';
       actionButtons('mn-retry', intakePending || controls.busy || localSetup);
       $('mnOptimize').setAttribute('aria-busy', String(controls.busy));
-      $('mnProgress').hidden = !controls.busy;
+      $('mnProgress').hidden = !controls.busy && !pngPending;
       $('mnTarget').disabled = controls.busy;
       setValue($('mnTarget'), s.options.target);
       for (const b of radios('mnProfile')) {
@@ -275,7 +275,7 @@ const P8Minifier = (() => {
     function captureCurrent(capture) {
       invalidateEditor();
       const now = adapter.getState();
-      return !disposed && !editorStale && !intakePending && Core.canExport(now) && capture.result === now.result && capture.sourceRevision === now.sourceRevision && capture.optionsRevision === now.optionsRevision;
+      return !disposed && !root.hidden && !editorStale && !intakePending && Core.canExport(now) && capture.result === now.result && capture.sourceRevision === now.sourceRevision && capture.optionsRevision === now.optionsRevision;
     }
     function restoreExportFocus(opener) {
       const doc = root.ownerDocument, active = doc.activeElement;
@@ -299,7 +299,7 @@ const P8Minifier = (() => {
         const current = captureCurrent(capture);
         reportExport(current ? 'Copied optimized Lua · build copy. Original source unchanged.' : 'Copied the captured earlier build. Source changed meanwhile; refresh before exporting again.', current ? 'ok' : 'warn');
       } catch (_) { if (!disposed) reportExport('Copy failed: clipboard access is unavailable or denied. Select the read-only optimized Lua and copy it with your keyboard.', 'error'); }
-      finally { exportPending = false; if (!disposed) { render(adapter.getState()); restoreExportFocus(opener); } }
+      finally { exportPending = false; pngPending = false; if (!disposed) { render(adapter.getState()); restoreExportFocus(opener); } }
     }
     async function downloadBuild() {
       if (exportPending) return;
@@ -309,18 +309,31 @@ const P8Minifier = (() => {
       exportPending = true; reportExport('Choose a build-copy download. Original source unchanged.');
       try {
         const { artifacts } = capture;
+        const pngAvailable = !!artifacts.cart && adapter.getState().engine?.capabilities.png && typeof adapter.exportPng === 'function';
+        const pngReason = !artifacts.cart ? 'PNG needs a complete .p8 source cartridge.' : !pngAvailable ? 'PNG unavailable: optional local encoder is missing. Text/Lua exports remain available.' : 'PNG carries cartridge code, ROM and label. Text-only metadata is not retained. Code capacity is checked before download.';
         const choice = await app.modal({ title: 'Download optimized build copy',
-          body: `Downloads a separate generated artifact, never a project Save. Keep the original editable source.${artifacts.cart ? ' The .p8 retains the original header and all non-Lua text exactly.' : ' Lua input has no complete source cartridge; only .lua is offered.'}${artifacts.warnings.length ? '\n\n' + artifacts.warnings.join('\n') : ''}`,
-          buttons: [{ label: 'Cancel', value: null }, { label: `Download ${artifacts.lua.filename}`, value: 'lua', primary: !artifacts.cart }, ...(artifacts.cart ? [{ label: `Download ${artifacts.cart.filename}`, value: 'cart', primary: true }] : [])] });
+          body: `Downloads a separate generated artifact, never a project Save. Keep the original editable source.${artifacts.cart ? ' The .p8 retains the original header and all non-Lua text exactly.' : ' Lua input has no complete source cartridge; only .lua is offered.'}${artifacts.warnings.length ? '\n\n' + artifacts.warnings.join('\n') : ''}\n\n${pngReason}`,
+          buttons: [{ label: 'Cancel', value: null }, { label: `Download ${artifacts.lua.filename}`, value: 'lua', primary: !artifacts.cart }, ...(artifacts.cart ? [{ label: `Download ${artifacts.cart.filename}`, value: 'cart', primary: true }] : []), ...(pngAvailable ? [{ label: `Download ${artifacts.cart.filename}.png`, value: 'png' }] : [])] });
         if (disposed) return;
         if (!choice) { reportExport('Download cancelled. Original source unchanged.'); return; }
         if (!captureCurrent(capture)) throw Core.error('E_EXPORT_STALE', 'Source or result changed while choosing a download. Optimize the current source again; nothing was downloaded.');
+        if (choice === 'png' && pngAvailable) {
+          pngPending = true; reportExport('Encoding and verifying PNG cartridge…');
+          const png = await adapter.exportPng(artifacts.cart.text);
+          if (!captureCurrent(capture)) throw Core.error('E_EXPORT_STALE', 'Source or result changed during PNG generation. Nothing was downloaded.');
+          const bytes = Uint8Array.from(atob(png.base64), (c) => c.charCodeAt(0));
+          if (bytes.length !== png.pngBytes) throw Core.error('E_PNG_INVALID', 'PNG byte length does not match the verified result. Nothing was downloaded.');
+          const filename = artifacts.cart.filename + '.png';
+          app.download(bytes, filename, 'image/png');
+          reportExport(`Download requested: ${filename} · build copy. Compressed code: ${png.compressedBytes} bytes (must be <${png.compressedBudgetExclusive}); PNG image: ${png.pngBytes} bytes. Original source unchanged.`, 'ok');
+          return;
+        }
         const artifact = choice === 'lua' ? artifacts.lua : choice === 'cart' ? artifacts.cart : null;
         if (!artifact) throw Core.error('E_EXPORT_INVALID', 'Choose an available build format.');
         app.download(artifact.text, artifact.filename, artifact.type);
         reportExport(`Download requested: ${artifact.filename} · build copy. Browser download controls completion; original source is unchanged.`, 'ok');
       } catch (err) { if (!disposed) reportExport(err.code ? err.message : 'Download failed. The browser could not start the build-copy download. Original source unchanged.', 'error'); }
-      finally { exportPending = false; if (!disposed) { render(adapter.getState()); restoreExportFocus(opener); } }
+      finally { exportPending = false; pngPending = false; if (!disposed) { render(adapter.getState()); restoreExportFocus(opener); } }
     }
     function openFile() {
       return replaceFrom(async (live) => {

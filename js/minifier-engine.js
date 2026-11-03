@@ -51,7 +51,7 @@ const P8MinifierEngine = (() => {
       const ticket = pending.get(message?.requestId);
       if (!ticket || ticket.owner !== owner) return;
       try {
-        if (message.protocol !== 1 || !['ready', 'result', 'error'].includes(message.type) || (ticket.type === 'init' && message.type === 'result') || (ticket.type === 'optimize' && message.type === 'ready')) throw Core.error('E_PROTOCOL', 'Unexpected Minifier worker reply.');
+        if (message.protocol !== 1 || (message.type !== 'error' && message.type !== ({ init: 'ready', optimize: 'result', png: 'png' })[ticket.type])) throw Core.error('E_PROTOCOL', 'Unexpected Minifier worker reply.');
         if (ticket.job && !Core.sameJob(ticket.job, message)) throw Core.error('E_RESULT_IDENTITY', 'Worker reply does not match the submitted source/options job.');
         if (ticket.job && Core.engineKey(Core.engineSnapshot(message.engine)) !== Core.engineKey(state.engine)) throw Core.error('E_ENGINE_VERSION', 'Worker reply changed engine versions during a job.');
         if (message.type === 'error') {
@@ -154,6 +154,21 @@ const P8MinifierEngine = (() => {
       })();
       return promise;
     }
+    async function exportPng(cartText) {
+      alive();
+      const result = state.result;
+      if (!Core.canExport(state) || !state.engine.capabilities.png || result.job.kind !== 'p8') throw Core.error('E_PNG_UNAVAILABLE', 'PNG needs a current cartridge result and the optional local encoder. Lua/.p8 exports remain available.');
+      if (typeof cartText !== 'string') throw Core.error('E_PNG_INPUT', 'PNG needs a validated complete text cartridge.');
+      const raw = await send('png', { ...result.job, cartText });
+      if (disposed || !Core.canExport(state) || state.result !== result) throw Core.error('E_EXPORT_STALE', 'Source or result changed during PNG generation. Nothing was downloaded.');
+      if (raw?.ok !== true || typeof raw.base64 !== 'string' || raw.base64.length > 2_000_000 || !/^iVBORw0KGgo[A-Za-z0-9+/=]*$/.test(raw.base64) || !Number.isSafeInteger(raw.pngBytes) || raw.pngBytes < 45 || raw.width !== 160 || raw.height !== 205 || !Number.isSafeInteger(raw.compressedBytes) || raw.compressedBytes < 0 || raw.compressedBudgetExclusive !== 15360 || raw.compressedBytes >= raw.compressedBudgetExclusive || raw.codeRegionBytes !== 15616) throw Core.error('E_PNG_INVALID', 'The PNG encoder returned an invalid or over-capacity image. Nothing was downloaded.');
+      let bytes;
+      try { bytes = Uint8Array.from(atob(raw.base64), (c) => c.charCodeAt(0)); }
+      catch (_) { throw Core.error('E_PNG_INVALID', 'PNG binary data is invalid. Nothing was downloaded.'); }
+      const header = new DataView(bytes.buffer);
+      if (bytes.length !== raw.pngBytes || bytes.length < 33 || header.getUint32(0) !== 0x89504e47 || header.getUint32(4) !== 0x0d0a1a0a || header.getUint32(8) !== 13 || header.getUint32(12) !== 0x49484452 || header.getUint32(16) !== 160 || header.getUint32(20) !== 205 || bytes[24] !== 8 || bytes[25] !== 6) throw Core.error('E_PNG_INVALID', 'PNG header or byte length disagrees with the encoder. Nothing was downloaded.');
+      return Object.freeze({ ...raw });
+    }
     function change(event) {
       alive();
       const next = Core.transition(state, { ...event, engineReset: !!operation?.sent });
@@ -176,7 +191,7 @@ const P8MinifierEngine = (() => {
     }
     function cancel() {
       alive();
-      if (!initialization && !operation) return false;
+      if (!initialization && !operation && ![...pending.values()].some((ticket) => ticket.type === 'png')) return false;
       invalidate('cancel', Core.error('E_CANCELLED', 'Minifier work was cancelled.'));
       return true;
     }
@@ -196,7 +211,7 @@ const P8MinifierEngine = (() => {
       subscribe(listener) { alive(); if (typeof listener !== 'function') throw TypeError('Expected a state listener.'); listeners.add(listener); return () => listeners.delete(listener); },
       setSource: (source) => change({ type: 'source', source }),
       setOptions: (options) => change({ type: 'options', options }),
-      initialize, optimize, cancel, retry, dispose });
+      initialize, optimize, exportPng, cancel, retry, dispose });
   }
   return { create };
 })();

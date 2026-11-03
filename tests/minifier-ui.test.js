@@ -398,3 +398,22 @@ t('MIN-10 export completion restores a disabled opener after render, without ste
   f.root.hidden = false; download.focus(); pending = f.actions['mn-download'](); f.view.dispose(); f.doc.activeElement = f.doc.body;
   f.dialogs.at(-1).finish(null); await pending; assert.strictEqual(f.doc.activeElement, f.doc.body, 'disposed view must not gain focus');
 });
+
+t('MIN-11 PNG is explicit and capability-gated, uses binary download, and rechecks changes during encoding', async () => {
+  const K = require('../js/code-core.js');
+  const bytes = fs.readFileSync(path.join(__dirname, 'fixtures/minifier/release/representative.min.p8.png'));
+  const png = { ok: true, base64: bytes.toString('base64'), pngBytes: bytes.length, compressedBytes: 136, compressedBudgetExclusive: 15360, codeRegionBytes: 15616, width: 160, height: 205 };
+  const downloads = [], f = fixture(true, undefined, { download: (...args) => downloads.push(args) });
+  await f.initialize({ engine: { ...engine(), capabilities: { ...engine().capabilities, png: true } } });
+  const text = K.NEW_CART + 'cls()\n'; f.view.load({ kind: 'p8', entryPath: 'demo.p8', files: [{ path: 'demo.p8', text }] });
+  await f.finish({ result: { ...result(), cartText: text } });
+  let pending = f.actions['mn-download'](); assert.ok(f.dialogs.at(-1).buttons.some((b) => b.value === 'png'));
+  f.dialogs.at(-1).finish('png'); await flush(); assert.strictEqual(f.$('mnCancel').disabled, false, 'PNG encoding must be cancellable'); f.workers.at(-1).reply({ type: 'png', result: png }); await pending;
+  assert.deepStrictEqual([...downloads[0][0]], [...bytes]); assert.strictEqual(downloads[0][1], 'demo.min.p8.png'); assert.strictEqual(downloads[0][2], 'image/png');
+  assert.match(f.$('mnExportStatus').textContent, /Compressed code: 136 bytes/); assert.match(f.$('mnExportStatus').textContent, /PNG image:/);
+  pending = f.actions['mn-download'](); f.dialogs.at(-1).finish('png'); await flush(); f.view.load(source('newer()'));
+  f.workers.at(-1).reply({ type: 'png', result: png }); await pending; assert.strictEqual(downloads.length, 1); assert.match(f.$('mnExportStatus').textContent, /changed during PNG/); f.view.dispose();
+  const missing = fixture(); await missing.initialize(); missing.view.load({ kind: 'p8', entryPath: 'demo.p8', files: [{ path: 'demo.p8', text }] }); await missing.finish({ result: { ...result(), cartText: text } });
+  pending = missing.actions['mn-download'](); assert.ok(!missing.dialogs.at(-1).buttons.some((b) => b.value === 'png')); assert.match(missing.dialogs.at(-1).body, /PNG unavailable/);
+  assert.ok(missing.dialogs.at(-1).buttons.some((b) => b.value === 'cart')); missing.dialogs.at(-1).finish(null); await pending; missing.view.dispose();
+});
