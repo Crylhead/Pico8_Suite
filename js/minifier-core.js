@@ -50,6 +50,47 @@ const P8MinifierCore = (() => {
   }
   const hasSource = (s) => !!s.source?.files.find((f) => f.path === s.source.entryPath)?.text.trim();
 
+  function inputKind(name) {
+    if (typeof name !== 'string' || !/\.(?:lua|p8)$/i.test(name)) throw error('E_FORMAT_UNSUPPORTED', 'Open a .lua file or a PICO-8 text cartridge (.p8). PNG cartridges and other formats are not supported.');
+    return name.toLowerCase().endsWith('.p8') ? 'p8' : 'lua';
+  }
+  function decodeText(bytes) {
+    try { return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); }
+    catch (_) { throw error('E_INPUT_ENCODING', 'This file is not valid UTF-8 text. Save it as a UTF-8 .lua or .p8 text file before importing.'); }
+  }
+  function prepareInput(raw) {
+    const source = sourceSnapshot(raw);
+    if (!source) return null;
+    const Code = typeof P8Code !== 'undefined' ? P8Code : require('./code-core.js');
+    const text = source.files.find((f) => f.path === source.entryPath).text;
+    if (text.includes('\0')) throw error('E_INPUT_ENCODING', 'Source contains NUL bytes. Open a UTF-8 .lua or .p8 text file, not a binary cartridge.');
+    let lua = text, original = { text, cart: null };
+    if (source.kind === 'p8') {
+      const parts = Code.splitCart(text);
+      const lines = text.replace(/\r\n?/g, '\n').split('\n');
+      const version = /^version[ \t]+(\d+)[ \t]*$/.exec(lines[1] || '');
+      if (!/^pico-8 cartridge(?:\s|$)/.test(lines[0]) || !version || !Number.isSafeInteger(Number(version[1]))) throw error('E_CART_HEADER', 'A .p8 file must start with the PICO-8 cartridge header and a numeric version line. Save the cart as a text .p8 file in PICO-8.');
+      if (parts.head === null || parts.head.split('\n').slice(2, -2).some((line) => line.trim()) || parts.sections.includes('lua') || new Set(parts.sections).size !== parts.sections.length) throw error('E_CART_SECTIONS', 'The cartridge needs one __lua__ section after its version header and unique section markers. Check missing, misplaced or duplicate delimiters.');
+      // splitCart normalizes newlines. Map its boundaries back to raw text to retain exact non-Lua bytes.
+      const rawOffset = (offset) => {
+        let i = 0;
+        for (let n = 0; n < offset && i < text.length; n++, i++) if (text[i] === '\r' && text[i + 1] === '\n') i++;
+        return i;
+      };
+      const tailStart = rawOffset(text.replace(/\r\n?/g, '\n').length - parts.tail.length);
+      lua = parts.lua;
+      original = { text, cart: { version: Number(version[1]), header: text.slice(0, rawOffset(parts.head.length)), nonLua: text.slice(tailStart), sections: [...parts.sections], crlf: parts.crlf } };
+    } else if (/^\ufeff?pico-8 cartridge(?:\s|$)/.test(text)) {
+      throw error('E_FORMAT_UNSUPPORTED', 'This looks like a complete cartridge. Open it with a .p8 filename instead of treating it as Lua.');
+    }
+    if (!lua.trim()) throw error('E_EMPTY', 'Source has no Lua code. Choose a nonempty .lua file or a .p8 cartridge with code.');
+    return freeze({ source, lua, tabs: Code.codeTabs(lua), original });
+  }
+  function textInput(name, text) {
+    const kind = inputKind(name);
+    return prepareInput({ kind, entryPath: name, files: [{ path: name, text }] });
+  }
+
   function normalizeDiagnostics(raw) {
     if (!Array.isArray(raw)) return freeze([]);
     return freeze(raw.map((d) => {
@@ -154,6 +195,6 @@ const P8MinifierCore = (() => {
     const base = String(path || 'untitled').split(/[\\/]/).pop().replace(/[\x00-\x1f<>:"|?*]/g, '_').replace(/\.(?:p8|lua)$/i, '') || 'untitled';
     return `${base}.min.${kind}`;
   }
-  return { DEFAULTS, FLAGS, STATES, settings, validateSettings, flagsFor, sourceSnapshot, normalizeDiagnostics, engineSnapshot, engineKey, sameJob, resultSnapshot, initialState, transition, describe, canExport, metricDelta, outputFilename, error };
+  return { DEFAULTS, FLAGS, STATES, settings, validateSettings, flagsFor, sourceSnapshot, inputKind, decodeText, prepareInput, textInput, normalizeDiagnostics, engineSnapshot, engineKey, sameJob, resultSnapshot, initialState, transition, describe, canExport, metricDelta, outputFilename, error };
 })();
 if (typeof module !== 'undefined') module.exports = P8MinifierCore;

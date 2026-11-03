@@ -240,6 +240,9 @@
       <div class="menu" data-show="minifier">
         <button class="menu-btn" aria-haspopup="menu" aria-expanded="false">Minifier</button>
         <div class="menu-pop" role="menu">
+          <button role="menuitem" data-action="mn-open">Open .p8 / .lua…</button>
+          <button role="menuitem" data-action="mn-paste">Paste Lua…</button>
+          <hr>
           <button role="menuitem" data-action="mn-optimize" disabled>Optimize</button>
           <button role="menuitem" data-action="mn-cancel" disabled>Cancel</button>
           <button role="menuitem" data-action="mn-retry">Load engine</button>
@@ -1094,7 +1097,7 @@
   <!-- Data Carts                                                       -->
   <!-- ================================================================ -->
   <!-- ================================================================ -->
-  <!-- Minifier: source intake, detailed reporting and exports follow in MIN-04/05/08. -->
+  <!-- Minifier: detailed reporting and dedicated exports follow in MIN-05/08. -->
   <main class="layout-minifier" data-ws="minifier" hidden aria-labelledby="mnHeading">
     <header class="card mn-command">
       <div class="mn-heading-row">
@@ -1104,11 +1107,13 @@
         <button class="btn btn-sm" data-action="docs">Help</button>
       </div>
       <div class="mn-source-actions" aria-label="Source actions">
-        <button id="mnOpen" class="btn" disabled aria-describedby="mnAvailability">Open file…</button>
-        <button id="mnPaste" class="btn" disabled aria-describedby="mnAvailability">Paste Lua…</button>
+        <button id="mnOpen" class="btn" data-action="mn-open" data-help-id="minifier.open">Open file…</button>
+        <button id="mnPaste" class="btn" data-action="mn-paste" data-help-id="minifier.paste">Paste Lua…</button>
         <button id="mnUseEditor" class="btn" disabled aria-describedby="mnAvailability">Use current editor</button>
       </div>
-      <p id="mnAvailability" class="notice">File import, paste and Code Editor handoff are not available yet. Copy and download will follow separately.</p>
+      <p id="mnSourceStorage" class="muted">Open a .p8 / .lua file or paste Lua to begin.</p>
+      <p id="mnInputStatus" class="status-line" role="status" aria-live="polite" aria-atomic="true"></p>
+      <p id="mnAvailability" class="notice">Code Editor handoff and dedicated Copy / Download actions are not available yet. Imported sources are page-only snapshots.</p>
       <section id="mnLocalSetup" class="notice" data-tone="warn" hidden aria-labelledby="mnLocalSetupHeading">
         <h3 id="mnLocalSetupHeading">Local setup required</h3>
         <p>Minifier needs a local web address. On Windows, double-click <b>Start_Pico8_Suite.bat</b> in the Suite folder (Python 3.9+). Or run <code>python tools/serve_suite.py</code>. The launcher verifies/prepares the pinned assets and opens the browser. First setup needs Internet or the pinned dependency archives; later starts can be offline.</p>
@@ -1496,7 +1501,8 @@
 
         <h3 id="doc-minifier">Minifier</h3>
         <p>Develop → Minifier compares original source with generated output from locally packaged Shrinko8. The default is <b>Minimal</b> with <b>Tokens</b> focus. Names and line breaks are kept; expressions, comments and spacing may change, and token reduction is not guaranteed. Source and output are read only and selectable. Use Compare, Original or Optimized to change the view; arrow keys select within each option group. Tablet and phone layouts start in Original view.</p>
-        <p>This release adds the workspace shell. File/paste import, Code Editor handoff and dedicated copy/download actions are not available yet. Unavailable actions are disabled. Opening Minifier initializes the local engine only; optimization always requires an explicit Optimize action and a loaded source. Source changes and navigation never optimize or save automatically. Switching tools cancels pending work and retains the source and any earlier result, marked stale.</p>
+        <p><b>Open file…</b> reads a UTF-8 <code>.p8</code> text cartridge or <code>.lua</code> file. <b>Paste Lua…</b> opens a labelled dialog; Load Lua creates a snapshot named <code>pasted.lua</code>. File and paste inputs are unsaved page-only snapshots: no file writes, Library saves or folder permissions. A cartridge retains its full original text and non-Lua sections, while the code views show Lua. Empty/corrupt input and picker/dialog Cancel keep the current source and result. Replacing a snapshot asks first. Closing/reloading the page loses the snapshot.</p>
+        <p>Import validates UTF-8 text and cartridge structure; Shrinko8 checks Lua syntax when you choose <b>Optimize</b>. Opening Minifier initializes the engine only, and importing never optimizes automatically. Source changes, navigation, Save and Run never auto-optimize or save. Switching tools cancels pending intake/work and retains the current source and any earlier output, marked stale when appropriate. Code Editor handoff and dedicated Copy / Download actions remain unavailable; includes and PNG import are unsupported.</p>
         <p>Engine errors show a Retry engine action. Retry loads a fresh worker without submitting source. For direct file:// opening, the workspace shows <b>Local setup required</b> and disables futile Retry. On Windows, double-click <b>Start_Pico8_Suite.bat</b> (Python 3.9+), or run <code>python tools/serve_suite.py</code>. The optional launcher verifies/prepares the pinned runtime assets, starts localhost and opens Minifier; keep its window open. First setup needs Internet or the pinned dependency archives. Library/browser sessions are separate for file:// and localhost: export/import a backup when switching. Hosted browser use needs no Python service. See <code>docs/MINIFIER_ENGINE.md</code> for manual packaging and offline setup. Real PICO-8 equivalence testing and validated exports remain separate release steps.</p>
 
         <h3 id="doc-cartbuilder">Cart Builder</h3>

@@ -9,8 +9,8 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const markup = html.slice(html.indexOf('<main class="layout-minifier"'), html.indexOf('</main>', html.indexOf('<main class="layout-minifier"')));
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-function fixture(wide = true, protocol) {
-  const nodes = new Map(), actions = {}, workers = [];
+function fixture(wide = true, protocol, io = {}) {
+  const nodes = new Map(), actions = {}, workers = [], dialogs = [], created = [];
   const doc = { activeElement: null, createElement: () => node(), querySelectorAll(selector) { return [...nodes.values()].filter((n) => n.action && selector.includes(`"${n.action}"`)); } };
   function node(id) {
     return { id, dataset: {}, attrs: {}, listeners: {}, disabled: false, hidden: false, value: '', textContent: '', children: [], ownerDocument: doc,
@@ -35,8 +35,12 @@ function fixture(wide = true, protocol) {
       reply(extra = {}) { const req = this.requests.at(-1); listeners.message({ data: { protocol: 1, requestId: req.requestId, type: req.type === 'init' ? 'ready' : 'result', engine: engine(), ...(req.job ? { jobId: req.job.jobId, sourceRevision: req.job.sourceRevision, optionsRevision: req.job.optionsRevision, result: result() } : {}), ...extra } }); } };
     workers.push(w); return w;
   } });
-  const view = UI.mount({ root, adapter, media, protocol, app: { registerActions(more) { Object.assign(actions, more); } } });
-  return { view, adapter, nodes, actions, root, workers, media, doc, $: (id) => nodes.get(id),
+  const app = { registerActions(more) { Object.assign(actions, more); },
+    el(tag, props = {}, ...children) { const n = Object.assign(node(props.id), props, { tag, children }); created.push(n); return n; },
+    modal(options) { return new Promise((resolve) => { const d = { ...options, finish: resolve }; dialogs.push(d); options.onOpen?.(d); }); },
+    pickFile: async () => null, confirmDialog: async () => true, ...io };
+  const view = UI.mount({ root, adapter, media, protocol, app });
+  return { view, adapter, nodes, actions, root, workers, media, doc, dialogs, created, $: (id) => nodes.get(id),
     async initialize() { const p = view.initialize(); await flush(); workers.at(-1).reply(); await p; },
     async finish(extra) { const p = actions['mn-optimize'](); await flush(); workers.at(-1).reply(extra); await p; },
   };
@@ -56,7 +60,7 @@ t('MIN-03 shell uses the real adapter, remains lazy and requires explicit ready 
   assert.match(f.$('mnOutputState').textContent, /Current result/);
   assert.strictEqual(f.$('mnTokensBefore').textContent, '4'); assert.strictEqual(f.$('mnTokensAfter').textContent, '3');
   assert.strictEqual(f.$('mnBytesBefore').textContent, '—'); assert.match(f.$('mnBytesBefore').attrs['aria-label'], /Not emitted/);
-  for (const id of ['mnOpen', 'mnPaste', 'mnUseEditor', 'mnCopy', 'mnDownload']) assert.ok(f.$(id).disabled, id);
+  for (const id of ['mnUseEditor', 'mnCopy', 'mnDownload']) assert.ok(f.$(id).disabled, id);
   f.view.dispose();
 });
 
@@ -119,4 +123,73 @@ t('#134 file launch shows setup rather than a failed job, suppresses futile Retr
   f.view.load(source('flip()')); // A different input cannot repair the hosting origin.
   assert.strictEqual(f.$('mnLocalSetup').hidden, false); assert.ok(f.$('mnRetry').disabled);
   assert.strictEqual(f.$('mnSourceCode').value, 'flip()'); f.view.dispose();
+});
+
+const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
+const file = (name, text) => ({ name, arrayBuffer: async () => new TextEncoder().encode(text).buffer });
+
+t('MIN-04 picker Cancel, read/encoding/format failure and declined replacement keep exact current state', async () => {
+  let next, confirmations = 0;
+  const f = fixture(true, undefined, { pickFile: async () => next, confirmDialog: async () => { confirmations++; return false; } });
+  await f.initialize(); f.view.load(source()); await f.finish();
+  const before = f.view.getState(), original = f.view.getInput().original;
+  const unsupported = { name: 'cart.png', arrayBuffer: () => { throw Error('must not read'); } };
+  for (next of [null, { name: 'bad.lua', arrayBuffer: async () => { throw Error('read denied'); } }, file('empty.lua', '  '), file('bad.p8', 'not a cart'), { name: 'bad.lua', arrayBuffer: async () => new Uint8Array([255]) }, unsupported, file('other.lua', 'flip()')]) {
+    await f.actions['mn-open']();
+    assert.strictEqual(f.view.getState(), before); assert.strictEqual(f.view.getInput().original, original);
+    assert.strictEqual(f.$('mnOutputCode').value, 'cls()');
+  }
+  assert.strictEqual(confirmations, 1); assert.strictEqual(f.workers[0].requests.length, 2); f.view.dispose();
+});
+
+t('MIN-04 accepted input is a frozen unsaved snapshot, never a file handle, and import does not optimize', async () => {
+  const raw = 'print("♥")\r\n';
+  const f = fixture(true, undefined, { pickFile: async () => file('fresh.lua', raw) });
+  await f.initialize(); await f.actions['mn-open']();
+  assert.strictEqual(f.$('mnSourceCode').value, 'print("♥")\n'); assert.strictEqual(f.$('mnProvenance').textContent, 'Local file');
+  assert.strictEqual(f.view.getInput().original.text, raw); assert.strictEqual(f.view.getState().source.files[0].text, raw);
+  assert.match(f.$('mnSourceStorage').textContent, /not saved/); assert.ok(Object.isFrozen(f.view.getInput().original));
+  assert.strictEqual(f.view.getInput().sourceRevision, f.view.getState().sourceRevision);
+  assert.strictEqual(f.workers[0].requests.length, 1); assert.strictEqual(f.$('mnOptimize').disabled, false);
+  assert.deepStrictEqual(Object.keys(f.view.getState().source.files[0]).sort(), ['path', 'text']); f.view.dispose();
+});
+
+t('MIN-04 newer input, programmatic replacement and cancellation reject late reads without mutating results', async () => {
+  let next;
+  const f = fixture(true, undefined, { pickFile: async () => next });
+  f.view.load(source()); const read = deferred();
+  next = { name: 'old.lua', arrayBuffer: () => read.promise };
+  const old = f.actions['mn-open'](); await flush();
+  next = file('new.lua', 'flip()'); await f.actions['mn-open']();
+  const state = f.view.getState(); read.resolve(new TextEncoder().encode('old()')); await old;
+  assert.strictEqual(f.view.getState(), state); assert.strictEqual(f.$('mnSourceCode').value, 'flip()');
+  for (const cancel of [() => f.actions['mn-cancel'](), () => f.view.load(source('external()'))]) {
+    const pending = deferred(); next = { name: 'late.lua', arrayBuffer: () => pending.promise };
+    const p = f.actions['mn-open'](); await flush(); cancel(); const kept = f.view.getState();
+    pending.resolve(new TextEncoder().encode('late()')); await p; assert.strictEqual(f.view.getState(), kept);
+  }
+  f.view.dispose();
+});
+
+t('MIN-04 a result completed during replacement confirmation is never discarded under an old consent', async () => {
+  const consent = deferred();
+  const f = fixture(true, undefined, { pickFile: async () => file('new.lua', 'flip()'), confirmDialog: () => consent.promise });
+  await f.initialize(); f.view.load(source()); const run = f.actions['mn-optimize'](); await flush();
+  const incoming = f.actions['mn-open'](); await flush(); f.workers[0].reply(); await run;
+  const completed = f.view.getState(); consent.resolve(true); await incoming;
+  assert.strictEqual(f.view.getState(), completed); assert.match(f.$('mnInputStatus').textContent, /changed while confirming/); f.view.dispose();
+});
+
+t('MIN-04 paste uses a labelled modal, keeps invalid/empty text there and commits only confirmed input', async () => {
+  const f = fixture();
+  const p = f.actions['mn-paste']();
+  const dialog = f.dialogs.at(-1), text = f.created.find((n) => n.id === 'mnPasteText');
+  const problem = f.created.find((n) => n.id === 'mnPasteError'); assert.strictEqual(problem.hidden, true);
+  assert.strictEqual(dialog.title, 'Paste Lua'); assert.strictEqual(f.doc.activeElement, text);
+  const load = dialog.buttons[1]; text.value = '  ';
+  assert.strictEqual(load.validate(), false); assert.strictEqual(text.attrs['aria-invalid'], 'true'); assert.strictEqual(problem.hidden, false); assert.strictEqual(f.view.getState().source, null);
+  text.value = 'print("♥")'; assert.ok(load.validate()); assert.strictEqual(problem.hidden, true); dialog.finish(load.value()); await p;
+  assert.strictEqual(f.$('mnProvenance').textContent, 'Pasted Lua'); assert.strictEqual(f.view.getState().source.entryPath, 'pasted.lua');
+  const before = f.view.getState(); const cancel = f.actions['mn-paste'](); f.dialogs.at(-1).finish(null); await cancel;
+  assert.strictEqual(f.view.getState(), before); assert.strictEqual(f.workers.length, 0); f.view.dispose();
 });
