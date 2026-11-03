@@ -1,6 +1,6 @@
 # Minifier engine foundation and job adapter — MIN-01 / #119, MIN-02 / #120
 
-Real Shrinko8 runs in a local browser **module Web Worker**. The DOM-free model and adapter below manage application jobs, revisions and cancellation. The native Develop → Minifier workspace accepts standalone UTF-8 `.p8` / `.lua` files and pasted Lua. Editor handoff, includes and validated output actions remain subsequent roadmap steps.
+Real Shrinko8 runs in a local browser **module Web Worker**. The DOM-free model and adapter below manage application jobs, revisions and cancellation. The native Develop → Minifier workspace accepts standalone UTF-8 `.p8` / `.lua` files, pasted Lua and immutable live Code Editor snapshots (including unsaved edits). The handoff returns to the existing editor without applying output; later editor changes invalidate its job/result. Includes and validated output actions remain subsequent roadmap steps. See [the handoff API](../EXTENDING.md#minifier-jobs).
 
 ## Pins and package scope
 

@@ -295,6 +295,7 @@
   function renderTitle() {
     dom.file.textContent = `${ed.name}${dirty() ? ' •' : ''}`;
     dom.file.title = dirty() ? 'Unsaved changes' : 'Saved';
+    sourceBridge.refresh();
   }
 
   let structTimer = 0;
@@ -897,6 +898,7 @@
     ed.folderReady = true;
     if (resetRel || !same) { ed.rel = null; ed.parent = null; }
     if (!same) ed.fileCache = new Map();
+    sourceBridge.refresh(); // Invalidate handoffs before awaiting folder enumeration/relocation.
     await listFolder();
     if (ed.folder !== h) return; // another folder was chosen meanwhile
     // the open file may live in this folder
@@ -1423,9 +1425,24 @@
   // Suite integration                                                  //
   // ------------------------------------------------------------------ //
 
+  let sourceRestoring = true;
+  const sourceBridge = K.createSourceBridge({
+    read: () => ({ ready: !sourceRestoring, doc: ed.doc, loc: ed.loc, name: ed.name, parts: ed.parts,
+      text: dom.ta.value, savedLua: ed.savedLua, folder: ed.folder, folderReady: ed.folderReady, rel: ed.rel, parent: ed.parent,
+      selection: { start: dom.ta.selectionStart, end: dom.ta.selectionEnd, direction: dom.ta.selectionDirection, top: dom.ta.scrollTop, left: dom.ta.scrollLeft } }),
+    focus: () => dom.ta.focus({ preventScroll: true }),
+  });
+  S.codeSource = sourceBridge;
+  sourceBridge.subscribe((status) => {
+    $('#ceMinify').disabled = !status.available;
+    $('#ceMinifyReason').textContent = status.reason;
+    $('#ceMinifyReason').hidden = status.available;
+  });
+  sourceBridge.refresh();
+
   S.registerTool({
     ws: 'code', name: 'Code Editor',
-    desc: 'PICO-8 Lua with PICO-8 syntax highlighting, API completion and hints, code tabs, functions list, live token count; saves straight back into the .p8.',
+    desc: 'PICO-8 Lua with PICO-8 syntax highlighting, API completion and hints, code tabs, functions list, live token count; saves straight back into the .p8. Cart → Minify… copies the unsaved buffer for inspection.',
     tasks: [{ group: 'edit', label: 'Edit code', hint: 'Lua with tokens, #include and Run' }], color: '#ff77a8', tags: ['code', 'tokens', '.p8'], category: 'develop',
   });
   App.registerShortcuts('code', onKey);
@@ -1459,6 +1476,11 @@
     'code-indent-tab': () => { set.indent = '\t'; persist(); toast('Indent: tab'); },
     'code-gfx': openGfx,
     'code-map': openMap,
+    'code-minify': () => {
+      if (!sourceBridge.getStatus().available) return showMessage('Minifier', sourceBridge.getStatus().reason);
+      if (!S.minifier?.useEditor) return showMessage('Minifier', 'Minifier is unavailable. Restore the complete Suite folder and reload.');
+      return S.minifier.useEditor({ navigate: true });
+    },
     'code-open-folder': openFolder,
     'code-run': runCart,
     'code-stop': stopCart,
@@ -1470,6 +1492,5 @@
   applyFont();
   bind();
   mountProjectLink();
-  S.assets.ready.then(restoreSession);
+  S.assets.ready.then(restoreSession).finally(() => { sourceRestoring = false; sourceBridge.refresh(); });
 })();
-

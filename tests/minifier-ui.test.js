@@ -9,6 +9,15 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const markup = html.slice(html.indexOf('<main class="layout-minifier"'), html.indexOf('</main>', html.indexOf('<main class="layout-minifier"')));
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
+function editorFixture() {
+  const K = require('../js/code-core.js');
+  const state = { ready: true, doc: {}, loc: {}, name: 'edited.lua', parts: K.splitCart('cls()'), text: 'cls() --dirty', savedLua: 'cls()', selection: { start: 2, end: 4 } };
+  let focused = 0, subscriptions = 0;
+  const bridge = K.createSourceBridge({ read: () => state, focus: () => focused++ });
+  const source = { ...bridge, subscribe(fn) { subscriptions++; const off = bridge.subscribe(fn); return () => { subscriptions--; off(); }; } };
+  return { state, source, get focused() { return focused; }, get subscriptions() { return subscriptions; } };
+}
+
 function fixture(wide = true, protocol, io = {}) {
   const nodes = new Map(), actions = {}, workers = [], dialogs = [], created = [];
   const doc = { activeElement: null, createElement: () => node(), querySelectorAll(selector) { return [...nodes.values()].filter((n) => n.action && selector.includes(`"${n.action}"`)); } };
@@ -33,14 +42,15 @@ function fixture(wide = true, protocol, io = {}) {
     const listeners = {};
     const w = { requests: [], addEventListener(type, fn) { listeners[type] = fn; }, removeEventListener(type) { delete listeners[type]; }, terminate() { this.terminated = true; },
       postMessage(message) { this.requests.push(message); },
-      reply(extra = {}) { const req = this.requests.at(-1); listeners.message({ data: { protocol: 1, requestId: req.requestId, type: req.type === 'init' ? 'ready' : 'result', engine: engine(), ...(req.job ? { jobId: req.job.jobId, sourceRevision: req.job.sourceRevision, optionsRevision: req.job.optionsRevision, result: result() } : {}), ...extra } }); } };
+      reply(extra = {}) { return this.captureReply(extra)(); },
+      captureReply(extra = {}) { const req = this.requests.at(-1), receive = listeners.message; return () => receive({ data: { protocol: 1, requestId: req.requestId, type: req.type === 'init' ? 'ready' : 'result', engine: engine(), ...(req.job ? { jobId: req.job.jobId, sourceRevision: req.job.sourceRevision, optionsRevision: req.job.optionsRevision, result: result() } : {}), ...extra } }); } };
     workers.push(w); return w;
   } });
   const app = { registerActions(more) { Object.assign(actions, more); },
     el(tag, props = {}, ...children) { const n = Object.assign(node(props.id), props, { tag, children }); created.push(n); return n; },
     modal(options) { return new Promise((resolve) => { const d = { ...options, finish: resolve }; dialogs.push(d); options.onOpen?.(d); }); },
     pickFile: async () => null, confirmDialog: async () => true, ...io };
-  const view = UI.mount({ root, adapter, media, protocol, app });
+  const view = UI.mount({ root, adapter, media, protocol, app, editorSource: io.editorSource });
   return { view, adapter, nodes, actions, root, workers, media, doc, dialogs, created, $: (id) => nodes.get(id),
     async initialize() { const p = view.initialize(); await flush(); workers.at(-1).reply(); await p; },
     async finish(extra) { const p = actions['mn-optimize'](); await flush(); workers.at(-1).reply(extra); await p; },
@@ -232,4 +242,61 @@ t('MIN-05 diagnostics filter plain data and select only the exact current snapsh
   f.view.load(source('new()')); f.view.setMode('optimized'); const focus = f.doc.activeElement;
   location.listeners.click(); assert.strictEqual(f.$('mnCodeViews').dataset.mode, 'optimized'); assert.strictEqual(f.doc.activeElement, focus);
   f.view.dispose();
+});
+
+t('MIN-06 handoff captures dirty live source, asks before replacement and returns without editing', async () => {
+  const e = editorFixture(), workspaces = [];
+  const f = fixture(true, undefined, { editorSource: e.source, setWorkspace: (ws) => workspaces.push(ws), confirmDialog: async () => false });
+  await f.initialize(); const identity = e.source.getSnapshot().identity;
+  assert.strictEqual(await f.view.useEditor({ navigate: true }), true);
+  assert.deepStrictEqual(workspaces, ['minifier']); assert.strictEqual(e.subscriptions, 1);
+  assert.strictEqual(f.$('mnSourceCode').value, e.state.text); assert.match(f.$('mnProvenance').textContent, /From Code Editor.*Unsaved changes/);
+  assert.strictEqual(f.view.getInput().editor.identity, identity); assert.strictEqual(f.$('mnReturn').hidden, false);
+  await f.finish(); f.actions['mn-return-editor']();
+  assert.deepStrictEqual(workspaces, ['minifier', 'code']); assert.strictEqual(e.focused, 1);
+  assert.ok(e.source.isCurrent(identity)); assert.strictEqual(e.state.savedLua, 'cls()'); assert.deepStrictEqual(e.state.selection, { start: 2, end: 4 });
+  const kept = f.view.getState();
+  for (let i = 0; i < 3; i++) assert.strictEqual(await f.actions['mn-use-editor'](), false);
+  assert.strictEqual(f.view.getState(), kept); assert.strictEqual(e.subscriptions, 1); assert.strictEqual(f.workers.length, 1);
+  f.view.dispose(); assert.strictEqual(e.subscriptions, 0);
+});
+
+t('MIN-06 editor changes invalidate a running job and retained result; old replies cannot become current', async () => {
+  for (const change of [(s) => { s.text = 'newer()'; }, (s) => { s.doc = {}; s.text = 'replacement()'; s.name = 'replacement.lua'; }]) {
+    const e = editorFixture();
+    const f = fixture(true, undefined, { editorSource: e.source }); await f.initialize(); await f.actions['mn-use-editor'](); await f.finish();
+    const captured = f.view.getInput(), run = f.actions['mn-optimize'](); await flush();
+    const old = f.workers[0], lateReply = old.captureReply({ result: result(4, 1) }), kept = f.$('mnOutputCode').value;
+    change(e.state); e.source.refresh(); await run;
+    assert.ok(old.terminated); assert.ok(f.$('mnOptimize').disabled); assert.match(f.$('mnEditorState').textContent, /Earlier snapshot/);
+    assert.match(f.$('mnOutputState').textContent, /Stale result/); assert.strictEqual(f.view.getInput().lua, captured.lua);
+    // Even a delivered callback after termination cannot publish a current result.
+    lateReply();
+    assert.strictEqual(f.$('mnOutputCode').value, kept); assert.strictEqual(e.state.savedLua, 'cls()');
+    assert.strictEqual(await f.actions['mn-use-editor'](), true); assert.strictEqual(f.view.getInput().lua, e.state.text);
+    assert.match(f.$('mnEditorState').textContent, /snapshot is current/); f.view.dispose();
+  }
+});
+
+t('MIN-06 pending handoff rejects an editor changed during consent; Cancel and missing source preserve state', async () => {
+  const e = editorFixture(); let consent = deferred();
+  const f = fixture(true, undefined, { editorSource: e.source, confirmDialog: () => consent.promise });
+  await f.initialize(); f.view.load(source('existing()')); const kept = f.view.getState();
+  const pending = f.view.useEditor({ navigate: true }); await flush();
+  e.state.text = 'later()'; e.source.refresh(); consent.resolve(true); assert.strictEqual(await pending, false);
+  assert.strictEqual(f.view.getState(), kept); assert.match(f.$('mnInputStatus').textContent, /Code Editor changed/);
+  consent = deferred(); const cancelled = f.actions['mn-use-editor'](); await flush(); f.actions['mn-cancel'](); consent.resolve(true); await cancelled;
+  assert.strictEqual(f.view.getState(), kept);
+  e.state.text = ''; e.source.refresh(); assert.ok(f.$('mnUseEditor').disabled); assert.match(f.$('mnEditorAvailability').textContent, /nonempty/);
+  assert.strictEqual(await f.actions['mn-use-editor'](), false); assert.strictEqual(f.view.getState(), kept);
+  f.view.dispose();
+});
+
+t('MIN-06 result publication checks live editor identity even before a change notification', async () => {
+  const e = editorFixture(), f = fixture(true, undefined, { editorSource: e.source });
+  await f.initialize(); await f.actions['mn-use-editor']();
+  const run = f.actions['mn-optimize'](); await flush(); e.state.doc = {}; e.state.text = 'next()';
+  f.workers[0].reply(); await run;
+  assert.match(f.$('mnEditorState').textContent, /Earlier snapshot/); assert.match(f.$('mnOutputState').textContent, /Stale result/);
+  assert.ok(f.$('mnOptimize').disabled); assert.strictEqual(e.state.text, 'next()'); f.view.dispose();
 });

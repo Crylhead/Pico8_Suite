@@ -419,7 +419,60 @@ const P8Code = (() => {
 
   const NEW_CART = 'pico-8 cartridge // http://www.pico-8.com\nversion 42\n__lua__\n';
 
-  return { KEYWORDS, API, API_NAMES, CALLBACKS, lex, bracketPairs, codeTabs, outline, includes, includeTarget, maskLua, joinPath, includedCode, identifiers, opensBlock, DEDENT, callAt, splitCart, joinCart, NEW_CART };
+  /** Read-only editor handoff. Native identities stay private; snapshots contain plain copies only. */
+  function createSourceBridge({ read, focus }) {
+    const ids = new WeakMap(), listeners = new Set();
+    let serial = 0, revision = 0, fingerprint = null, status = null, published = null;
+    const id = (object) => {
+      if (!object || typeof object !== 'object') return null;
+      if (!ids.has(object)) ids.set(object, `code-source-${++serial}`);
+      return ids.get(object);
+    };
+    const freeze = (value) => {
+      if (value && typeof value === 'object' && !Object.isFrozen(value)) { Object.values(value).forEach(freeze); Object.freeze(value); }
+      return value;
+    };
+    function inspect(c) {
+      const p = c.parts || {};
+      const next = [c.ready, c.doc, c.loc, c.name, c.text, c.savedLua, p.head, p.tail, p.crlf, (p.sections || []).join('\0'), c.folder, c.folderReady, c.rel, c.parent?.rel, c.parent?.name];
+      if (fingerprint && next.every((value, index) => value === fingerprint[index])) return status;
+      fingerprint = next; revision++;
+      const kind = p.head == null ? 'lua' : 'p8';
+      const validName = typeof c.name === 'string' && c.name.toLowerCase().endsWith('.' + kind);
+      const nonempty = typeof c.text === 'string' && !!c.text.trim();
+      const available = c.ready !== false && nonempty && validName;
+      const reason = c.ready === false ? 'Code Editor is restoring its session. Wait for its source to load.' : !nonempty ? 'Open or type nonempty source in Code Editor first.' : !validName ? 'Open a valid .p8 text cartridge with a __lua__ section, or a .lua file, in Code Editor.' : '';
+      status = freeze({ available, reason, name: c.name || '', dirty: c.text !== c.savedLua,
+        identity: { documentId: id(c.doc), locationId: id(c.loc), folderId: id(c.folder), revision } });
+      return status;
+    }
+    const getStatus = () => inspect(read());
+    function getSnapshot() {
+      const c = read(), current = inspect(c);
+      if (!current.available) return null;
+      const p = c.parts;
+      const parts = { head: p.head, tail: p.tail, crlf: Boolean(p.crlf), sections: [...p.sections] };
+      const kind = parts.head == null ? 'lua' : 'p8', entryPath = c.rel || c.name;
+      return freeze({ identity: current.identity, name: c.name, dirty: current.dirty, lua: c.text, parts, tabs: codeTabs(c.text),
+        source: { kind, entryPath, files: [{ path: entryPath, text: kind === 'p8' ? joinCart(parts, c.text) : c.text }] },
+        context: { folder: c.folder ? { id: id(c.folder), name: String(c.folder.name || ''), ready: c.folderReady === true } : null,
+          relativePath: c.rel || null, parent: c.parent ? { rel: c.parent.rel, name: c.parent.name } : null },
+        selection: { start: c.selection?.start || 0, end: c.selection?.end || 0, direction: c.selection?.direction || 'none', top: c.selection?.top || 0, left: c.selection?.left || 0 } });
+    }
+    return Object.freeze({ getStatus, getSnapshot,
+      isCurrent(identity) { const now = getStatus().identity; return !!identity && identity.documentId === now.documentId && identity.locationId === now.locationId && identity.folderId === now.folderId && identity.revision === now.revision; },
+      subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+      refresh() {
+        const current = getStatus();
+        if (current === published) return;
+        published = current;
+        for (const fn of [...listeners]) { try { fn(current); } catch (_) { /* Observers cannot interrupt editing/saving. */ } }
+      },
+      focusCurrent() { focus?.(); },
+    });
+  }
+
+  return { KEYWORDS, API, API_NAMES, CALLBACKS, lex, bracketPairs, codeTabs, outline, includes, includeTarget, maskLua, joinPath, includedCode, identifiers, opensBlock, DEDENT, callAt, splitCart, joinCart, NEW_CART, createSourceBridge };
 })();
 
 // Saving the Code Editor's buffer into a file that PICO-8 or another tab may have changed (#4, #6).
