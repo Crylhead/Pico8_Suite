@@ -127,6 +127,16 @@ class NativeMinifierTests(unittest.TestCase):
         self.assertTrue(result['ok'], result)
         self.assertIn('♥', result['lua'])
 
+    def test_release_integration_goldens_match_the_pinned_real_engine(self):
+        data = json.loads((FIXTURES / 'release/engine-results.json').read_text())
+        lock = json.loads((ROOT / 'vendor/minifier-lock.json').read_text())
+        self.assertEqual(data['engine']['shrinko8Commit'], lock['shrinko8']['commit'])
+        self.assertEqual(data['engine']['pyodideVersion'], lock['pyodide']['version'])
+        for case in data['cases']:
+            with self.subTest(case=case['name']):
+                actual = json.loads(self.bridge.optimize(json.dumps(case['source'])))
+                self.assertEqual(actual, case['result'])
+
     def test_exported_carts_retain_assets_with_an_independent_native_reader(self):
         from pico_cart import CartFormat, read_cart
         from pico_defs import from_p8str
@@ -143,7 +153,7 @@ s = C.transition(s,{type:'ready',engine:engine()}); s = C.transition(s,{type:'st
 s = C.transition(s,{type:'complete',job:s.activeJob,result:data.result});
 process.stdout.write(JSON.stringify(E.build(s,{...C.prepareInput(data.source),sourceRevision:s.sourceRevision})));
 '''
-        for original in [text, text.replace('\n', '\r\n'), header + '-- comment only\n__gfx__\n__music__\n__sfx__\n']:
+        for original in [text, text.replace('\n', '\r\n'), header + '-- comment only\n__gfx__\n__music__\n__sfx__\n', (FIXTURES / 'release/representative.p8').read_text()]:
             with self.subTest(crlf='\r\n' in original), tempfile.TemporaryDirectory() as directory:
                 result = self.run_source(original, 'assets.p8')
                 self.assertTrue(result['ok'], result)

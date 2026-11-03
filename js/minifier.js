@@ -277,10 +277,20 @@ const P8Minifier = (() => {
       const now = adapter.getState();
       return !disposed && !editorStale && !intakePending && Core.canExport(now) && capture.result === now.result && capture.sourceRevision === now.sourceRevision && capture.optionsRevision === now.optionsRevision;
     }
+    function restoreExportFocus(opener) {
+      const doc = root.ownerDocument, active = doc.activeElement;
+      // Export renders disable the opener before the shared modal captures/restores it.
+      // Restore after re-enabling, without stealing focus from later user navigation/dialogs.
+      if (disposed || root.hidden || !root.contains(opener) || doc.querySelector?.('dialog[open]') || (active && active !== doc.body && active !== opener)) return;
+      const usable = (node) => node?.isConnected && !node.disabled && node.getClientRects().length;
+      const target = usable(opener) ? opener : $('mnOpen');
+      if (usable(target)) target.focus({ preventScroll: true });
+    }
     async function copyLua() {
       if (exportPending) return;
       let capture;
       try { capture = exportCapture(); } catch (err) { reportExport(err.message, 'error'); return; }
+      const opener = root.ownerDocument.activeElement;
       exportPending = true; reportExport('Copying optimized Lua…');
       try {
         if (!clipboard?.writeText) throw Core.error('E_CLIPBOARD', 'Clipboard access is unavailable. Select the read-only optimized Lua and copy it with your keyboard.');
@@ -289,12 +299,13 @@ const P8Minifier = (() => {
         const current = captureCurrent(capture);
         reportExport(current ? 'Copied optimized Lua · build copy. Original source unchanged.' : 'Copied the captured earlier build. Source changed meanwhile; refresh before exporting again.', current ? 'ok' : 'warn');
       } catch (_) { if (!disposed) reportExport('Copy failed: clipboard access is unavailable or denied. Select the read-only optimized Lua and copy it with your keyboard.', 'error'); }
-      finally { exportPending = false; if (!disposed) render(adapter.getState()); }
+      finally { exportPending = false; if (!disposed) { render(adapter.getState()); restoreExportFocus(opener); } }
     }
     async function downloadBuild() {
       if (exportPending) return;
       let capture;
       try { capture = exportCapture(); } catch (err) { reportExport(err.message, 'error'); return; }
+      const opener = root.ownerDocument.activeElement;
       exportPending = true; reportExport('Choose a build-copy download. Original source unchanged.');
       try {
         const { artifacts } = capture;
@@ -309,7 +320,7 @@ const P8Minifier = (() => {
         app.download(artifact.text, artifact.filename, artifact.type);
         reportExport(`Download requested: ${artifact.filename} · build copy. Browser download controls completion; original source is unchanged.`, 'ok');
       } catch (err) { if (!disposed) reportExport(err.code ? err.message : 'Download failed. The browser could not start the build-copy download. Original source unchanged.', 'error'); }
-      finally { exportPending = false; if (!disposed) render(adapter.getState()); }
+      finally { exportPending = false; if (!disposed) { render(adapter.getState()); restoreExportFocus(opener); } }
     }
     function openFile() {
       return replaceFrom(async (live) => {
