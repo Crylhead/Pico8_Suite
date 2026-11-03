@@ -21,7 +21,7 @@ body[data-workspace="minifier"] { height: 100vh; height: 100dvh; display: flex; 
 .layout-minifier summary { cursor: pointer; font-weight: var(--fw-label); padding: var(--space-2); border-radius: var(--radius-xs); }
 .mn-options details p { margin: var(--space-4) 0; }
 #mnFlags { display: block; overflow-wrap: anywhere; color: var(--muted); }
-#mnStatus, #mnEngine, #mnInputStatus, #mnSourceStorage, .mn-diagnostics li { overflow-wrap: anywhere; }
+#mnStatus, #mnEngine, #mnInputStatus, #mnSourceStorage, #mnMetricsState, #mnDiagnosticsShown, .mn-diagnostics li { overflow-wrap: anywhere; }
 .mn-results { display: flex; flex-direction: column; gap: var(--space-5); overflow-y: auto; min-height: 0; }
 #mnCompareMode { align-self: flex-start; flex-wrap: wrap; }
 .mn-code-views { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); flex: 1 0 220px; min-height: 220px; }
@@ -31,7 +31,16 @@ body[data-workspace="minifier"] { height: 100vh; height: 100dvh; display: flex; 
 .mn-code-pane .code-out { flex: 1 1 auto; min-height: 150px; max-height: none; resize: vertical; width: 100%; box-sizing: border-box; tab-size: 2; }
 .mn-code-pane .code-out:focus-visible, .layout-minifier summary:focus-visible { outline: var(--focus-width) solid var(--focus-color); outline-offset: var(--focus-offset); }
 .mn-metrics { border-top: 1px solid var(--border); padding-top: var(--space-4); }
-.mn-metrics table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.mn-metrics table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.mn-metrics th:first-child { width: 25%; }
+.mn-metrics th:last-child { width: 35%; }
+.mn-metrics th, .mn-metrics td { overflow-wrap: anywhere; }
+.mn-limit-state { display: block; font: var(--fs-xs)/1.4 var(--font); color: var(--muted); font-weight: var(--fw-control); }
+.mn-limit-state[data-tone="warn"], .mn-metrics td[data-tone="warn"] { color: var(--status-warn); }
+.mn-primary-metric th, .mn-primary-metric td { font-weight: var(--fw-label); }
+#mnMetricReasons { padding-top: var(--space-3); overflow-wrap: anywhere; }
+.mn-diag-filters { display: inline-flex; flex-wrap: wrap; max-width: 100%; margin: var(--space-4) 0; }
+.mn-diagnostic-location { max-width: 100%; white-space: normal; text-align: left; overflow-wrap: anywhere; }
 .mn-metrics th, .mn-metrics td { text-align: right; padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--border); }
 .mn-metrics th:first-child { text-align: left; }
 .mn-metrics td { font-family: var(--mono); }
@@ -44,6 +53,8 @@ body[data-workspace="minifier"] { height: 100vh; height: 100dvh; display: flex; 
   .mn-code-views[data-mode="compare"] { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 699px) {
+  .mn-metrics th:first-child { width: 30%; }
+  .mn-metrics th, .mn-metrics td { padding: var(--space-2); }
   body[data-workspace="minifier"] { height: auto; display: block; overflow: visible; }
   .layout-minifier { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
   .mn-options, .mn-results { overflow: visible; }

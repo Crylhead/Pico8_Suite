@@ -1,4 +1,4 @@
-// MIN-03: native DOM presenter. Intake, detailed reports, editor handoff and exports follow separately.
+// Native Minifier: immutable intake, truthful reports and revision-bound source locations.
 'use strict';
 const P8Minifier = (() => {
   const Core = typeof P8MinifierCore !== 'undefined' ? P8MinifierCore : require('./minifier-core.js');
@@ -7,6 +7,7 @@ const P8Minifier = (() => {
     const radios = (id) => [...$(id).querySelectorAll('[role=radio]')];
     let mode = media.matches ? 'compare' : 'original', explicitMode = false;
     let origin = 'In-memory source', previousDiagnostics = null, input = null;
+    let diagnosticFilter = 'all', renderedDiagnostics = null, renderedFilter = null, renderedDiagnosticJob = null;
     let intakeSerial = 0, intakePending = false, disposed = false;
     const needsLocalSetup = (s) => protocol === 'file:' || s.diagnostics.some((d) => d.code === 'E_LOCAL_HTTP');
     const setValue = (node, value) => {
@@ -14,6 +15,8 @@ const P8Minifier = (() => {
       const display = value.replace(/\r\n?/g, '\n');
       if (node.value !== display) node.value = display;
     };
+    const currentInput = (s) => input ? Object.freeze({ ...input, sourceRevision: s.sourceRevision }) : null;
+    const setText = (node, text) => { if (node.textContent !== text) node.textContent = text; };
     const actionButtons = (action, disabled) => {
       for (const button of root.ownerDocument.querySelectorAll(`[data-action="${action}"]`)) button.disabled = disabled;
     };
@@ -30,7 +33,7 @@ const P8Minifier = (() => {
         radios('mnCompareMode').find((b) => b.dataset.value === mode)?.focus({ preventScroll: true });
       }
     }
-    function statusText(s) {
+    function statusText(s, rows) {
       if (needsLocalSetup(s)) return 'Local setup required. Start the local Suite launcher to use Minifier.';
       if (s.status === 'ready' && s.enginePhase === 'cold') return 'Source loaded. Engine not ready. Load the engine to optimize.';
       const messages = {
@@ -40,12 +43,62 @@ const P8Minifier = (() => {
         error: 'Minifier failed.', unsupported: 'Unsupported input or settings.',
       };
       let text = messages[s.status];
+      if (Core.canExport(s)) {
+        if (rows[0].delta.direction === 'increase') text += ' Token count increased; review the result.';
+        if (rows.some((row) => row.afterOver)) text += ' Output is over the code budget. See measurements.';
+      }
       if (['error', 'unsupported'].includes(s.status)) text += ' ' + (s.diagnostics[0]?.message || 'Check diagnostics and retry.');
       else if (s.enginePhase === 'cold' && ['ready', 'stale', 'cancelled'].includes(s.status)) text += ' Load the engine to optimize.';
       return text;
     }
+    function renderDiagnostics(s) {
+      if (previousDiagnostics !== s.diagnostics) {
+        previousDiagnostics = s.diagnostics; diagnosticFilter = 'all';
+        if (s.diagnostics.length) $('mnDiagnostics').open = true;
+      }
+      setText($('mnDiagnosticsSummary'), `Diagnostics (${s.diagnostics.length})`);
+      const labels = { all: 'All', error: 'Errors', warning: 'Warnings', info: 'Info' };
+      for (const b of radios('mnDiagnosticFilter')) {
+        const severity = b.dataset.value;
+        b.setAttribute('aria-checked', String(severity === diagnosticFilter));
+        setText(b, `${labels[severity]} (${severity === 'all' ? s.diagnostics.length : s.diagnostics.filter((d) => d.severity === severity).length})`);
+      }
+      if (renderedDiagnostics === s.diagnostics && renderedFilter === diagnosticFilter && renderedDiagnosticJob === s.diagnosticJob) return;
+      renderedDiagnostics = s.diagnostics; renderedFilter = diagnosticFilter; renderedDiagnosticJob = s.diagnosticJob;
+      const shown = s.diagnostics.filter((d) => diagnosticFilter === 'all' || d.severity === diagnosticFilter);
+      setText($('mnDiagnosticsShown'), !s.diagnostics.length ? 'No diagnostics.' : `${shown.length} of ${s.diagnostics.length} diagnostics shown · ${labels[diagnosticFilter]}.`);
+      const items = shown.map((d) => {
+        const li = root.ownerDocument.createElement('li'); li.textContent = `${d.severity}: ${d.code} — ${d.message}`;
+        const location = Core.diagnosticLocation(s, currentInput(s), d);
+        if (location) {
+          const button = root.ownerDocument.createElement('button');
+          button.type = 'button'; button.className = 'btn btn-ghost btn-sm mn-diagnostic-location';
+          button.dataset.helpId = 'minifier.location';
+          button.textContent = `${d.file}:${d.line}${d.column ? ':' + d.column : ''}`;
+          button.setAttribute('aria-label', `Select source line ${location.line} for ${button.textContent}`);
+          button.addEventListener('click', () => {
+            const now = adapter.getState(), target = Core.diagnosticLocation(now, currentInput(now), d);
+            if (!target) return; // Saved callbacks from a different job/revision cannot navigate current source.
+            setMode('original');
+            const code = $('mnSourceCode'); code.focus(); code.setSelectionRange(target.start, target.end);
+            const height = parseFloat(root.ownerDocument.defaultView?.getComputedStyle(code).lineHeight) || 18;
+            code.scrollTop = Math.max(0, (target.line - 2) * height); code.scrollIntoView?.({ block: 'nearest' });
+          });
+          li.append(button);
+        } else if (d.file || d.line) {
+          const where = root.ownerDocument.createElement('span');
+          where.textContent = ` Reported location: ${d.file || 'unknown file'}${d.line ? ':' + d.line : ''}${d.column ? ':' + d.column : ''}`;
+          li.append(where);
+        }
+        return li;
+      });
+      if (!items.length) items.push(Object.assign(root.ownerDocument.createElement('li'), { textContent: s.diagnostics.length ? 'No diagnostics match this filter.' : 'No diagnostics.' }));
+      $('mnDiagnosticList').replaceChildren(...items);
+    }
     function render(s) {
       const controls = Core.describe(s), current = controls.canExport;
+      const rows = Core.metricRows(s.result);
+      const reportWarning = current && (rows[0].delta.direction === 'increase' || rows.some((row) => row.afterOver));
       const localSetup = needsLocalSetup(s);
       $('mnLocalSetup').hidden = !localSetup;
       root.dataset.state = s.status;
@@ -57,8 +110,8 @@ const P8Minifier = (() => {
       $('mnOutputState').textContent = !s.result ? 'No result.' : current ? 'Current result · generated build copy.' : 'Stale result · this is an earlier snapshot.';
       $('mnOutputState').dataset.tone = s.result && !current ? 'warn' : '';
       $('mnOutputPane').dataset.stale = String(!!s.result && !current);
-      $('mnStatus').textContent = statusText(s);
-      $('mnStatus').dataset.tone = localSetup ? 'warn' : ['error', 'unsupported'].includes(s.status) ? 'error' : ['cancelled', 'stale'].includes(s.status) ? 'warn' : ['success', 'unchanged'].includes(s.status) ? 'ok' : '';
+      setText($('mnStatus'), statusText(s, rows));
+      $('mnStatus').dataset.tone = localSetup || reportWarning ? 'warn' : ['error', 'unsupported'].includes(s.status) ? 'error' : ['cancelled', 'stale'].includes(s.status) ? 'warn' : ['success', 'unchanged'].includes(s.status) ? 'ok' : '';
       actionButtons('mn-optimize', intakePending || localSetup || !controls.canOptimize);
       actionButtons('mn-cancel', !controls.busy && !intakePending);
       for (const b of root.ownerDocument.querySelectorAll('[data-action="mn-cancel"]')) b.textContent = intakePending ? 'Cancel input' : 'Cancel';
@@ -76,26 +129,28 @@ const P8Minifier = (() => {
       $('mnRetry').hidden = localSetup || (s.enginePhase === 'ready' && s.status !== 'error');
       $('mnEngine').textContent = s.engine ? `Shrinko8 ${s.engine.shrinko8Version} · Pyodide ${s.engine.pyodideVersion}` : s.enginePhase === 'loading' ? 'Engine initializing locally…' : 'Engine not ready.';
       $('mnFlags').textContent = Core.validateSettings(s.options).ok ? Core.flagsFor(s.options).join(' ') : 'Unsupported settings.';
-      // Only actual engine measurements are shown. Limits, deltas and filtering belong to MIN-05.
-      $('mnMetricsState').textContent = !s.result ? 'No measurements.' : current ? 'Current result · code counts, not whole-file sizes.' : 'Stale measurements · earlier snapshot.';
-      for (const [id, key] of [['Tokens', 'tokens'], ['Chars', 'characters'], ['Bytes', 'compressedBytes']]) {
+      setText($('mnMetricsState'), !s.result ? 'No measurements. Choose Optimize to measure with Shrinko8.' : `${current ? 'Current result' : 'Stale measurements · earlier snapshot'} · Shrinko8 ${s.result.engine.shrinko8Version} · Lua code from “${s.result.job.entryPath}”.`);
+      const reasons = [];
+      for (const [index, id] of ['Tokens', 'Chars', 'Bytes'].entries()) {
+        const row = rows[index];
         for (const [suffix, side] of [['Before', 'original'], ['After', 'optimized']]) {
-          const m = s.result?.metrics[side];
+          const value = side === 'original' ? row.before : row.after, reason = side === 'original' ? row.beforeReason : row.afterReason;
           const cell = $('mn' + id + suffix);
-          cell.textContent = m?.[key] == null ? '—' : String(m[key]);
-          cell.setAttribute('aria-label', m?.[key] == null ? `${key}: unavailable. ${key === 'compressedBytes' ? m?.compressedReason || 'No engine measurement.' : 'No engine measurement.'}` : `${key}: ${m[key]}`);
+          setText(cell, value === null ? '—' : String(value));
+          cell.setAttribute('aria-label', value === null ? `${row.label}: unavailable. ${reason}` : `${row.label}: ${value}`);
+          if (s.result && value === null) reasons.push(`${row.label}, ${suffix.toLowerCase()}: ${reason}`);
+          if (row.limit !== null) {
+            const over = side === 'original' ? row.beforeOver : row.afterOver;
+            const budget = $('mn' + id + suffix + 'Limit');
+            setText(budget, value === null ? '' : over ? `Over limit by ${value - row.limit}` : 'Within limit');
+            budget.dataset.tone = over ? 'warn' : '';
+          }
         }
+        setText($('mn' + id + 'Change'), row.change);
+        $('mn' + id + 'Change').dataset.tone = row.delta.direction === 'increase' ? 'warn' : '';
       }
-      if (previousDiagnostics !== s.diagnostics) {
-        previousDiagnostics = s.diagnostics;
-        $('mnDiagnosticsSummary').textContent = `Diagnostics (${s.diagnostics.length})`;
-        $('mnDiagnosticList').replaceChildren(...(s.diagnostics.length ? s.diagnostics.map((d) => {
-          const li = root.ownerDocument.createElement('li');
-          li.textContent = `${d.severity}: ${d.code} — ${d.message}`;
-          return li;
-        }) : [Object.assign(root.ownerDocument.createElement('li'), { textContent: 'No diagnostics.' })]));
-        if (s.diagnostics.length) $('mnDiagnostics').open = true;
-      }
+      setText($('mnMetricReasons'), reasons.join(' ')); $('mnMetricReasons').hidden = !reasons.length;
+      renderDiagnostics(s);
       // Dedicated output actions await MIN-08 content/preservation validation.
       $('mnCopy').disabled = true; $('mnDownload').disabled = true;
     }
@@ -188,10 +243,15 @@ const P8Minifier = (() => {
       if (b && !b.disabled) adapter.setOptions({ profile: b.dataset.value });
     };
     const onTarget = () => adapter.setOptions({ target: $('mnTarget').value });
+    const onDiagnosticFilter = (e) => {
+      const b = e.target.closest('[role=radio]');
+      if (b && ['all', 'error', 'warning', 'info'].includes(b.dataset.value)) { diagnosticFilter = b.dataset.value; renderDiagnostics(adapter.getState()); }
+    };
     const onResize = () => { if (!explicitMode) setMode(media.matches ? 'compare' : 'original', false); };
     $('mnCompareMode').addEventListener('click', onView);
     $('mnProfile').addEventListener('click', onProfile);
     $('mnTarget').addEventListener('change', onTarget);
+    $('mnDiagnosticFilter').addEventListener('click', onDiagnosticFilter);
     media.addEventListener('change', onResize);
     const unsubscribe = adapter.subscribe(render);
     setMode(mode, false); render(adapter.getState());
@@ -201,7 +261,7 @@ const P8Minifier = (() => {
         cancelIntake(); commit(prepared, provenance);
         inputStatus(snapshot ? 'Source snapshot loaded. Original files unchanged.' : 'Source cleared.');
       },
-      getInput: () => input ? Object.freeze({ ...input, sourceRevision: adapter.getState().sourceRevision }) : null,
+      getInput: () => currentInput(adapter.getState()),
       getState: adapter.getState, initialize: () => swallow(() => adapter.initialize()), setMode,
       cancel() { cancelIntake(); return adapter.cancel(); },
       dispose() {
@@ -210,6 +270,7 @@ const P8Minifier = (() => {
         $('mnCompareMode').removeEventListener('click', onView);
         $('mnProfile').removeEventListener('click', onProfile);
         $('mnTarget').removeEventListener('change', onTarget);
+        $('mnDiagnosticFilter').removeEventListener('click', onDiagnosticFilter);
         adapter.dispose();
       },
     });

@@ -130,7 +130,7 @@ const P8MinifierCore = (() => {
   const jobOptions = (job) => ({ profile: job.profile, target: job.target });
   const idle = (s) => !validateSettings(s.options).ok ? 'unsupported' : s.enginePhase === 'loading' ? 'loading' : !hasSource(s) ? 'empty' : s.result ? 'stale' : 'ready';
   function initialState() {
-    return freeze({ revision: 0, sourceRevision: 0, optionsRevision: 0, source: null, options: DEFAULTS, engine: null, enginePhase: 'cold', status: 'empty', latestJobId: null, activeJob: null, result: null, diagnostics: [] });
+    return freeze({ revision: 0, sourceRevision: 0, optionsRevision: 0, source: null, options: DEFAULTS, engine: null, enginePhase: 'cold', status: 'empty', latestJobId: null, activeJob: null, result: null, diagnosticJob: null, diagnostics: [] });
   }
   function transition(s, e) {
     let n = { ...s };
@@ -144,11 +144,12 @@ const P8MinifierCore = (() => {
       n.revision++;
       n[e.type === 'source' ? 'sourceRevision' : 'optionsRevision'] = n.revision;
       n.activeJob = null; n.latestJobId = null;
+      n.diagnosticJob = null;
       n.diagnostics = e.type === 'options' ? validateSettings(n.options).diagnostics : [];
       if (e.engineReset) { n.enginePhase = 'cold'; n.engine = null; }
       n.status = idle(n);
     } else if (e.type === 'loading') {
-      n.enginePhase = 'loading'; n.status = 'loading'; n.diagnostics = [];
+      n.enginePhase = 'loading'; n.status = 'loading'; n.diagnostics = []; n.diagnosticJob = null;
     } else if (e.type === 'ready') {
       n.engine = engineSnapshot(e.engine); n.enginePhase = 'ready';
       n.status = n.activeJob ? 'running' : idle(n);
@@ -159,20 +160,22 @@ const P8MinifierCore = (() => {
       n.revision++;
       n.activeJob = freeze({ jobId: `minifier-${n.revision}`, sourceRevision: s.sourceRevision, optionsRevision: s.optionsRevision, ...s.source, ...s.options });
       n.latestJobId = n.activeJob.jobId;
-      n.status = s.enginePhase === 'ready' ? 'running' : 'loading'; n.diagnostics = [];
+      n.status = s.enginePhase === 'ready' ? 'running' : 'loading'; n.diagnostics = []; n.diagnosticJob = null;
     } else if (e.type === 'complete') {
       if (!sameJob(s.activeJob, e.job) || e.job.sourceRevision !== s.sourceRevision || e.job.optionsRevision !== s.optionsRevision) return s;
       if (s.enginePhase !== 'ready' || !s.engine) throw error('E_RESULT_INVALID', 'Output arrived before engine initialization.');
       n.result = resultSnapshot(s.activeJob, s.engine, e.result);
       n.activeJob = null; n.diagnostics = n.result.diagnostics;
+      n.diagnosticJob = n.result.job;
       n.status = n.result.metrics.original.tokens === n.result.metrics.optimized.tokens ? 'unchanged' : 'success';
     } else if (e.type === 'failure') {
       if (e.job && !sameJob(s.activeJob, e.job)) return s;
       n.activeJob = null; n.diagnostics = normalizeDiagnostics(e.diagnostics);
+      n.diagnosticJob = e.job ? s.activeJob : null;
       if (e.engineReset) { n.enginePhase = 'cold'; n.engine = null; }
       n.status = n.diagnostics.some((d) => /UNSUPPORTED/.test(d.code) || d.code === 'E_LOCAL_HTTP') ? 'unsupported' : 'error';
     } else if (e.type === 'cancel' || e.type === 'reset') {
-      n.revision++; n.activeJob = null; n.latestJobId = null; n.engine = null; n.enginePhase = 'cold'; n.diagnostics = [];
+      n.revision++; n.activeJob = null; n.latestJobId = null; n.engine = null; n.enginePhase = 'cold'; n.diagnostics = []; n.diagnosticJob = null;
       n.status = e.type === 'cancel' ? 'cancelled' : idle(n);
     } else throw error('E_STATE_EVENT', 'Unknown Minifier state transition.');
     return freeze(n);
@@ -183,11 +186,12 @@ const P8MinifierCore = (() => {
   function describe(s) {
     return freeze({ state: s.status, busy: ['loading', 'running'].includes(s.status), stale: !!s.result && !canExport(s), canExport: canExport(s), canOptimize: hasSource(s) && s.enginePhase === 'ready' && !['loading', 'running', 'unsupported'].includes(s.status) && validateSettings(s.options).ok });
   }
+  const formatPercent = (percent) => percent === null ? 'percentage unavailable' : percent > 0 && percent < 0.01 ? '<0.01%' : `${Number(percent.toFixed(2))}%`;
   function metricDelta(before, after) {
     if (!count(before) || !count(after)) return freeze({ available: false, text: '—', reason: 'Comparable engine measurements are unavailable.', saved: null, percent: null });
     const saved = before - after;
     const percent = before === 0 ? (after === 0 ? 0 : null) : Math.abs(saved) * 100 / before;
-    const percentText = percent === null ? 'percentage unavailable' : `${Number(percent.toFixed(2))}%`;
+    const percentText = formatPercent(percent);
     return freeze({ available: true, saved, percent, direction: saved < 0 ? 'increase' : saved > 0 ? 'saved' : 'unchanged', text: saved === 0 ? '0 (0%)' : `${Math.abs(saved)} ${saved < 0 ? 'increase' : 'saved'} (${percentText})` });
   }
   function outputFilename(path, kind) {
@@ -195,6 +199,34 @@ const P8MinifierCore = (() => {
     const base = String(path || 'untitled').split(/[\\/]/).pop().replace(/[\x00-\x1f<>:"|?*]/g, '_').replace(/\.(?:p8|lua)$/i, '') || 'untitled';
     return `${base}.min.${kind}`;
   }
-  return { DEFAULTS, FLAGS, STATES, settings, validateSettings, flagsFor, sourceSnapshot, inputKind, decodeText, prepareInput, textInput, normalizeDiagnostics, engineSnapshot, engineKey, sameJob, resultSnapshot, initialState, transition, describe, canExport, metricDelta, outputFilename, error };
+  function metricRows(result) {
+    return freeze([['Tokens', 'tokens', 8192], ['Characters', 'characters', 65535], ['Compressed code bytes', 'compressedBytes', null]].map(([label, key, limit]) => {
+      const original = result?.metrics?.original, optimized = result?.metrics?.optimized;
+      const before = count(original?.[key]) ? original[key] : null, after = count(optimized?.[key]) ? optimized[key] : null;
+      const reason = (side) => key === 'compressedBytes' && typeof side?.compressedReason === 'string' ? side.compressedReason : 'No engine measurement is available.';
+      const delta = metricDelta(before, after);
+      const percent = formatPercent(delta.percent);
+      const change = delta.direction === 'increase' ? `Increased by ${-delta.saved} (${percent})` : delta.text;
+      return { label, key, limit, before, after, beforeReason: before === null ? reason(original) : '', afterReason: after === null ? reason(optimized) : '',
+        delta, change, beforeOver: limit !== null && before !== null && before > limit, afterOver: limit !== null && after !== null && after > limit };
+    }));
+  }
+  function diagnosticLocation(state, input, diagnostic) {
+    const job = state.diagnosticJob;
+    if (!job || !input || !state.diagnostics.includes(diagnostic) || job.jobId !== state.latestJobId || job.sourceRevision !== state.sourceRevision || job.optionsRevision !== state.optionsRevision || input.sourceRevision !== state.sourceRevision || diagnostic.file !== job.entryPath || input.source.entryPath !== job.entryPath || !count(diagnostic.line) || diagnostic.line < 1) return null;
+    const text = job.files.find((f) => f.path === job.entryPath)?.text;
+    if (input.source.files.find((f) => f.path === job.entryPath)?.text !== text) return null;
+    let line = diagnostic.line;
+    if (job.kind === 'p8') {
+      if (!input.original.cart) return null;
+      line -= input.original.cart.header.replace(/\r\n?/g, '\n').split('\n').length - 1;
+    }
+    const lines = input.lua.replace(/\r\n?/g, '\n').split('\n');
+    if (line < 1 || line > lines.length) return null;
+    const start = lines.slice(0, line - 1).reduce((n, value) => n + value.length + 1, 0);
+    // Select the whole line: engine columns count P8SCII, while DOM offsets count UTF-16.
+    return freeze({ file: diagnostic.file, reportedLine: diagnostic.line, line, start, end: start + lines[line - 1].length });
+  }
+  return { DEFAULTS, FLAGS, STATES, settings, validateSettings, flagsFor, sourceSnapshot, inputKind, decodeText, prepareInput, textInput, normalizeDiagnostics, engineSnapshot, engineKey, sameJob, resultSnapshot, initialState, transition, describe, canExport, metricDelta, metricRows, diagnosticLocation, outputFilename, error };
 })();
 if (typeof module !== 'undefined') module.exports = P8MinifierCore;

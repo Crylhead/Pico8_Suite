@@ -16,12 +16,13 @@ function fixture(wide = true, protocol, io = {}) {
     return { id, dataset: {}, attrs: {}, listeners: {}, disabled: false, hidden: false, value: '', textContent: '', children: [], ownerDocument: doc,
       setAttribute(key, value) { this.attrs[key] = value; }, addEventListener(type, fn) { this.listeners[type] = fn; }, removeEventListener(type) { delete this.listeners[type]; },
       replaceChildren(...children) { this.children = children; }, contains(other) { return this === other || this.children.includes(other); },
+      append(...children) { this.children.push(...children); }, setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; },
       focus() { doc.activeElement = this; }, closest() { return this; }, querySelectorAll() { return this.children; } };
   }
   for (const m of markup.matchAll(/<[^>]+\sid="([^"]+)"[^>]*>/g)) {
     const n = node(m[1]); n.disabled = /\sdisabled\b/.test(m[0]); n.action = /data-action="([^"]+)"/.exec(m[0])?.[1]; nodes.set(n.id, n);
   }
-  for (const [id, values] of [['mnProfile', ['minimal', 'safe', 'aggressive']], ['mnCompareMode', ['compare', 'original', 'optimized']]]) {
+  for (const [id, values] of [['mnProfile', ['minimal', 'safe', 'aggressive']], ['mnCompareMode', ['compare', 'original', 'optimized']], ['mnDiagnosticFilter', ['all', 'error', 'warning', 'info']]]) {
     nodes.get(id).children = values.map((value) => Object.assign(node(), { dataset: { value } }));
   }
   for (const side of ['Source', 'Output']) nodes.get(`mn${side}Pane`).children.push(nodes.get(`mn${side}Code`));
@@ -192,4 +193,43 @@ t('MIN-04 paste uses a labelled modal, keeps invalid/empty text there and commit
   assert.strictEqual(f.$('mnProvenance').textContent, 'Pasted Lua'); assert.strictEqual(f.view.getState().source.entryPath, 'pasted.lua');
   const before = f.view.getState(); const cancel = f.actions['mn-paste'](); f.dialogs.at(-1).finish(null); await cancel;
   assert.strictEqual(f.view.getState(), before); assert.strictEqual(f.workers.length, 0); f.view.dispose();
+});
+
+t('MIN-05 displays valid zero savings, token increases, over-budget counts and visible unavailable reasons', async () => {
+  const f = fixture(); await f.initialize(); f.view.load(source());
+  await f.finish({ result: result(4, 4) });
+  assert.strictEqual(f.$('mnTokensChange').textContent, '0 (0%)'); assert.match(f.$('mnStatus').textContent, /No token savings/);
+  assert.strictEqual(f.$('mnBytesChange').textContent, '—'); assert.match(f.$('mnMetricReasons').textContent, /Not emitted/);
+  await f.finish({ result: result(4, 5) });
+  assert.strictEqual(f.$('mnTokensChange').textContent, 'Increased by 1 (25%)'); assert.strictEqual(f.$('mnStatus').dataset.tone, 'warn');
+  const oversized = result(9000, 8500); oversized.metrics.optimized.characters = 65536;
+  await f.finish({ result: oversized });
+  assert.strictEqual(f.$('mnTokensAfterLimit').textContent, 'Over limit by 308'); assert.strictEqual(f.$('mnCharsAfterLimit').textContent, 'Over limit by 1');
+  assert.match(f.$('mnStatus').textContent, /over the code budget/);
+  f.view.load(source('flip()')); assert.match(f.$('mnMetricsState').textContent, /Stale measurements/); assert.strictEqual(f.$('mnTokensAfter').textContent, '8500');
+  f.view.dispose();
+});
+
+t('MIN-05 diagnostics filter plain data and select only the exact current snapshot; old callbacks cannot navigate', async () => {
+  const f = fixture(); await f.initialize(); f.view.load(source('print("♥")\nlocal = 1', 'demo.lua'));
+  const run = f.actions['mn-optimize'](); await flush();
+  f.workers[0].reply({ type: 'error', result: { diagnostics: [
+    { severity: 'error', code: 'E_TEST', message: '<img src=x> literal', file: 'demo.lua', line: 2, column: 7 },
+    { severity: 'warning', code: 'W_TEST', message: 'warning', file: 'other.lua', line: 1 },
+    { severity: 'info', code: 'I_TEST', message: 'info', file: 'demo.lua', line: 999 },
+  ] } }); await run;
+  const items = f.$('mnDiagnosticList').children;
+  assert.ok(items[0].textContent.includes('<img src=x>')); assert.strictEqual(items[0].children[0].type, 'button');
+  assert.strictEqual(items[1].children[0].type, undefined); assert.strictEqual(items[2].children[0].type, undefined);
+  const location = items[0].children[0]; f.view.setMode('optimized'); location.listeners.click();
+  assert.strictEqual(f.$('mnCodeViews').dataset.mode, 'original'); assert.strictEqual(f.doc.activeElement, f.$('mnSourceCode'));
+  assert.strictEqual(f.$('mnSourceCode').value.slice(f.$('mnSourceCode').selectionStart, f.$('mnSourceCode').selectionEnd), 'local = 1');
+  for (const severity of ['error', 'warning', 'info']) {
+    const b = f.$('mnDiagnosticFilter').children.find((b) => b.dataset.value === severity);
+    f.$('mnDiagnosticFilter').listeners.click({ target: b });
+    assert.strictEqual(f.$('mnDiagnosticList').children.length, 1); assert.ok(f.$('mnDiagnosticList').children[0].textContent.startsWith(severity));
+  }
+  f.view.load(source('new()')); f.view.setMode('optimized'); const focus = f.doc.activeElement;
+  location.listeners.click(); assert.strictEqual(f.$('mnCodeViews').dataset.mode, 'optimized'); assert.strictEqual(f.doc.activeElement, focus);
+  f.view.dispose();
 });

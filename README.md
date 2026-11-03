@@ -18,7 +18,7 @@ Browser-based PICO-8 graphics suite, developed in this standalone repository. It
 
 ## Minifier workspace — staged implementation
 
-**Develop → Minifier** now provides the native read-only comparison workspace with real local Shrinko8 integration, **Minimal** profile and **Tokens** focus. Compare / Original / Optimized views, basic measured counts, engine status, Cancel and Retry use the shared job adapter. Opening the workspace initializes the engine but never optimizes automatically.
+**Develop → Minifier** now provides the native read-only comparison workspace with real local Shrinko8 integration, **Minimal** profile and **Tokens** focus. Compare / Original / Optimized views, actual same-job counts with savings/increases, budget checks, unavailable reasons and filtered diagnostics use the shared job adapter. Reliable diagnostic locations select the current read-only source line; stale results are labelled. Opening the workspace initializes the engine but never optimizes automatically.
 
 **Open file…** accepts UTF-8 `.p8` / `.lua`; **Paste Lua…** loads a snapshot named `pasted.lua`. Cartridge intake retains the full original text and non-Lua data; the comparison shows Lua. Replacing a snapshot asks first. Cancelled/failed input leaves the current source/result untouched, and import never optimizes or saves automatically. Lua syntax is checked on explicit Optimize. Snapshots are page-only and lost on reload. **Use current editor, Copy optimized Lua and Download remain unavailable** until their roadmap steps; includes and PNG imports are unsupported. See [roadmap #130](https://github.com/Crylhead/Pico8_Suite/issues/130) and [engine packaging/setup](docs/MINIFIER_ENGINE.md).
 
