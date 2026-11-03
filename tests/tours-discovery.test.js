@@ -109,18 +109,19 @@ t('#108 menu action uses current workspace/tab and gives a visible Help fallback
 t('#108 chooser filters, keeps progress, refreshes registrations and launches only after its modal closes', async () => {
   const f = setup();
   const showing = f.actions['quick-tours']();
+  const total = Data.TOURS.length;
   assert.strictEqual(f.focused, f.input);
-  assert.strictEqual(f.count.textContent, '3 of 3 tours');
+  assert.strictEqual(f.count.textContent, `${total} of ${total} tours`);
   const studio = f.list.children.find((li) => li.children[1].dataset.tour === 'studio');
   assert.strictEqual(studio.children[1].textContent, 'Replay');
   assert.match(studio.children[0].children[1].textContent, /Completed.*Current tool/);
   assert.match(f.list.children[0].children[0].children[1].textContent, /Suite overview/);
   f.input.value = 'TERRAIN'; f.input.listeners.input();
-  assert.strictEqual(f.count.textContent, '1 of 3 tours');
+  assert.strictEqual(f.count.textContent, `1 of ${total} tours`);
   f.input.value = 'no-such-tour'; f.input.listeners.input();
   assert.match(f.list.children[0].textContent, /No tours match/);
   f.input.value = ''; f.input.listeners.input();
-  f.register(tour()); assert.strictEqual(f.count.textContent, '4 of 4 tours');
+  f.register(tour()); assert.strictEqual(f.count.textContent, `${total + 1} of ${total + 1} tours`);
   const button = f.list.children.find((li) => li.children[1].dataset.tour === 'plugin').children[1];
   f.list.listeners.click({ target: button });
   assert.strictEqual(f.starts.length, 0, 'no tour before the modal promise settles');
@@ -130,7 +131,7 @@ t('#108 chooser filters, keeps progress, refreshes registrations and launches on
   assert.strictEqual(f.starts[0].opts.opener, f.helpButton);
   const count = f.count;
   f.register(tour({ id: 'later' }));
-  assert.strictEqual(count.textContent, '4 of 4 tours', 'closed selector has no refresh callback');
+  assert.strictEqual(count.textContent, `${total + 1} of ${total + 1} tours`, 'closed selector has no refresh callback');
 });
 
 t('#108 cancelling selector starts nothing; focus uses the opener or the current visible workspace', async () => {
