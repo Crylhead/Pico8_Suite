@@ -72,6 +72,21 @@ For each tour, start it from its tool with Help › Tour this tool, and once fro
 2. Select each Extra Tools tab (LUT, Wave, Line, Terrain), focus a control without a help ID and press F1. Each opens its own subject. Check a known focused help ID takes precedence, and an unknown ID or an extension without a subtopic falls back safely.
 3. Search for another tool, clear the query, browse the index and use Return to the original context. Follow a related topic, then Full documentation: the reference must follow the topic being read. Repeat keyboard-only and at 320 CSS px; help remains local/offline.
 
+## Help detail browser acceptance (#107)
+
+Recorded 2026-11-04 with Chromium 153.0.8010.0 on Linux/headless, using a disposable local session based on `612883a` plus the #107 follow-up. In each workspace, the real Settings dialog ran **Off → Concise → Detailed → Off → Concise**, without reloading. Mouse hover and keyboard focus matched the registry at each level; Detailed included its F1 pointer, Off showed no custom tip, and Escape dismissed a tip without moving focus.
+
+| Workspace | Registry control checked | Authored native title with Off | Reenable result |
+| --- | --- | --- | --- |
+| Pixel Studio | Ink select/group | Pixel perfect keeps `Pixel perfect (P)` | Full child title restored; no inherited Ink tip over it |
+| Tile Maker | Threshold | Disabled Auto Generate Tiles explanation removed | Native explanation restored, custom tip suppressed while disabled |
+| Map Editor | Size… | Draw keeps `Draw (B)` | Full native explanation restored; icon name retained |
+| Project Audit | Choose Project Folder… | Rescan keeps `F5` | Full native explanation restored |
+
+Additional checks passed: importing/building an 8×8 test image enabled Auto Generate Tiles, after which its native title was claimed and exactly one registry tip appeared; empty-title buttons in Terrain's dynamically built mode group allowed registry help and obeyed Off; the live Map fit status survived preference changes; a tap on the already-selected Pixel Studio Preview radio supplied a hint in Concise and none in Off; icon names and Preview F1 help remained available. No browser JavaScript errors occurred. Focused regressions cover disabled controls, a control disabled during the delay, nested native ownership and empty-title builders.
+
+These checks inspect actual browser DOM/title state and custom popovers; operating-system native-tooltip pixels were not captured. Touch was browser-emulated. Physical touch devices and other browser engines remain untested. This record completes the outstanding #154 browser follow-up and documents the two overlap fixes; it does not claim the broader #110 all-control walkthrough.
+
 ## Contextual help on primary controls (#110)
 
 With Help detail Concise, hover and keyboard-focus one marked control per workspace and check that exactly one tooltip appears (no browser tooltip beside it) and that it matches F1: Pixel Studio Ink, Sieve, Remap…, Layers; Palette & Fades Normal/Ramp, Dark/Bright, Auto Fill, Gamma, fade slider; Tile Maker Import Image…, threshold, Rebuild, view switch, Edit Tiles…; Map Editor Size…, Reload tileset; Code Editor Run, Save, token meter; Data Tools Convert, Image File…; Project Audit Choose Project Folder…, columns, details view; Data Carts Inspect/Pack, Show as; Cart Builder stages and a part’s Move…; Extra Tools LUT type, Wave Export waves.p8, Line Export Lua…, Terrain Simple/Advanced and the Terrain splitter. Switch to Off: none of these tips appears and every control keeps its name. Switch to Detailed: the same text plus the F1 pointer.

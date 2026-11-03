@@ -11,6 +11,8 @@
 // - A native `title` on an opted-in control that already has visible text or an aria-label is
 //   moved to data-title-orig: the registry tip replaces it so one control never shows two
 //   tooltips and Off applies consistently. Controls without such a name keep their title.
+// - Disabled controls retaining a native title, and titled children inside help groups, use that
+//   native fallback without an additional registry tooltip.
 // - Legacy native titles authored in index.html (#107): with Off, a title's optional explanation is
 //   dropped while names and shortcut keys stay (offTitle). "Draw (B) · paints the selected tile"
 //   becomes "Draw (B)"; "Save into the file (Ctrl+S)" on a button already named Save becomes
@@ -127,6 +129,11 @@ const P8Tips = (() => {
 
     const level = () => prefs.get().helpLevel;
     const target = (node) => (node && node.closest ? node.closest('[data-help-id]') : null);
+    const hasNativeTitle = (el) => !!el.getAttribute('title')?.trim();
+    const nativeChild = (node) => {
+      const owner = target(node), native = node?.closest?.('[title]');
+      return owner && native && hasNativeTitle(native) && native !== owner && owner.contains(native);
+    };
     const focused = () => current && current.el.contains(document.activeElement);
     const hovered = () => current && pointer && inHoverArea(current.el.getBoundingClientRect(), tip.getBoundingClientRect(), current.side, pointer.x, pointer.y);
     const rememberPointer = (e) => { pointer = { x: e.clientX, y: e.clientY }; };
@@ -149,6 +156,9 @@ const P8Tips = (() => {
     }
 
     function show(el) {
+      // Disabled controls retain their native explanation; do not layer a custom tip over it.
+      // Recheck here too: availability can change during the hover/focus delay.
+      if (el.disabled && hasNativeTitle(el)) return;
       const t = resolveTip(help, el.dataset.helpId, level());
       if (!t) return;
       hide();
@@ -172,7 +182,7 @@ const P8Tips = (() => {
 
     function schedule(el, delay) {
       cancelPending();
-      if (level() === 'off') return;
+      if (level() === 'off' || (el.disabled && hasNativeTitle(el))) return;
       pending = el;
       timer = setTimeout(() => { cancelPending(); if (el.isConnected) show(el); }, delay);
     }
@@ -188,6 +198,8 @@ const P8Tips = (() => {
     document.addEventListener('pointerover', quiet((e) => {
       if (e.pointerType && e.pointerType !== 'mouse' && e.pointerType !== 'pen') return;
       rememberPointer(e);
+      // A titled child owns its native name/status; inherited group help must not cover it.
+      if (nativeChild(e.target)) { hide(); return; }
       // The visual tip is pointer-transparent: controls beneath it must not replace its text.
       if (current && (focused() || hovered())) return;
       const el = target(e.target);
@@ -205,6 +217,7 @@ const P8Tips = (() => {
       if (current && current.el === el && !focused() && (!e.relatedTarget || !hovered())) hide();
     }));
     document.addEventListener('focusin', quiet((e) => {
+      if (nativeChild(e.target)) { hide(); return; }
       const el = target(e.target);
       if (!el) { if (!hovered()) hide(); return; }
       if (current && current.el === el) { cancelPending(); return; }
