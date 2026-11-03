@@ -936,8 +936,8 @@
 
   const showMessage = (title, message, kind) => modal({ title, body: message, alert: kind === 'error' || kind === 'warn' });
 
-  const confirmDialog = (title, message, yes = 'Yes') =>
-    modal({ title, body: message, buttons: [{ label: 'No', value: false }, { label: yes, value: true, primary: true }] })
+  const confirmDialog = (title, message, yes = 'Yes', no = 'No') =>
+    modal({ title, body: message, buttons: [{ label: no, value: false }, { label: yes, value: true, primary: true }] })
       .then((v) => v === true);
 
   async function copyText(text, textarea) {

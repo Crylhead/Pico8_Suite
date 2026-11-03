@@ -451,7 +451,8 @@ if (typeof module !== 'undefined') module.exports = P8Storage;
    */
   async function openIn(consumerId, a, { saved = true } = {}) {
     const c = consumers.find((x) => x.id === consumerId);
-    const r = await P8Transfer.send(c, a, { confirm: (m) => confirmDialog('Replace unsaved work?', m, 'Replace') });
+    // the message offers "Replace … or cancel": the buttons say exactly that (#57)
+    const r = await P8Transfer.send(c, a, { confirm: (m) => confirmDialog('Replace unsaved work?', m, 'Replace', 'Cancel') });
     if (r.status === 'done') {
       closeLibrary();
       if (r.confirmed) toast(P8Transfer.doneMessage(c, a, { saved }), 'info', 5200);
