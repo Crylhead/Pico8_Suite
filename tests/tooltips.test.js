@@ -35,6 +35,22 @@ t('#60 placement stays on screen and never covers the target', () => {
   assert.ok(above.left + 200 <= 796);
 });
 
+t('#60 when neither below nor above fits, the tip goes beside the target or is shortened, never over it', () => {
+  const covers = (p, r, w, h) => p && !(p.left + w <= r.left || r.left + r.width <= p.left || p.top + (p.maxHeight ?? h) <= r.top || r.bottom <= p.top);
+  // short, wide viewport: room to the right
+  const r1 = { top: 40, bottom: 70, left: 10, width: 100 };
+  const p1 = Tips.place(r1, 200, 130, 800, 150);
+  assert.strictEqual(p1.side, 'right');
+  assert.ok(!covers(p1, r1, 200, 130));
+  // narrow and short (320 x 150, the case found in the browser): shortened on the larger side
+  const r2 = { top: 58, bottom: 92, left: 27, width: 162 };
+  const p2 = Tips.place(r2, 304, 131, 320, 150);
+  assert.ok(p2 && p2.maxHeight > 0 && p2.maxHeight < 131, JSON.stringify(p2));
+  assert.ok(!covers(p2, r2, 304, 131), JSON.stringify(p2));
+  // no room for even two lines anywhere: no tip rather than one over the control
+  assert.strictEqual(Tips.place({ top: 20, bottom: 80, left: 10, width: 300 }, 304, 131, 320, 100), null);
+});
+
 t('#60 every data-help-id in index.html resolves in the help registry', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const ids = [...html.matchAll(/data-help-id="([^"]+)"/g)].map((m) => m[1]);
