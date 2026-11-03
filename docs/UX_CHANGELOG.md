@@ -114,7 +114,7 @@ Keep these issues open rather than treating a green model test as full acceptanc
 | #65 | Keyboard/focus/contrast walkthrough done 2026-11-03 (`docs/ACCESSIBILITY.md`); splitter reset announcement fixed. No screen reader available. |
 | #66 | Addressed in the follow-up below (disposable-folder walkthrough; Commit-stage baseline fixed). Native picker/permission UI not shown. |
 | #67 | Addressed: independent foreground before/after, frame pacing and worker-retry evidence in `docs/PERFORMANCE_BASELINE_TERRAIN.md` (2026-11-03). |
-| #68 | First-run/returning-user browser journey, task navigation and narrow-layout checks. |
+| #68 | Addressed in the follow-up below (walkthrough; missing project folders now detected). |
 
 ## Follow-up: #62 default diagnostics export is allowlist-based (2026-11-03)
 
@@ -269,3 +269,20 @@ Following resumes only through an explicit request in Data Carts, when the resul
 - No exceptions were thrown and no diagnostics were recorded.
 
 Not covered: the native folder picker and permission prompt UI (stubbed), and a real folder on disk.
+
+## Follow-up: #68 Home launcher walkthrough (2026-11-03)
+
+Headless Chrome with a fresh browser profile, driven over the DevTools protocol with real keyboard and pointer input. The temporary script, outside the repo, used disposable Origin Private File System folders as projects and intercepted file choosers left unanswered (cancelled). **15/15 checks pass after one fix.**
+
+**Fixed:** a moved, renamed or deleted project folder was never reported as missing. `queryAccess()` in `js/project-context-core.js` treated a folder as gone (`stale`) only when `queryPermission()` threw, but browsers grant permission to the handle, not to the folder's existence. So Home kept offering *Continue project "…"* for a folder that no longer existed, and the #56 tool strips showed it as available. With access granted, the context now reads one entry of the folder (or the file); a failure means `stale`. This applies to `check()`, `select()`, `restore()` and `reconnect()`. Home then says *"The folder "projGone" is no longer available (moved, renamed or deleted). Choose the project folder again in its tool."* `tests/project-context.test.js` adds the case; it fails on the old code. Handles without directory/file methods are not probed, so their timing is unchanged.
+
+**Results:**
+- **First run:** tasks are grouped under Create / Edit / Import / Analyze, each with a visible text label and the tool name. Pixel art (*Draw pixel art*), palette (*Make a palette*), terrain (*Generate terrain*), code (*Edit code*), audit (*Audit a project*, *Open a project folder*) and packing carts (*Pack data carts*) are all found without icons. There is no Continue entry yet, but there is a "Pick a task below…" hint, an empty Library note and the browser-only storage notice (*"nothing saved yet"*).
+- **Every task** (12) opens its own tool (*Generate terrain* → `#extras/terrain`). Unsaved work stays untouched across all of them: a Pixel Studio image, Code Editor text, the shared palette and the terrain parameters were all identical before and after.
+- **Returning user:** *Continue in Map Editor* opens the last tool. A Library asset appears in the recent list. The storage notice calls the Library and sessions browser-only, not files on disk. With storage unavailable (`assets.mode() === 'memory'`), a `role="alert"` warning names the backup route.
+- **Project continuation:** with access granted, *Continue project "projP"* appears, labeled folder-backed. If permission lapses after Home rendered, the click re-checks access, stays on Home, shows a message and offers *Reconnect*. A denied reconnect stays on Home with a message. A deleted folder gives the missing-folder message above.
+- **Keyboard and layout:** Tab moves between task buttons, and Enter opens the task. At 320 px there is no page overflow, and every task, continue and tool button is reachable.
+- **Registry:** a tool registered at runtime with a task gets its Home task and tool card, with no hand-maintained list.
+- No exceptions were thrown and no diagnostics were recorded.
+
+Not covered: the native folder picker and permission prompt UI (stubbed), a real folder deleted on disk (an OPFS folder removed through the API stood in for it), and non-Chromium browsers.
