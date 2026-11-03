@@ -1677,17 +1677,28 @@
     const expected = area('Expected', 'What you expected');
     const actual = area('Actual', 'What happened instead');
     const preview = el('textarea', { rows: 10, className: 'report-preview', attrs: { 'aria-label': 'Report summary preview (editable)' } });
-    const jsonPreview = el('textarea', { rows: 8, className: 'report-preview', value: diagnostics.exportJSON(), attrs: { 'aria-label': 'Diagnostics JSON preview (editable)' } });
-    const note = el('p', { className: 'hint', textContent: 'Nothing is sent automatically. Copy summary copies exactly the summary preview; Download diagnostics downloads exactly the JSON preview. Review and edit each separately. The issue-form link contains no report data; add attachments yourself. Descriptions may contain anything you type. Diagnostics are sanitized summaries; review them for private details. JavaScript hooks cannot recover a crashed tab or process.' });
+    // #62: by default error messages are reduced to generic words; full scrubbed text is opt-in
+    const fullMessages = el('input', { type: 'checkbox' });
+    const exportOpts = () => ({ messages: fullMessages.checked ? 'sanitized' : 'redacted' });
+    const jsonPreview = el('textarea', { rows: 8, className: 'report-preview', value: diagnostics.exportJSON(exportOpts()), attrs: { 'aria-label': 'Diagnostics JSON preview (editable)' } });
+    const note = el('p', { className: 'hint', textContent: 'Nothing is sent automatically. Copy summary copies exactly the summary preview; Download diagnostics downloads exactly the JSON preview. Review and edit each separately. The issue-form link contains no report data; add attachments yourself. Descriptions may contain anything you type. By default, error messages keep only generic error words; other words appear as […]. JavaScript hooks cannot recover a crashed tab or process.' });
     const status = el('p', { className: 'hint', attrs: { role: 'status', 'aria-live': 'polite' } });
     const refresh = () => {
       preview.value = buildReportSummary({
         what: what.ta.value, steps: steps.ta.value, expected: expected.ta.value, actual: actual.ta.value, tool: document.body.dataset.workspace,
-      }, diagnostics.exportBundle());
+      }, diagnostics.exportBundle(exportOpts()));
     };
     for (const a of [what, steps, expected, actual]) a.ta.addEventListener('input', refresh);
+    fullMessages.addEventListener('change', () => {
+      jsonPreview.value = diagnostics.exportJSON(exportOpts());
+      refresh();
+      status.textContent = fullMessages.checked
+        ? 'Full error messages included. They may contain names, values or code from your work: review both previews. Earlier edits to the previews were replaced.'
+        : 'Error messages reduced to generic words again. Earlier edits to the previews were replaced.';
+    });
     refresh();
     const body = el('div', { className: 'report-form' }, note, what.node, steps.node, expected.node, actual.node,
+      el('label', { className: 'check' }, fullMessages, el('span', { textContent: 'Include full error messages (scrubbed, but may contain private details; regenerates both previews)' })),
       el('label', { className: 'report-row' }, el('span', { textContent: 'Summary preview' }), preview),
       el('label', { className: 'report-row' }, el('span', { textContent: 'Diagnostics JSON preview (edit or remove records before downloading)' }), jsonPreview), status);
     const say = (m) => { status.textContent = m; };
@@ -1717,7 +1728,7 @@
               : 'You appear to be offline. Copy the summary and report later.');
           },
         },
-        { label: 'Clear diagnostics', onClick: () => { diagnostics.clear(); jsonPreview.value = diagnostics.exportJSON(); refresh(); say('Diagnostics cleared.'); } },
+        { label: 'Clear diagnostics', onClick: () => { diagnostics.clear(); jsonPreview.value = diagnostics.exportJSON(exportOpts()); refresh(); say('Diagnostics cleared.'); } },
       ],
       buttons: [{ label: 'Close', value: null, primary: true }],
     });

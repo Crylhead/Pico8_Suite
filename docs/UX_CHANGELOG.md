@@ -108,10 +108,20 @@ Keep these issues open rather than treating a green model test as full acceptanc
 | #59 | Browser F1, search, legacy-reference and keyboard walkthrough. |
 | #60 | Browser hover/focus/Escape, touch and narrow-viewport checks. |
 | #61 | Browser welcome/replay/keyboard/missing-target smoke; asynchronous engine cancellation and help-text lookup are covered by regressions. |
-| #62 | Arbitrary error-text privacy guarantee remains unmet; regex scrubbing is best effort. No logs are uploaded automatically. |
+| #62 | Addressed in the follow-up below (allowlisted default export). Manual browser check of the Report dialog opt-in remains. |
 | #63 | Reviewed export actions are regression-tested, but the generated report inherits #62’s incomplete arbitrary-error privacy guarantee; actual offline/browser dialog validation also remains. |
 | #64 | Actual 320/768/1280 layouts, 200% zoom, theme and pointer/touch checks. |
 | #65 | Shared-shell browser keyboard/focus/contrast walkthrough; screen-reader check where available. |
 | #66 | Disposable folder happy path, cancellation, permission denial and preflight-to-actual-write comparison. |
 | #67 | Foreground before/after input-to-paint and frame-pacing evidence at 256/512/1024; independent worker retry smoke. Archive timings are attributed, not independently reproduced. |
 | #68 | First-run/returning-user browser journey, task navigation and narrow-layout checks. |
+
+## Follow-up: #62 default diagnostics export is allowlist-based (2026-11-03)
+
+The integration above left #62's privacy criterion open because regex scrubbing cannot remove arbitrary unquoted text from an exception (for example `playerName.split is not a function` or `Unexpected identifier hunter2`).
+
+- `exportBundle()` / `exportJSON()` now default to `messages: 'redacted'`: each message keeps only a fixed vocabulary of generic error words, numbers of up to five digits, punctuation and the scrubber's placeholders; every other word (identifiers, names, values, non-ASCII words) becomes `[…]`. The bundle records which mode was used (`messages`).
+- Full scrubbed text is an explicit opt-in: **Report a problem › Include full error messages** (off by default) regenerates both previews with it and warns that it may contain private details.
+- Exported `state` is reduced to plain word characters; stack frames keep a function name only when it is a JavaScript identifier/member chain.
+- In-memory `read()` records, Error IDs and de-duplication are unchanged, so local failure UI (e.g. Terrain Lab's Error ID) behaves as before.
+- Regressions in `tests/diagnostics.test.js`: hostile unquoted identifiers/values/non-ASCII text, opt-in bounds and scrubbing, stack function-name filtering.
