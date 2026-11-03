@@ -199,7 +199,7 @@ For registered plug-ins, Extra Tools adds the tab (with the next <kbd>Alt</kbd>+
 
 `js/ux-tooltips.js` (`P8Tips`, #60) shows optional tips for elements marked `data-help-id="<control id>"`. The text always comes from the help registry (`controls[]` / `actions[]` with `text`, optional `detail`); never write tooltip text in HTML or JS. Concise shows `text`, Detailed adds `detail` and a pointer to F1, Off shows nothing (**Help › Settings…**, applies without reload).
 
-- Tips appear after a delay on mouse hover and on keyboard focus (also after a touch tap), hide on Escape (consumed only while a tip is visible), on leaving, scrolling or a preference change, and never take focus or pointer events. Dragging or painting suppresses them.
+- Tips appear after a delay on mouse hover and on keyboard focus (also after a touch tap). They stay visible while the pointer is over the control, the tip or the gap connecting them, or while focus remains within the control. Escape (consumed only while a tip is visible), leaving both areas without focus, scrolling, window blur or a preference change dismisses them. Pointer coordinates provide hover persistence without intercepting canvas clicks; tips never take focus or pointer events. Dragging or painting suppresses them.
 - A native `title` on a marked control that already has visible text or an `aria-label` is moved to `data-title-orig`, so the registry tip replaces it and Off applies consistently. Put essential information in a label, status text, error or warning, never only in a tip.
 - Unknown ids do nothing. `tests/tooltips.test.js` fails if a `data-help-id` in `index.html` has no registry text.
 

@@ -1092,7 +1092,7 @@ body[data-workspace="datacarts"] { height: 100vh; height: 100dvh; display: flex;
 .help-list { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 4px; }
 
 /* Optional explanatory tooltips (#60): never take focus or pointer events */
-.ux-tip { position: fixed; z-index: 1000; max-width: min(320px, calc(100vw - 16px)); overflow: hidden; padding: 6px 8px; font-size: 12px; line-height: 1.4; pointer-events: none; color: var(--text, inherit); background: var(--panel-2, var(--bg, Canvas)); border: 1px solid var(--border-strong, currentColor); border-radius: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+.ux-tip { box-sizing: border-box; position: fixed; z-index: 1000; max-width: min(320px, calc(100vw - 16px)); overflow: hidden; padding: 6px 8px; font-size: 12px; line-height: 1.4; pointer-events: none; color: var(--text, inherit); background: var(--panel-2, var(--bg, Canvas)); border: 1px solid var(--border-strong, currentColor); border-radius: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
 .ux-tip[hidden] { display: none; }
 :root[data-help-level="off"] .ux-tip { display: none; }
 

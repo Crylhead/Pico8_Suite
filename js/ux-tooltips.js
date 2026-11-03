@@ -6,8 +6,8 @@
 //   (example / note) and a pointer to F1. Labels, warnings, errors and disabled reasons live
 //   elsewhere and are never touched.
 // - Shown on mouse hover and on keyboard focus (and on focus after a touch tap, which has no
-//   hover). Escape or leaving the control hides the tip; the tip never takes focus or pointer
-//   events, so it cannot trap focus or block editing.
+//   hover). Escape or leaving both control and tip hides it, unless the control retains focus.
+//   Pointer coordinates make the tip hoverable without intercepting canvas clicks or drags.
 // - A native `title` on an opted-in control that already has visible text or an aria-label is
 //   moved to data-title-orig: the registry tip replaces it so one control never shows two
 //   tooltips and Off applies consistently. Controls without such a name keep their title.
@@ -57,6 +57,17 @@ const P8Tips = (() => {
       : { top: r.top - gap - roomAbove, left: centered, side: 'above', maxHeight: roomAbove };
   }
 
+  /** Includes the gap to the adjacent tip, so slow pointer travel has no dismissal deadline. */
+  function inHoverArea(r, t, side, x, y) {
+    const inside = (b) => x >= b.left && x <= b.right && y >= b.top && y <= b.bottom;
+    if (inside(r) || inside(t)) return true;
+    const vertical = side === 'above' || side === 'below';
+    const gap = vertical
+      ? { left: Math.min(r.left, t.left), right: Math.max(r.right, t.right), top: side === 'below' ? r.bottom : t.bottom, bottom: side === 'below' ? t.top : r.top }
+      : { top: Math.min(r.top, t.top), bottom: Math.max(r.bottom, t.bottom), left: side === 'right' ? r.right : t.right, right: side === 'right' ? t.left : r.left };
+    return inside(gap);
+  }
+
   function init({ prefs, help, delays = {} }) {
     if (typeof document === 'undefined') return null;
     const cfg = { ...DEFAULTS, ...delays };
@@ -67,16 +78,27 @@ const P8Tips = (() => {
     tip.hidden = true;
     document.body.append(tip);
 
-    let current = null; // { el, prev } element showing the tip
+    let current = null; // { el, prev, side } element showing the tip
     let timer = 0;
+    let pending = null;
+    let pointer = null;
     let lastPointer = 'mouse';
 
     const level = () => prefs.get().helpLevel;
     const target = (node) => (node && node.closest ? node.closest('[data-help-id]') : null);
+    const focused = () => current && current.el.contains(document.activeElement);
+    const hovered = () => current && pointer && inHoverArea(current.el.getBoundingClientRect(), tip.getBoundingClientRect(), current.side, pointer.x, pointer.y);
+    const rememberPointer = (e) => { pointer = { x: e.clientX, y: e.clientY }; };
 
-    function hide() {
+    function cancelPending() {
       clearTimeout(timer);
       timer = 0;
+      pending = null;
+    }
+
+    function hide() {
+      cancelPending();
+      document.removeEventListener('pointermove', followPointer, true);
       if (current) {
         const { el, prev } = current;
         if (prev == null) el.removeAttribute('aria-describedby'); else el.setAttribute('aria-describedby', prev);
@@ -102,40 +124,60 @@ const P8Tips = (() => {
       tip.style.top = `${p.top}px`;
       tip.style.left = `${p.left}px`;
       tip.style.maxHeight = p.maxHeight ? `${p.maxHeight}px` : '';
-      current = { el, prev: el.getAttribute('aria-describedby') };
+      current = { el, prev: el.getAttribute('aria-describedby'), side: p.side };
       el.setAttribute('aria-describedby', current.prev ? `${current.prev} ${tip.id}` : tip.id);
+      document.addEventListener('pointermove', followPointer, true);
     }
 
     function schedule(el, delay) {
-      clearTimeout(timer);
+      cancelPending();
       if (level() === 'off') return;
-      timer = setTimeout(() => { if (el.isConnected) show(el); }, delay);
+      pending = el;
+      timer = setTimeout(() => { cancelPending(); if (el.isConnected) show(el); }, delay);
     }
 
     const quiet = (fn) => (e) => { try { fn(e); } catch (err) { window.P8App?.diagnostics?.report('tooltips', 'E_TIP', err); } };
+    const followPointer = quiet((e) => {
+      if (e.pointerType && e.pointerType !== 'mouse' && e.pointerType !== 'pen') return;
+      rememberPointer(e);
+      if (current && (!current.el.isConnected || e.buttons || (!focused() && !hovered()))) hide();
+    });
 
     document.addEventListener('pointerdown', (e) => { lastPointer = e.pointerType || 'mouse'; hide(); }, true);
     document.addEventListener('pointerover', quiet((e) => {
       if (e.pointerType && e.pointerType !== 'mouse' && e.pointerType !== 'pen') return;
+      rememberPointer(e);
+      // The visual tip is pointer-transparent: controls beneath it must not replace its text.
+      if (current && (focused() || hovered())) return;
       const el = target(e.target);
       if (!el || (current && current.el === el)) return;
       if (e.buttons) return; // dragging / painting: stay out of the way
+      if (current) hide();
       schedule(el, cfg.hoverDelay);
     }));
     document.addEventListener('pointerout', quiet((e) => {
+      rememberPointer(e);
+      if (!e.relatedTarget && current && !focused()) { hide(); return; }
       const el = target(e.target);
       if (!el || el.contains(e.relatedTarget)) return;
-      if (current && current.el === el && document.activeElement === el) return; // keep the focus tip
-      hide();
+      if (pending === el && !el.contains(document.activeElement)) cancelPending();
+      if (current && current.el === el && !focused() && (!e.relatedTarget || !hovered())) hide();
     }));
     document.addEventListener('focusin', quiet((e) => {
       const el = target(e.target);
-      if (!el) { hide(); return; }
+      if (!el) { if (!hovered()) hide(); return; }
+      if (current && current.el === el) { cancelPending(); return; }
+      if (current) hide();
       let keyboard = false;
-      try { keyboard = el.matches(':focus-visible'); } catch { keyboard = true; }
+      try { keyboard = e.target.matches(':focus-visible'); } catch { keyboard = true; }
       if (keyboard || lastPointer === 'touch') schedule(el, cfg.focusDelay);
     }));
-    document.addEventListener('focusout', quiet((e) => { if (target(e.target)) hide(); }));
+    document.addEventListener('focusout', quiet((e) => {
+      const el = target(e.target);
+      if (!el || el.contains(e.relatedTarget)) return;
+      if (pending === el) cancelPending();
+      if (current && current.el === el && !hovered()) hide();
+    }));
     // Escape hides a visible tip first and is then consumed, so it never also closes a dialog or
     // changes the active tool; with no tip showing it passes through untouched.
     document.addEventListener('keydown', (e) => {
@@ -143,6 +185,7 @@ const P8Tips = (() => {
     }, true);
     window.addEventListener('scroll', hide, true);
     window.addEventListener('resize', hide);
+    window.addEventListener('blur', hide);
 
     // one tooltip per control: the registry tip replaces a duplicate native title
     function claimTitles(root = document) {
@@ -159,7 +202,7 @@ const P8Tips = (() => {
     return { hide, claimTitles, show, configure: (d) => Object.assign(cfg, d) };
   }
 
-  return { init, resolveTip, place, DEFAULTS };
+  return { init, resolveTip, place, inHoverArea, DEFAULTS };
 })();
 
 if (typeof module !== 'undefined') module.exports = P8Tips;
