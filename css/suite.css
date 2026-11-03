@@ -1098,7 +1098,7 @@ body[data-workspace="datacarts"] { height: 100vh; height: 100dvh; display: flex;
 
 /* Quick tours (#61): no backdrop; the page stays usable */
 .tour-ring { position: fixed; z-index: 900; display: none; pointer-events: none; border: 2px solid var(--accent, currentColor); border-radius: 6px; box-shadow: 0 0 0 2px var(--bg, transparent); }
-.tour-card { max-height: calc(100dvh - 16px); overflow-y: auto; position: fixed; z-index: 901; width: min(340px, calc(100vw - 16px)); box-sizing: border-box; padding: 12px; color: var(--text, inherit); background: var(--bg, Canvas); border: 1px solid var(--border-strong, currentColor); border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, .4); }
+.tour-card { max-height: calc(100dvh - 16px); overflow-y: auto; position: fixed; z-index: 901; width: min(340px, calc(100% - 16px)); /* % of the viewport without its scrollbar (fixed position) */ box-sizing: border-box; padding: 12px; color: var(--text, inherit); background: var(--bg, Canvas); border: 1px solid var(--border-strong, currentColor); border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, .4); }
 .tour-card h2 { margin: 0 0 6px; font-size: 15px; }
 .tour-card p { margin: 0 0 8px; font-size: 13px; line-height: 1.45; }
 .tour-buttons { display: flex; gap: 6px; flex-wrap: wrap; }

@@ -134,8 +134,11 @@ const P8Tips = (() => {
       const owner = target(node), native = node?.closest?.('[title]');
       return owner && native && hasNativeTitle(native) && native !== owner && owner.contains(native);
     };
-    const focused = () => current && current.el.contains(document.activeElement);
-    const hovered = () => current && pointer && inHoverArea(current.el.getBoundingClientRect(), tip.getBoundingClientRect(), current.side, pointer.x, pointer.y);
+    // A control hidden after its tip appeared (e.g. a keyboard workspace switch) reports a 0×0 box at
+    // the page origin, which would make most of the screen count as "still hovering": treat it as gone.
+    const onScreen = (el) => el.isConnected && (typeof el.getClientRects !== 'function' || el.getClientRects().length > 0);
+    const focused = () => current && onScreen(current.el) && current.el.contains(document.activeElement);
+    const hovered = () => current && pointer && onScreen(current.el) && inHoverArea(current.el.getBoundingClientRect(), tip.getBoundingClientRect(), current.side, pointer.x, pointer.y);
     const rememberPointer = (e) => { pointer = { x: e.clientX, y: e.clientY }; };
 
     function cancelPending() {
@@ -191,7 +194,7 @@ const P8Tips = (() => {
     const followPointer = quiet((e) => {
       if (e.pointerType && e.pointerType !== 'mouse' && e.pointerType !== 'pen') return;
       rememberPointer(e);
-      if (current && (!current.el.isConnected || e.buttons || (!focused() && !hovered()))) hide();
+      if (current && (!onScreen(current.el) || e.buttons || (!focused() && !hovered()))) hide();
     });
 
     document.addEventListener('pointerdown', (e) => { lastPointer = e.pointerType || 'mouse'; hide(); }, true);
@@ -238,6 +241,7 @@ const P8Tips = (() => {
       if (e.key === 'Escape' && current) { e.stopPropagation(); e.preventDefault(); hide(); }
     }, true);
     window.addEventListener('scroll', hide, true);
+    document.addEventListener('p8:workspace', () => hide()); // the control's workspace was just hidden
     window.addEventListener('resize', hide);
     window.addEventListener('blur', hide);
 

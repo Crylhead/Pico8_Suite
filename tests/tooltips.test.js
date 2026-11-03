@@ -343,3 +343,41 @@ t('#110 every built-in workspace exposes contextual help for its own controls', 
     assert.ok(own.length >= 1, `workspace "${ws}" has no control marked with one of its help ids`);
   }
 });
+
+t('a tip whose control is hidden (keyboard workspace switch) is removed and never pins the screen', () => {
+  const f = tooltipFixture();
+  f.enter(); f.flush();
+  assert.strictEqual(f.tip.hidden, false);
+  // Hidden controls report no client rects and a 0×0 box at the origin; the old hover corridor
+  // then covered most of the page, so the stale tip stayed and blocked every new one.
+  f.control.getClientRects = () => [];
+  f.control.rect = { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 };
+  f.move(10, 10);
+  assert.strictEqual(f.tip.hidden, true, 'pointer movement drops the tip of a hidden control');
+  delete f.control.getClientRects; f.control.rect = { left: 100, top: 100, width: 100, height: 20, right: 200, bottom: 120 };
+  f.enter(); f.flush();
+  assert.strictEqual(f.tip.hidden, false);
+  f.doc.emit('p8:workspace', {});
+  assert.strictEqual(f.tip.hidden, true, 'a workspace switch hides the tip immediately, before any pointer move');
+});
+
+t('no help-marked control in index.html sits inside an element with its own native title', () => {
+  // A titled ancestor shows a second (native) tooltip over the registry tip; #160 covers titled children.
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const body = html.slice(0, html.indexOf('<template id="docsTemplate"'));
+  const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+  const stack = [];
+  const problems = [];
+  for (const m of body.matchAll(/<(\/?)([a-zA-Z][\w-]*)\b([^>]*)>/g)) {
+    const [, close, tag, attrs] = m;
+    const name = tag.toLowerCase();
+    if (close) { const i = stack.map((s) => s.name).lastIndexOf(name); if (i >= 0) stack.length = i; continue; }
+    const help = /\sdata-help-id="([^"]+)"/.exec(attrs);
+    if (help) {
+      const titled = stack.find((s) => s.title);
+      if (titled) problems.push(`${help[1]} inside <${titled.name}> titled "${titled.title}"`);
+    }
+    if (!VOID.has(name) && !attrs.trimEnd().endsWith('/')) stack.push({ name, title: /\stitle="([^"]+)"/.exec(attrs)?.[1] || null });
+  }
+  assert.deepStrictEqual(problems, []);
+});
