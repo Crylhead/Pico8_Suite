@@ -59,3 +59,30 @@ t('#57 success wording names the target and says temporary or saved', () => {
   assert.match(X.doneMessage(c, img(), { saved: false }), /temporary copy.*Tile Maker.*not in the Library/);
   assert.match(X.doneMessage(c, img(), { saved: true }), /Library copy is unchanged/);
 });
+
+t('#57 Suite.openIn: the unsaved-work prompt offers Replace / Cancel; Cancel never opens or reports success', async () => {
+  const fs = require('fs');
+  const path = require('path');
+  const vm = require('vm');
+  const src = fs.readFileSync(path.join(__dirname, '../js/suite.js'), 'utf8');
+  const start = src.indexOf('  async function openIn(');
+  const end = src.indexOf('  /**', start);
+  const prompts = []; const toasts = []; const opened = [];
+  let answer = false;
+  const sandbox = {
+    P8Transfer: X,
+    consumers: [mk({ id: 'map', label: 'Map Editor', unsaved: () => 'The current map has unsaved changes.', open: async (a) => { opened.push(a.name); return true; } })],
+    confirmDialog: async (title, message, yes, no) => { prompts.push({ title, yes, no }); return answer; },
+    closeLibrary: () => {}, toast: (m) => toasts.push(m), showMessage: () => { throw new Error('unexpected message'); },
+  };
+  vm.runInNewContext(`${src.slice(start, end)}
+this.openIn = openIn;`, sandbox);
+  assert.strictEqual(await sandbox.openIn('map', img(), { saved: false }), false);
+  assert.deepStrictEqual(prompts[0], { title: 'Replace unsaved work?', yes: 'Replace', no: 'Cancel' });
+  assert.deepStrictEqual(opened, []);
+  assert.match(toasts[0], /^Cancelled\./);
+  answer = true;
+  assert.strictEqual(await sandbox.openIn('map', img(), { saved: false }), true);
+  assert.deepStrictEqual(opened, ['logo']);
+  assert.match(toasts[1], /temporary copy of “logo” to Map Editor/);
+});

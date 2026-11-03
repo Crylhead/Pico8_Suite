@@ -104,7 +104,7 @@ Keep these issues open rather than treating a green model test as full acceptanc
 | Issue | Remaining acceptance evidence/work |
 | --- | --- |
 | #56 | Real folder-adoption/permission walkthrough. Data Carts currently delegates adoption to Project Audit and therefore replaces its scan too; independence between those tools needs review. |
-| #57 | Browser transfer/cancel/unsupported-dimension journey and destination state verification. |
+| #57 | Addressed in the follow-up below (browser journey; prompt buttons fixed). |
 | #59 | Addressed in the follow-up below (browser F1/search/legacy/keyboard walkthrough). |
 | #60 | Browser hover/focus/Escape, touch and narrow-viewport checks. |
 | #61 | Browser welcome/replay/keyboard/missing-target smoke; asynchronous engine cancellation and help-text lookup are covered by regressions. |
@@ -133,6 +133,24 @@ Builds on the #62 follow-up above (allowlisted default export).
 - **Issue form** (`.github/ISSUE_TEMPLATE/bug_report.yml`): separate required *Affected workspace / tool*, optional *Suite version* and *Browser and version*, required *Expected vs. actual*, an *Attachments* field explaining that files are added manually, and a required privacy confirmation. The privacy notice says the issue is public. No YAML parser was available offline; the file was checked for ambiguous plain scalars and duplicate IDs, and renders on GitHub only after merge to the default branch.
 - **Regressions** (`tests/report.test.js`): the real dialog code with empty diagnostics while offline (environment fields, zero records, offline GitHub message), and a recorded error whose summary carries the Error ID but not the message's user text until *Include full error messages* is ticked, and again after it is unticked.
 - **Browser walkthrough** (headless Chrome via the DevTools protocol, local `http.server`, temporary script outside the repo): no errors on load. With empty diagnostics, Help › Report a problem shows zero records and the environment section, and focuses Close. While offline, *Open GitHub issue form* reports the offline state and opens only the bare template URL. In headless Chrome, *Copy summary* reaches the select-and-press-Ctrl+C fallback. A synthetic window error and an unhandled rejection with hostile text (identifier, Windows user path, token-like word) appear with Error IDs and `[…]`/`[path]` placeholders, and nothing hostile leaks into either preview. The opt-in shows full text (path still scrubbed) and a warning. After typing a description, *Clear diagnostics* and Close, localStorage, sessionStorage and IndexedDB hold none of the description, message text or error codes. The app threw no other exceptions. Not covered: a real clipboard grant, a real download prompt, a screen reader.
+
+## Follow-up: #57 Send to… browser journey (2026-11-03)
+
+Headless Chrome on `main` at `c532fbc`, driven over the DevTools protocol against a local `http.server`, using a temporary script outside the repo.
+
+**Defect found and fixed:** the central unsaved-work prompt said *"Replace it … or cancel and keep both as they are?"*, but its buttons were **No** / **Replace**. The issue specifies Replace / Cancel. `confirmDialog(title, message, yes, no = 'No')` now takes an optional cancel label (existing callers are unchanged), and `Suite.openIn` passes `'Cancel'`. Initial focus stays on the dialog's ✕ button, so Enter and Escape do not replace. Regression: `tests/transfer.test.js` runs the real `openIn` from `js/suite.js` and checks the labels; Cancel neither opens nor reports success, and Replace opens with the temporary-copy wording. The test fails before the fix and passes after it.
+
+**Journey results:**
+- **Pixel Studio › File › Send to › All destinations…** lists all 12 registered consumers, available ones first. The three unavailable ones remain Tab-focusable with `aria-disabled`, a visible reason and `aria-describedby`. Clicking one does nothing.
+- **Happy path to Map Editor tileset:** sends a 128×128 image without opening the Library. The toast names the target and says *temporary copy*, and the Pixel Studio source pixels are unchanged.
+- **Happy path to Tile Maker** (File › Send to › Tile Maker): imports and rebuilds, with the same temporary-copy wording.
+- **Unsupported dimensions:** a 100×60 image disables the fade preview and the Map Editor tileset with exact size reasons. A 2048×16 image also disables Pixel Studio (*supports up to 1024×1024*). No conversion is offered silently.
+- **Unsaved destination:** with an unsaved map open, sending a tileset prompts Replace / Cancel. **Cancel** closes everything, toasts *"Cancelled. … unchanged"*, and leaves the map unsaved (the next send prompts again). **Replace** applies the tileset. The workspace switches only after confirmation.
+- **Failing destination** (a test consumer that throws): an error dialog says *"… could not open … Nothing was changed."*, `openIn` returns `false` and no success toast appears.
+- **Library:** storing still works, and an asset's details dialog lists the same destinations. Sending from it says *"The Library copy is unchanged"*, and the stored asset is intact.
+- No exceptions were thrown, and `P8App.diagnostics` stayed empty.
+
+**Noted, not changed:** Pixel Studio lists itself as a destination for its own image (harmless; it reopens the same picture). Touch input and screen reader announcement were not checked.
 
 ## Follow-up: #59 Help registry browser walkthrough (2026-11-03)
 
