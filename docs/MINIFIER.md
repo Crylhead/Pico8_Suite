@@ -55,7 +55,7 @@ For cartridges, checks compare the engine's decoded asset ROM/version and genera
 
 Copy writes only Lua. Clipboard denial or unavailability reports failure; manually select the read-only text and copy with your keyboard. If source changes during copying, feedback identifies the captured earlier build. Download requests a separate browser artifact; the browser controls completion. It is never a project Save. A source/result change while the format dialog is open blocks the download. Export completion returns keyboard focus to its invoking control when still usable, otherwise the Source actions; it does not pull focus back after you navigate elsewhere. `.p8.png` export is unavailable.
 
-Independent cartridge-parser checks establish format/data preservation; they do **not** establish runtime equivalence. See the [acceptance record and outstanding installed-PICO-8 check](MINIFIER_ACCEPTANCE.md). Full real PICO-8 release validation is tracked separately in [MIN-10 / #128](https://github.com/Crylhead/Pico8_Suite/issues/128).
+Independent cartridge-parser checks establish format/data preservation; they do **not** establish runtime equivalence. The [acceptance record](MINIFIER_ACCEPTANCE.md) documents the user-confirmed original/optimized representative-cart comparison, including startup sound, in Windows PICO-8 0.2.7 for [MIN-10 / #128](https://github.com/Crylhead/Pico8_Suite/issues/128). That result does not guarantee equivalence for arbitrary carts.
 
 ## Help, tooltips and Quick Tour
 
@@ -87,4 +87,4 @@ The bundled engine is **Shrinko8 1.2.7f**, pinned to commit `fb6e66827d481020857
 - [Official PICO-8 manual](https://www.lexaloffle.com/dl/docs/pico-8_manual.html)
 - [Engine packaging, supported include semantics and adapter details](MINIFIER_ENGINE.md)
 
-This guide describes MIN-01 through MIN-09. Real PICO-8 release testing remains MIN-10; optional PNG export is MIN-11. Neither automatic Cart Builder minification nor applying generated output to editable source is supported.
+This guide describes the core workflow delivered in MIN-01 through MIN-10. The representative-cart runtime gate passed via user testing; optional PNG export remains MIN-11. Neither automatic Cart Builder minification nor applying generated output to editable source is supported.

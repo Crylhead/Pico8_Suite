@@ -1,5 +1,7 @@
 # Minifier engine foundation and job adapter — MIN-01 / #119, MIN-02 / #120
 
+**Current verification status:** the representative original and optimized carts were confirmed to match visually and audibly by the user in Windows PICO-8 0.2.7 on 2026-11-03. See [the acceptance record](MINIFIER_ACCEPTANCE.md) for evidence and limits. Earlier stage-specific notes below retain the release gates that were pending when those checks ran. Optional PNG export #129 remains unimplemented.
+
 Real Shrinko8 runs in a local browser **module Web Worker**. The DOM-free model and adapter below manage application jobs, revisions and cancellation. The native Develop → Minifier workspace accepts standalone UTF-8 `.p8` / `.lua` files, pasted Lua and immutable live Code Editor snapshots (including unsaved edits). The handoff returns to the existing editor without applying output; later editor changes invalidate its job/result. Project includes are supported through already-authorized Code Editor folder handles; validated separate build-copy exports are available after preservation checks. See [the handoff API](../EXTENDING.md#minifier-jobs).
 
 ## Pins and package scope
