@@ -148,3 +148,10 @@ Headless Chrome, driven over the DevTools protocol with real key events, against
 - No exceptions were thrown, and `P8App.diagnostics` stayed empty throughout.
 
 Not covered: screen reader announcement of the live region, touch input, and a real non-Chromium browser.
+
+
+## Integrated review follow-ups (2026-11-03)
+
+The [review of `fd31e3c`](HEALTH_REVIEW_2026-11-03_fd31e3c.md) reproduced six further correctness gaps, tracked in #80–#85. Specific UX integration findings are the unguarded existing Tile Maker → Map Editor send (#81), stale include-parent context after Code Editor folder adoption/picking (#83), and palette/settings changes before Tile Maker import cancellation (#84). Default diagnostics message allowlisting remains in place, but arbitrary error names and identifier-shaped stack metadata still appear in default exports (#85); this limits the complete privacy claim made for #62/#63. No diagnostic upload occurs automatically.
+
+The review passed 205 JS regressions, five bridge tests, syntax and static HTML checks. These new findings came from actual-function/core probes with controlled fake I/O. The review had no working browser executable, so it does not repeat or replace the attributed browser evidence above. No implementation changed in the review documentation PR.
