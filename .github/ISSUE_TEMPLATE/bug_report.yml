@@ -5,8 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use **Help > Report a problem...** in the Suite to prepare a summary. It is generated locally and never sent automatically.
-        Do not paste project code, images or file paths you consider private.
+        Use **Help > Report a problem...** in the Suite to prepare a summary. It is generated locally and never sent automatically; you can also write this report by hand.
+        **Privacy:** everything you put here is public. Do not paste project code, images, file paths, names or tokens you consider private. Review the summary and any diagnostics file before adding them.
   - type: textarea
     id: what
     attributes:
@@ -17,22 +17,53 @@ body:
     id: steps
     attributes:
       label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
       label: Expected vs. actual behavior
+      placeholder: |
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
   - type: input
     id: tool
     attributes:
-      label: Workspace / tool and Suite version
+      label: Affected workspace / tool
+      placeholder: e.g. Pixel Studio, Map Editor, Cart Builder
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Suite version
+      description: Shown in the Report a problem summary ("Suite version").
   - type: input
     id: browser
     attributes:
       label: Browser and version
+      placeholder: e.g. Chrome 131, Firefox 133
   - type: textarea
     id: diagnostics
     attributes:
       label: Diagnostics summary
-      description: Paste the reviewed summary. Attach the downloaded diagnostics JSON manually if you want to; GitHub cannot attach it for you.
+      description: Paste the reviewed summary from Report a problem. Error IDs help match the report to the session log.
+      render: text
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Attachments (optional)
+      description: Drag the reviewed diagnostics JSON or screenshots here yourself if you want to share them. GitHub cannot attach them for you, and nothing is attached automatically.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I reviewed the summary and any attachments and they contain nothing I consider private.
+          required: true

@@ -109,7 +109,7 @@ Keep these issues open rather than treating a green model test as full acceptanc
 | #60 | Browser hover/focus/Escape, touch and narrow-viewport checks. |
 | #61 | Browser welcome/replay/keyboard/missing-target smoke; asynchronous engine cancellation and help-text lookup are covered by regressions. |
 | #62 | Addressed in the follow-up below (allowlisted default export). Manual browser check of the Report dialog opt-in remains. |
-| #63 | Reviewed export actions are regression-tested, but the generated report inherits #62’s incomplete arbitrary-error privacy guarantee; actual offline/browser dialog validation also remains. |
+| #63 | Addressed in the follow-up below (browser/offline walkthrough, issue-form fields). |
 | #64 | Actual 320/768/1280 layouts, 200% zoom, theme and pointer/touch checks. |
 | #65 | Shared-shell browser keyboard/focus/contrast walkthrough; screen-reader check where available. |
 | #66 | Disposable folder happy path, cancellation, permission denial and preflight-to-actual-write comparison. |
@@ -125,3 +125,11 @@ The integration above left #62's privacy criterion open because regex scrubbing 
 - Exported `state` is reduced to plain word characters; stack frames keep a function name only when it is a JavaScript identifier/member chain.
 - In-memory `read()` records, Error IDs and de-duplication are unchanged, so local failure UI (e.g. Terrain Lab's Error ID) behaves as before.
 - Regressions in `tests/diagnostics.test.js`: hostile unquoted identifiers/values/non-ASCII text, opt-in bounds and scrubbing, stack function-name filtering.
+
+## Follow-up: #63 Report a problem validation (2026-11-03)
+
+Builds on the #62 follow-up above (allowlisted default export).
+
+- **Issue form** (`.github/ISSUE_TEMPLATE/bug_report.yml`): separate required *Affected workspace / tool*, optional *Suite version* and *Browser and version*, required *Expected vs. actual*, an *Attachments* field explaining that files are added manually, and a required privacy confirmation. The privacy notice says the issue is public. No YAML parser was available offline; the file was checked for ambiguous plain scalars and duplicate IDs, and renders on GitHub only after merge to the default branch.
+- **Regressions** (`tests/report.test.js`): the real dialog code with empty diagnostics while offline (environment fields, zero records, offline GitHub message), and a recorded error whose summary carries the Error ID but not the message's user text until *Include full error messages* is ticked, and again after it is unticked.
+- **Browser walkthrough** (headless Chrome via the DevTools protocol, local `http.server`, temporary script outside the repo): no errors on load. With empty diagnostics, Help › Report a problem shows zero records and the environment section, and focuses Close. While offline, *Open GitHub issue form* reports the offline state and opens only the bare template URL. In headless Chrome, *Copy summary* reaches the select-and-press-Ctrl+C fallback. A synthetic window error and an unhandled rejection with hostile text (identifier, Windows user path, token-like word) appear with Error IDs and `[…]`/`[path]` placeholders, and nothing hostile leaks into either preview. The opt-in shows full text (path still scrubbed) and a warning. After typing a description, *Clear diagnostics* and Close, localStorage, sessionStorage and IndexedDB hold none of the description, message text or error codes. The app threw no other exceptions. Not covered: a real clipboard grant, a real download prompt, a screen reader.
