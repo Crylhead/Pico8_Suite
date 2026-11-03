@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "shrinko8": {
+    "version": "1.2.7f",
+    "commit": "fb6e66827d481020857d7548fdd9dd0171315a86",
+    "url": "https://github.com/thisismypassport/shrinko8/archive/fb6e66827d481020857d7548fdd9dd0171315a86.tar.gz",
+    "sha256": "375aeaf0bb881f3c5ef0a7368050f8756ae5b4d740d1eddb14ec6ef15f8c8179",
+    "modules": [
+      "media_utils.py",
+      "pico_cart.py",
+      "pico_compress.py",
+      "pico_constfold.py",
+      "pico_defs.py",
+      "pico_export.py",
+      "pico_lint.py",
+      "pico_minify.py",
+      "pico_output.py",
+      "pico_parse.py",
+      "pico_preprocess.py",
+      "pico_process.py",
+      "pico_rename.py",
+      "pico_srcdefs.py",
+      "pico_tokenize.py",
+      "pico_unminify.py",
+      "pico_utils.py",
+      "picotron_cart.py",
+      "picotron_defs.py",
+      "picotron_export.py",
+      "picotron_fs.py",
+      "run_shrinko.py",
+      "shrinko8.py",
+      "utils.py"
+    ],
+    "bundleSha256": "a754701fb5572e48c7f775a5392ba6ca1f47c9bb1fbf79824c8db68bb05c87d9",
+    "bundleBytes": 518437
+  },
+  "pyodide": {
+    "version": "314.0.7",
+    "pythonVersion": "3.14.2",
+    "url": "https://registry.npmjs.org/pyodide/-/pyodide-314.0.7.tgz",
+    "sha256": "66b7949e5a0cba2250b586d7e368bf12fb482800748d182c4618254b685ffaa0",
+    "files": {
+      "pyodide.mjs": {
+        "bytes": 17931,
+        "sha256": "6f1d60f7bf529beb300f0f47983c921d3982363640ba20af0e38efdddbc66109"
+      },
+      "pyodide.asm.mjs": {
+        "bytes": 1250344,
+        "sha256": "f7cdc8ece80678ceb712f8e65ebe6d3a83203a180c399865f49612a051693635"
+      },
+      "pyodide.asm.wasm": {
+        "bytes": 9598218,
+        "sha256": "cc36e3cab04fdfc9a63ff13eb52eae2b911bf46c025cc7b281f394bd3de1d5e6"
+      },
+      "python_stdlib.zip": {
+        "bytes": 2545637,
+        "sha256": "fa1957e5777068fc4f7437f96d860ae2fbe9c19732ba06c84e004ec16dd7dd7a"
+      },
+      "pyodide-lock.json": {
+        "bytes": 119077,
+        "sha256": "5dc2fc119108bc148c7457dc86e7675b5c87e1cafd420b9c34c1eaef7b36c010"
+      }
+    }
+  }
+}

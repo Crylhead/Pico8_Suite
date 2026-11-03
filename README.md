@@ -113,6 +113,10 @@ node tests/regress.js
 
 On 2026-11-03 the integrated review ran **205 JavaScript regressions and five Python bridge tests**, all passing. Every `js/*.js` passed `node --check`, the bridge passed syntax compilation, and static HTML checks passed (402 unique IDs, 43 local script/style references). [GitHub Actions](.github/workflows/ci.yml) runs these checks on PRs and pushes to `main`. Additional core/actual-function probes reproduced #80–#85, so passing tests does not establish complete coverage. This review could not run browser checks because the executable was absent; Windows and PICO-8 runtime checks were not performed. Earlier contributors' browser walkthroughs are documented separately in the [UX changelog](docs/UX_CHANGELOG.md). See [CONTRIBUTING.md](CONTRIBUTING.md) for commands and the [current review](docs/HEALTH_REVIEW_2026-11-03_fd31e3c.md) for evidence and limits.
 
+### Minifier engine foundation
+
+[MIN-01 implementation and proof](docs/MINIFIER_ENGINE.md) documents the pinned Shrinko8/Pyodide module worker, local asset packaging, real `.lua`/`.p8` fixtures and browser results. This is backend groundwork; the Minifier workspace and remaining integration follow [roadmap #130](https://github.com/Crylhead/Pico8_Suite/issues/130). Package assets with `python tools/package_minifier.py` before running real-engine checks; the unmodified Suite tools need no packaging step.
+
 ### Historical validation reports
 
 The following reports were inherited from development in Demotools. Their complete fixtures, browser automation and PICO-8 benchmarks are not included here and were **not rerun** for the standalone repository review. They are historical evidence, not a current clean bill of health.

@@ -1,1 +1,3 @@
 __pycache__/
+vendor/pyodide/runtime/
+vendor/shrinko8/runtime/
