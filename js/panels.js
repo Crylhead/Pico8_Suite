@@ -70,10 +70,12 @@
       // Only a width the user chose is written. Without one the CSS fallback of --side-w applies, so a layout
       // keeps its own responsive default (Pixel Studio: 272 px, 232 px between 861 and 1100 px) and a stored
       // choice is the only thing that changes the layout.
-      const cur = current();
       if (collapsed) layout.style.setProperty('--side-w', '0px');
       else if (w == null) layout.style.removeProperty('--side-w');
-      else layout.style.setProperty('--side-w', `${cur}px`);
+      else layout.style.setProperty('--side-w', `${P.clamp(p, cw(), w)}px`);
+      // measured after the variable changed: after a reset the default width is in effect, and that is what
+      // aria-valuenow/valuetext must announce (measuring first reported the old width)
+      const cur = current();
       layout.toggleAttribute('data-side-collapsed', collapsed);
       const [lo, hi] = P.bounds(p, cw());
       sep.setAttribute('aria-valuemin', String(lo));
