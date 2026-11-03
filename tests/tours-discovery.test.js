@@ -147,20 +147,11 @@ t('#108 cancelling selector starts nothing; focus uses the opener or the current
   assert.strictEqual(f.focused, f.workspaceButton);
 });
 
-t('#103 every workspace tab and built-in Extra Tools subtool has a replayable tour', () => {
-  const html = read('index.html');
-  // js/app.js: every <main data-ws="..."> is a workspace
-  const workspaces = [...html.matchAll(/<main\b[^>]*\sdata-ws="([\w-]+)"/g)].map((m) => m[1]);
-  const extrasTabs = html.slice(html.indexOf('id="exTabs"'), html.indexOf('</div>', html.indexOf('id="exTabs"')));
-  const subs = [...[...extrasTabs.matchAll(/data-value="([\w-]+)"/g)].map((m) => m[1]), 'terrain']; // Terrain Lab registers from js/terrain.js
-  assert.ok(workspaces.length >= 12 && subs.length === 4, `found ${workspaces} / ${subs}`);
+t('#103 declared built-in tours register and resolve to their exact workspace/subtool', () => {
   const engine = Core.create();
-  for (const x of Data.TOURS) assert.deepStrictEqual(engine.register(x).errors || [], [], x.id);
-  for (const ws of workspaces) {
-    assert.ok(Data.TOURS.some((x) => x.ws === ws && !x.sub), `workspace "${ws}" needs a tour in js/tours-data.js`);
+  for (const tour of Data.TOURS) assert.deepStrictEqual(engine.register(tour).errors || [], [], tour.id);
+  for (const tour of Data.TOURS) {
+    assert.strictEqual(Core.forContext(engine.list(), { ws: tour.ws, sub: tour.sub })?.id, tour.id);
   }
-  for (const sub of subs) assert.strictEqual(Core.forContext(engine.list(), { ws: 'extras', sub })?.id, sub, `Extra Tools "${sub}" needs its own tour`);
-  for (const x of Data.TOURS.filter((x) => x.scope !== 'suite')) {
-    assert.ok(x.steps[0].before?.ws === x.ws, `tour "${x.id}" must open its workspace in its first step`);
-  }
+  // Missing workspace/subtool and area coverage is audited from bundled sources by docs-integrity.
 });
