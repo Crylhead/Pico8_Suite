@@ -17,7 +17,9 @@
     if (!r.ok) App.diagnostics?.report('tours', 'E_TOUR_INVALID', new Error(r.errors.join('; ')));
   }
 
-  let active = null; // { run, ring, card }
+  let active = null; // { run, ring, card, opener }
+  let refreshList = null;
+  let chooserSeq = 0;
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const visible = (node) => !!node && node.getClientRects().length > 0 && !node.closest('[hidden]');
@@ -61,6 +63,21 @@
     }
   }
 
+  function returnTarget() {
+    const node = document.activeElement;
+    return node?.closest('.menu')?.querySelector('.menu-btn') || node;
+  }
+
+  function restoreOpener(opener) {
+    const node = opener && opener !== document.body && opener.isConnected && visible(opener) ? opener : document.querySelector('#wsTabs [aria-checked="true"]');
+    node?.focus({ preventScroll: true });
+  }
+
+  function currentContext() {
+    const ws = document.body.dataset.workspace;
+    return { ws, sub: ws === 'extras' ? document.querySelector('#exTabs [aria-checked="true"]')?.dataset.value : null };
+  }
+
   function end(finished) {
     if (!active) return;
     const { run, ring, card, opener } = active;
@@ -72,7 +89,7 @@
     document.removeEventListener('keydown', onKey, true);
     window.removeEventListener('resize', position);
     window.removeEventListener('scroll', position, true);
-    if (opener && opener.isConnected) opener.focus();
+    restoreOpener(opener);
   }
 
   function onKey(e) {
@@ -102,14 +119,14 @@
     card.querySelector('.btn-primary')?.focus({ preventScroll: true });
   }
 
-  async function start(id) {
+  async function start(id, { opener = active?.opener || returnTarget() } = {}) {
     if (!engine.get(id)) return false;
     if (active) end(false);
     const run = engine.run(id, prepare);
     const card = el('div', { className: 'tour-card', attrs: { role: 'dialog', 'aria-modal': 'false', 'aria-labelledby': 'tour-title', tabindex: '-1' } });
     const ring = el('div', { className: 'tour-ring', attrs: { 'aria-hidden': 'true' } });
     document.body.append(ring, card);
-    active = { run, ring, card, opener: document.activeElement };
+    active = { run, ring, card, opener };
     document.addEventListener('keydown', onKey, true);
     window.addEventListener('resize', position);
     window.addEventListener('scroll', position, true);
@@ -124,23 +141,67 @@
     return true;
   }
 
-  async function showTours() {
+  async function tourThisTool() {
+    const context = currentContext();
+    const tour = Core.forContext(engine.list(), context);
+    if (tour) return start(tour.id);
+    const opener = returnTarget();
+    const tool = window.Suite?.tools?.().find((t) => t.ws === context.ws && (t.sub || null) === (context.sub || null));
+    const choice = await App.modal({
+      title: 'No tour for this tool yet',
+      body: `There is no quick tour for ${tool?.name || 'this tool'} yet. Read its Help or browse the available tours. Your work stays unchanged.`,
+      buttons: [{ label: 'Close', value: null }, { label: 'Read Help', value: 'help' }, { label: 'Browse Quick tours', value: 'browse', primary: true }],
+    });
+    restoreOpener(opener);
+    if (choice === 'help') App.runAction('docs');
+    if (choice === 'browse') return showTours({ opener });
+    return false;
+  }
+
+  async function showTours({ opener = active?.opener || returnTarget() } = {}) {
     const statusOf = (t) => {
       const p = engine.progress(t.id);
       if (!p) return 'Not started';
       return `${p.status === 'done' ? 'Completed' : 'Closed early'}${engine.whatsNew(t.id) ? ' · What’s new' : ''}`;
     };
-    const list = el('ul', { className: 'tour-list' }, ...engine.list().map((t) => el('li', {},
-      el('div', {}, el('strong', { textContent: t.title }), el('span', { className: 'muted', textContent: ` ${statusOf(t)}` }), el('p', { className: 'hint', textContent: t.summary })),
-      el('button', { type: 'button', className: 'btn btn-sm', textContent: engine.progress(t.id) ? 'Replay' : 'Start', attrs: { 'aria-label': `${engine.progress(t.id) ? 'Replay' : 'Start'} ${t.title}` }, dataset: { tour: t.id } }))));
-    const body = el('div', {}, el('p', { className: 'hint', textContent: 'Tours are optional and change nothing in your projects. Press Esc to leave one at any time. Turn automatic offers off in Help › Settings.' }), list);
+    let selected = null;
+    const searchId = `tour-search-${++chooserSeq}`;
+    const input = el('input', { type: 'search', id: searchId, placeholder: 'Search tours by tool or subject', value: '', attrs: { 'aria-label': 'Search Quick tours' } });
+    const count = el('p', { className: 'muted', attrs: { role: 'status' } });
+    const list = el('ul', { className: 'tour-list' });
+    const renderList = () => {
+      const all = engine.list();
+      const found = Core.search(all, input.value);
+      const current = Core.forContext(all, currentContext());
+      count.textContent = `${found.length} of ${all.length} tours`;
+      list.replaceChildren(...found.map((t) => el('li', {},
+        el('div', {}, el('strong', { textContent: t.title }),
+          el('span', { className: 'muted', textContent: ` ${t.scope === 'suite' ? 'Suite overview' : 'Tool tour'} · ${statusOf(t)}${t.id === current?.id ? ' · Current tool' : ''}` }),
+          el('p', { className: 'hint', textContent: t.summary })),
+        el('button', { type: 'button', className: 'btn btn-sm', textContent: engine.progress(t.id) ? 'Replay' : 'Start', attrs: { 'aria-label': `${engine.progress(t.id) ? 'Replay' : 'Start'} ${t.title}` }, dataset: { tour: t.id } }))));
+      if (!found.length) list.append(el('li', { textContent: 'No tours match. Clear the search to see all available tours.' }));
+    };
+    input.addEventListener('input', renderList);
+    renderList();
+    const body = el('div', {},
+      el('p', { className: 'hint', textContent: 'Tours are optional and change nothing in your projects. Press Esc to leave one at any time. Turn automatic offers off in Help › Settings.' }),
+      el('label', { className: 'help-search', htmlFor: searchId }, el('span', { textContent: 'Search tours' }), input), count, list);
     list.addEventListener('click', (e) => {
       const b = e.target.closest('button[data-tour]');
       if (!b) return;
+      selected = b.dataset.tour;
       document.querySelector('dialog.modal[open] button[aria-label="Close"]')?.click();
-      setTimeout(() => start(b.dataset.tour), 0);
     });
-    await App.modal({ title: 'Quick tours', body, buttons: [{ label: 'Close', value: null, primary: true }] });
+    refreshList = renderList;
+    try {
+      await App.modal({ title: 'Quick tours', body, buttons: [{ label: 'Close', value: null, primary: true }], onOpen: () => input.focus() });
+    } finally {
+      if (refreshList === renderList) refreshList = null;
+    }
+    // Await removal of the modal and focus restoration before creating the non-modal tour card.
+    if (selected) return start(selected, { opener });
+    restoreOpener(opener);
+    return false;
   }
 
   async function offerWelcome() {
@@ -159,8 +220,8 @@
     if (choice === 'start') { engine.setWelcome('started'); start('suite'); } else if (choice === 'never') { engine.setWelcome('never'); App.prefs.set({ autoOfferTours: false }); } else engine.setWelcome('skipped');
   }
 
-  App.registerActions({ 'quick-tours': showTours });
-  window.P8Tours = { register: (t) => engine.register(t), start, list: () => engine.list(), engine };
+  App.registerActions({ 'quick-tours': showTours, 'tour-this-tool': tourThisTool });
+  window.P8Tours = { register: (t) => { const result = engine.register(t); if (result.ok) refreshList?.(); return result; }, start, list: () => engine.list(), engine };
   // after the first paint, never over a project the user already works in
   setTimeout(() => { offerWelcome().catch((e) => App.diagnostics?.report('tours', 'E_TOUR_WELCOME', e)); }, 1200);
 })();

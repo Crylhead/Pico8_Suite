@@ -32,6 +32,12 @@ Run each on the affected surface and note pass/fail; baseline tasks from the UX 
 | Keyboard | Tab through the app bar, menus, dialogs and a tool; focus is visible, option groups use arrow keys, dialogs return focus on close. See `docs/ACCESSIBILITY.md`. |
 | Responsive | At 1280, 768 and 320 CSS px and 200% zoom: no lost controls, no horizontal page scroll, dialogs usable. |
 
+## Tour discovery (#108)
+
+1. On Home and in Pixel Studio, use Help › Tour this tool. In Extra Tools select Terrain Lab and repeat; the selected subtool’s tour must start. Close with Esc and verify focus returns to the visible Help menu button. Repeat from a deep link and with automatic offers disabled.
+2. On a tool without a tour (currently including LUT, Wave and Line), the same action must explain that no tour exists and offer Read Help / Browse Quick tours. Neither choice changes document content. Check future built-in tour coverage separately under #103.
+3. Open Quick tours, search by tool/subject, try a query with no results, clear it and replay a completed tour. Verify progress, Suite overview / Tool tour and Current tool labels. The selector must close before the tour starts. Cancel the selector and verify focus return. At 320 CSS px, the search and Start/Replay buttons must remain usable; repeat in both themes.
+
 ## Contextual F1 help (#106)
 
 1. In Pixel Studio, focus a Preview scale button or the Transparent select and press F1. Help must focus/scroll to that exact explanation (including detailed text). Esc must return focus to the original control without editing the image. Repeat with optional hints Off.

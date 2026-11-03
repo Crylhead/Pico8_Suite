@@ -11,7 +11,7 @@
 const P8TourData = (() => {
   const TOURS = [
     {
-      id: 'suite', title: 'Suite overview', major: 1,
+      id: 'suite', title: 'Suite overview', major: 1, ws: 'home', scope: 'suite',
       summary: 'Where the tools are, how the Library connects them and where to find help.',
       steps: [
         { id: 'welcome', title: 'Welcome', text: 'The Suite is a set of PICO-8 tools in one page. Everything stays in this browser; nothing is uploaded. This tour takes about a minute and changes nothing.' },
@@ -22,7 +22,7 @@ const P8TourData = (() => {
       ],
     },
     {
-      id: 'studio', title: 'Pixel Studio basics', major: 1,
+      id: 'studio', title: 'Pixel Studio basics', major: 1, ws: 'studio',
       summary: 'Canvas, palette slots, and how a drawing reaches the Library.',
       steps: [
         { id: 'tools', before: { ws: 'studio' }, target: '#psTools', title: 'Drawing tools', text: 'Pencil, shapes, fill, selection and more. Buttons with a small triangle hold more tools; hover, right-click or long-press them.' },
@@ -35,7 +35,7 @@ const P8TourData = (() => {
       ],
     },
     {
-      id: 'terrain', title: 'Terrain Lab basics', major: 1,
+      id: 'terrain', title: 'Terrain Lab basics', major: 1, ws: 'extras', sub: 'terrain',
       summary: 'Generate seamless terrain, paint it, and see what will be exported.',
       steps: [
         { id: 'open', before: { ws: 'extras', click: '#exTabs [data-value="terrain"]' }, target: '.tl-canvas', title: 'Terrain preview', text: 'The map wraps around its edges. The preview answers every edit at once; the full-resolution render follows when you pause, and exports use that final render.' },

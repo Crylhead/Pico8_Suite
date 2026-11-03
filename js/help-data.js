@@ -249,11 +249,12 @@ const P8HelpData = (() => {
 
     // ---- guides and reference ------------------------------------------------------------
     {
-      id: 'suite', kind: 'guide', title: 'The Suite', rev: 3,
+      id: 'suite', kind: 'guide', title: 'The Suite', rev: 4,
       summary: 'What the Suite is, how tools share work, and how to run it offline.',
       inputs: [], outputs: [],
       tasks: ['switch tools', 'run the Suite offline', 'understand what is stored in the browser'],
       actions: [
+        { id: 'suite.tours', name: 'Quick tours', text: 'Help › Tour this tool starts the current tool’s tour, using the selected Extra Tools tab. If no tour exists, read Help or browse the available tours. Help › Quick tours searches tours by tool or subject and shows progress, replay and the Suite overview. Manual tours remain available when automatic offers are off. Esc closes a tour and returns to editing.' },
         { id: 'suite.help', name: 'Contextual Help', text: 'F1 opens the focused control’s explanation when available, otherwise the selected Extra Tool or workspace. Search and the Help index remain available; clearing search returns to the topic being read. The Return link restores the original context, and Full documentation follows the current topic.' },
         { id: 'suite.about', name: 'About', text: 'Help › About shows the web app version, author and current tools, including Extra Tools tabs. Run in PICO-8 additionally needs the optional local Python bridge and an installed PICO-8; a remotely hosted copy does not connect to the bridge automatically.' },
         { id: 'suite.offline', name: 'Offline use', text: 'The Suite is plain HTML/JS: open index.html from disk or a static host. No account, server or network is needed; only Report a problem → GitHub needs a connection.' },
