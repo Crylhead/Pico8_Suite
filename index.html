@@ -508,7 +508,7 @@
             <option value="nearest">Custom palette · nearest color</option>
           </select>
           <button class="btn" id="tmMappingBtn" data-action="tiles-mapping" hidden>Level mapping…</button>
-          <label class="check" title="Floyd–Steinberg dithering for smoother gradients (creates more unique tiles)">
+          <label class="check" data-help-id="tiles.dither" title="Floyd–Steinberg dithering for smoother gradients (creates more unique tiles)">
             <input type="checkbox" id="tmDither"><span>Dither</span>
           </label>
         </div>
@@ -519,7 +519,7 @@
           <button class="btn" id="tmRebuild">Rebuild</button>
         </div>
         <div class="tm-group">
-          <button class="btn" id="tmAutoGen" data-action="tiles-auto" disabled
+          <button class="btn" id="tmAutoGen" data-action="tiles-auto" data-help-id="tiles.autogen" disabled
                   title="Re-derive every tile from all its uses in the image (per-pixel median, snapped to the image colors)">Auto Generate Tiles</button>
           <button class="btn" id="tmEditTiles" data-action="tiles-edit" disabled>Edit Tiles…</button>
         </div>
