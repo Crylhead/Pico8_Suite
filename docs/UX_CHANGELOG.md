@@ -111,7 +111,7 @@ Keep these issues open rather than treating a green model test as full acceptanc
 | #62 | Addressed in the follow-up below (allowlisted default export). Manual browser check of the Report dialog opt-in remains. |
 | #63 | Addressed in the follow-up below (browser/offline walkthrough, issue-form fields). |
 | #64 | Actual 320/768/1280 layouts, 200% zoom, theme and pointer/touch checks. |
-| #65 | Shared-shell browser keyboard/focus/contrast walkthrough; screen-reader check where available. |
+| #65 | Keyboard/focus/contrast walkthrough done 2026-11-03 (`docs/ACCESSIBILITY.md`); splitter reset announcement fixed. No screen reader available. |
 | #66 | Disposable folder happy path, cancellation, permission denial and preflight-to-actual-write comparison. |
 | #67 | Foreground before/after input-to-paint and frame-pacing evidence at 256/512/1024; independent worker retry smoke. Archive timings are attributed, not independently reproduced. |
 | #68 | First-run/returning-user browser journey, task navigation and narrow-layout checks. |
