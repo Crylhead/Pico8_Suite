@@ -1,13 +1,34 @@
 # PICO-8 Suite — Minifier Workspace: Technical UI/UX Specification
 
 **Document ID:** P8S-MIN-UX-001  
-**Version:** 1.1 (proposed; icon included)  
+**Version:** 1.2 (status annotation; original v1.1 design retained)
+
 **Date:** 2026-11-03  
-**Status:** Implementation specification; not an assertion that this feature exists  
+**Status:** Historical design baseline with current implementation status below
+
 **Default profile:** **Minimal**  
 **Optimization target:** **Tokens**  
 **Primary engine:** Shrinko8, version pinned at implementation  
 **Target repository:** https://github.com/Crylhead/Pico8_Suite
+
+## Current implementation status — 2026-11-03
+
+Minifier is implemented on `main` through [PR #144](https://github.com/Crylhead/Pico8_Suite/pull/144) (`51c223b`). MIN-01–MIN-11 shipped; [core tracker #130](https://github.com/Crylhead/Pico8_Suite/issues/130), [core acceptance #128](https://github.com/Crylhead/Pico8_Suite/issues/128) and [PNG task #129](https://github.com/Crylhead/Pico8_Suite/issues/129) are closed. This status does not mean every original design detail or every possible cart has been verified.
+
+| Area | Current behavior / evidence |
+| --- | --- |
+| Workspace and defaults | Develop → Minifier, immediately after Code Editor; only **Minimal + Tokens** is supported. Safe/Aggressive and other focus values remain disabled/unavailable. |
+| Input and project handoff | UTF-8 `.lua` / `.p8`, pasted Lua and unsaved Code Editor snapshots; verified include forms from the already-opened project folder. Original source, caret/save context and undo are retained. |
+| Outputs | Copy generated Lua; separate `.min.lua` / `.min.p8`; optional `.min.p8.png` for complete cart input when its local encoder is available and capacity checks pass. PNG import is unsupported. |
+| Hosting and assets | HTTP(S) with packaged pinned Shrinko8/Pyodide assets; `file://` requires the localhost launcher. No source upload, CDN fallback or mandatory Run bridge. See [setup](MINIFIER_ENGINE.md). |
+| Comparison presentation | Native read-only textareas with Compare / Original / Optimized modes. Syntax-aware markup from the proposal below is not implemented; see [#147](https://github.com/Crylhead/Pico8_Suite/issues/147). |
+| Public API and control IDs | Use [EXTENDING.md](../EXTENDING.md#minifier-jobs), `index.html` and the current `js/minifier-*.js` modules. The illustrative IDs and request/result schema below are the original proposal, not an authoritative current API. |
+| Verification | Headless Chromium and native engine/data checks, plus user-run original/optimized `.p8` and PNG fixture comparisons in Windows PICO-8 0.2.7. See [core acceptance](MINIFIER_ACCEPTANCE.md) and [PNG verification](MINIFIER_PNG.md). No general runtime-equivalence, other-browser or full screen-reader claim is made. |
+| Follow-up work | Required native-engine CI execution is tracked in [#145](https://github.com/Crylhead/Pico8_Suite/issues/145); broader cart coverage in [#148](https://github.com/Crylhead/Pico8_Suite/issues/148); export budget wording in [#149](https://github.com/Crylhead/Pico8_Suite/issues/149). |
+
+### Reading the retained design baseline
+
+Sections 1–15 and the icon appendix preserve the original v1.1 design from [PR #118](https://github.com/Crylhead/Pico8_Suite/pull/118). Proposed layouts, control IDs, schema examples, release checkboxes and the initial six work packages are historical requirements, not a current feature inventory or completion dashboard. The implementation was delivered through the later eleven-issue [roadmap #130](https://github.com/Crylhead/Pico8_Suite/issues/130). For current user behavior, start with [MINIFIER.md](MINIFIER.md); for actual evidence and untested combinations, use the acceptance records above. Do not mark a proposed requirement verified without evidence.
 
 ## 1. Product decision and goals
 
@@ -321,7 +342,9 @@ The worker should never receive live DOM objects or browser handles. For a `.p8`
 
 No direct mutation of Code Editor private `ed` state from `minifier.js`. Expose a narrow snapshot API or event with an immutable copy of the source, its identity, and accessible dependency file texts.
 
-## 13. Acceptance criteria — must pass before release
+## 13. Original acceptance checklist — historical design requirements
+
+The unchecked boxes below retain the original design checklist. They do not indicate that the shipped Minifier is absent. Current implemented behavior, deferred details and actual verification are distinguished in the status table and linked records above; for example, syntax-aware comparison and native screen-reader/other-browser testing must not be marked passed based on the representative-cart checks.
 
 ### User-visible behavior
 
@@ -350,7 +373,7 @@ No direct mutation of Code Editor private `ed` state from `minifier.js`. Expose 
 - [ ] At least one representative generated `.p8` is launched successfully in real PICO-8; do not state broad runtime equivalence from one fixture.
 - [ ] Update README, EXTENDING.md if any public interface changes, help registry, tour registry, relevant docs and focused CI checks in the feature PR.
 
-## 14. Suggested independent implementation work packages
+## 14. Original suggested implementation work packages — historical
 
 **MIN-01: Engine feasibility and packaging (P0).** Pin Shrinko8/Pyodide, run one minimal/token fixture entirely in a worker, document sizes, cold-load and file-protocol limitations. Acceptance: deterministic output, no external source uploads and clear failure path. This package precedes UI integration.
 
@@ -368,7 +391,7 @@ No direct mutation of Code Editor private `ed` state from `minifier.js`. Expose 
 
 **Verified upstream controls:** Minimal Minification in Shrinko8's web UI maps to `--minify-safe-only --no-minify-rename --no-minify-lines`; `--focus-tokens` is an independent optimization target. The `--no-minify-transform` option is available in current Shrinko8; verify the desired behavior against fixtures. **Do not claim that Minimal is only comment/space removal.**
 
-**To validate during MIN-01:** whether the packaged Pyodide runtime can efficiently handle `.p8.png` without shipping optional large dependencies; precise file-handling mode and version used for invoking Shrinko8 as a Python library; and whether include/cycle behavior can use the same in-memory file map on all supported browsers. Do not block the entire v1 UI on optional PNG export.
+**Original MIN-01 investigation questions (historical):** whether the packaged Pyodide runtime can efficiently handle `.p8.png` without shipping optional large dependencies; precise file-handling mode and version used for invoking Shrinko8 as a Python library; and whether include/cycle behavior can use the same in-memory file map on all supported browsers. Do not block the entire v1 UI on optional PNG export. The resolved engine/library and include contracts are documented in [MINIFIER_ENGINE.md](MINIFIER_ENGINE.md); the lightweight PNG path and its verified dependencies are documented in [MINIFIER_PNG.md](MINIFIER_PNG.md).
 
 **References:**
 - Suite repository: https://github.com/Crylhead/Pico8_Suite
@@ -404,7 +427,7 @@ No direct mutation of Code Editor private `ed` state from `minifier.js`. Expose 
 
 **Minimum acceptance checks:** render at 20 × 20 CSS pixels at 100%, 125%, and 200% browser zoom; verify visible shape in dark and light themes and high-contrast/forced-colors mode; confirm the `Minifier` accessible name is announced once; ensure adding the icon does not change existing workspace icons or render a non-functional Minifier tab before the tool is implemented. Asset validation may be performed independently of a functional workspace.
 
-The approved icon is installed inline by MIN-03 in the native Minifier tab. Its path geometry, inherited theme color and single accessible name follow this contract. The complete v1 workflows described above still depend on the remaining roadmap issues.
+The approved icon is installed inline by MIN-03 in the native Minifier tab. Its path geometry, inherited theme color and single accessible name follow this contract. The shipped MIN-01–MIN-11 workflow and its verification are summarized in the current-status section above; deferred design details remain explicitly identified there.
 
 ---
 

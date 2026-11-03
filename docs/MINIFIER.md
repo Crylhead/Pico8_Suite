@@ -87,4 +87,4 @@ The bundled engine is **Shrinko8 1.2.7f**, pinned to commit `fb6e66827d481020857
 - [Official PICO-8 manual](https://www.lexaloffle.com/dl/docs/pico-8_manual.html)
 - [Engine packaging, supported include semantics and adapter details](MINIFIER_ENGINE.md)
 
-This guide describes the core workflow delivered in MIN-01 through MIN-10. The representative-cart runtime gate passed via user testing; optional PNG export is implemented in MIN-11, with its separate installed-console verification tracked in #129. Neither automatic Cart Builder minification nor applying generated output to editable source is supported.
+This guide describes the core workflow delivered in MIN-01 through MIN-10. The representative-cart runtime gate passed via user testing; optional PNG export is implemented in MIN-11 and its separate representative-fixture console check is recorded in the [PNG verification notes](MINIFIER_PNG.md); #129 is closed. Neither automatic Cart Builder minification nor applying generated output to editable source is supported.
