@@ -89,7 +89,11 @@ const P8HelpData = (() => {
         { id: 'tiles.edit', name: 'Edit Tiles…', text: 'Pixel editor for single tiles; Save Changes applies them.' },
         { id: 'tiles.tomap', name: 'Tiles + Map → Map Editor', text: 'Opens the tiles as the Map Editor tileset (sprite 0 stays empty when they fit) and the tile map as its map, as a temporary copy that is not in the Library. If the Map Editor has unsaved changes it first asks Replace / Cancel; Cancel changes neither tool.' },
       ],
-      controls: [{ id: 'tiles.mae', label: 'Tile reduction (MAE)', text: 'Higher values merge more similar tiles.' }],
+      controls: [
+        { id: 'tiles.mae', label: 'Tile reduction (MAE)', text: 'Higher values merge more similar tiles.' },
+        { id: 'tiles.dither', label: 'Dither', text: 'Floyd–Steinberg dithering gives smoother gradients but creates more unique tiles.' },
+        { id: 'tiles.autogen', label: 'Auto Generate Tiles', text: 'Re-derives every tile from all of its uses in the image: the per-pixel median, snapped to the image colors. Available after a build.' },
+      ],
       shortcuts: [['Ctrl+I', 'Import image'], ['Ctrl+O', 'Open tile project'], ['Ctrl+S', 'Save tile project']],
       restrictions: ['A PICO-8 map addresses at most 256 tiles.', 'Changing the custom palette asks for a rebuild.'],
       related: ['map', 'studio', 'palette'], keywords: ['tileset', 'sprite sheet', 'viewport', 'mae', 'dither'], legacy: 'doc-tiles',
@@ -335,7 +339,7 @@ const P8HelpData = (() => {
       id: 'settings', kind: 'reference', title: 'Settings', rev: 2,
       summary: 'Help › Settings… changes help detail, tour offers, compact navigation and motion; kept in this browser only.',
       inputs: [], outputs: [], tasks: ['turn optional help off', 'reduce motion'],
-      actions: [], controls: [{ id: 'settings.helpLevel', label: 'Help detail', text: 'Off, Concise or Detailed optional hints. Labels, warnings and errors are always shown.', detail: 'Explanatory tips stay open while the pointer is over the control, the tip or the gap between them, or while the control retains focus. Escape dismisses the tip without changing focus or editing. F1 provides the same help when there is not enough room for a tip.' }], shortcuts: [],
+      actions: [], controls: [{ id: 'settings.helpLevel', label: 'Help detail', text: 'Off, Concise or Detailed optional hints. Off also shortens the browser’s own hover text to names and shortcut keys. Labels, warnings and errors are always shown.', detail: 'Explanatory tips stay open while the pointer is over the control, the tip or the gap between them, or while the control retains focus. Escape dismisses the tip without changing focus or editing. F1 provides the same help when there is not enough room for a tip.' }], shortcuts: [],
       restrictions: ['If the browser blocks storage, changes last until reload.'], related: ['suite'], keywords: ['preferences', 'theme', 'motion', 'help level'], legacy: 'doc-settings',
     },
     {

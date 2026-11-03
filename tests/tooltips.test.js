@@ -8,7 +8,8 @@ const Help = require('../js/help-core.js');
 const vm = require('vm');
 
 // Bounded DOM/event fixture for the real init() adapter, with deterministic timers.
-function tooltipFixture(source = fs.readFileSync(path.join(__dirname, '../js/ux-tooltips.js'), 'utf8')) {
+// authored(element): optional; returns the elements carrying a title in the "authored markup" (#107).
+function tooltipFixture(source = fs.readFileSync(path.join(__dirname, '../js/ux-tooltips.js'), 'utf8'), { authored } = {}) {
   const events = () => ({
     listeners: new Map(),
     addEventListener(type, fn) { if (!this.listeners.has(type)) this.listeners.set(type, new Set()); this.listeners.get(type).add(fn); },
@@ -27,6 +28,8 @@ function tooltipFixture(source = fs.readFileSync(path.join(__dirname, '../js/ux-
     getBoundingClientRect() { return this.rect || box(parseFloat(this.style.left), parseFloat(this.style.top), this.offsetWidth, Math.min(this.offsetHeight, parseFloat(this.style.maxHeight) || Infinity)); },
   });
   const body = element();
+  const authoredNodes = authored ? authored(element) : [];
+  if (authored) body.querySelectorAll = () => authoredNodes;
   const doc = Object.assign(events(), { body, activeElement: body, documentElement: { clientWidth: 800, clientHeight: 600 }, createElement: () => element(), createTextNode: (text) => ({ textContent: text }), querySelectorAll: () => [] });
   const win = events();
   let next = 1, level = 'concise', subscriber;
@@ -217,4 +220,64 @@ t('#60 every data-help-id in index.html resolves in the help registry', () => {
   const ids = [...html.matchAll(/data-help-id="([^"]+)"/g)].map((m) => m[1]);
   assert.ok(ids.length >= 5, 'example controls are marked');
   for (const id of ids) assert.ok(Tips.resolveTip(Help, id, 'concise'), `no help text for ${id}`);
+});
+
+t('#107 Off keeps names and shortcut keys of native titles but drops optional explanations', () => {
+  const cases = [
+    ['Draw (B) · paints the selected tile or block', false, 'Draw (B)'], // only name: keep the name part
+    ['Ellipse select (M twice) · drag inside to move', false, 'Ellipse select (M twice)'],
+    ['Draw (B) · paints the selected tile or block', true, 'Draw (B)'],
+    ['Save into the file (Ctrl+S)', true, 'Ctrl+S'], // named button: the key is all that is extra
+    ['Next (F3 / Enter)', true, 'Next (F3 / Enter)'],
+    ['Fit (0)', true, 'Fit (0)'],
+    ['Pixel perfect (P): no L-shaped corners in 1-pixel strokes', true, 'Pixel perfect (P)'], // key mid-sentence
+    ['Read the folder again (F5). A folder chosen with the button has to be chosen again', true, 'F5'],
+    ['Cell grid (8×8 pixels)', true, null], // parenthetical explanation, not a key
+    ['Floyd–Steinberg dithering for smoother gradients (creates more unique tiles)', true, null],
+    ['A long description that is the only accessible name', false, 'A long description that is the only accessible name'],
+  ];
+  for (const [title, named, expected] of cases) assert.strictEqual(Tips.offTitle(title, named), expected, title);
+});
+
+t('#107 the real adapter applies Off live to authored titles and restores them without a reload', () => {
+  let named, tool, keyed, owned, plain, disabled;
+  const f = tooltipFixture(undefined, { authored: (element) => {
+    const make = (title, props = {}) => { const e = element(); e.setAttribute('title', title); return Object.assign(e, props); };
+    named = make('Cell grid (8×8 pixels)', { textContent: 'Grid' });
+    tool = make('Draw (B) · paints the selected tile or block');
+    keyed = make('Save into the file (Ctrl+S)', { textContent: 'Save' });
+    owned = make('Where this map fits in a PICO-8 cart', { textContent: '' });
+    plain = make('Fit (0)', { textContent: 'Fit' });
+    disabled = make('Re-derive every tile from all its uses', { textContent: 'Auto Generate Tiles', disabled: true });
+    disabled.dataset.helpId = 'tiles.autogen';
+    return [named, tool, keyed, owned, plain, disabled];
+  } });
+  // A module replaces a static title with live status after load: never touched afterwards.
+  owned.setAttribute('title', 'Fits in __map__ (128×32)');
+  f.setLevel('off');
+  assert.strictEqual(named.getAttribute('title'), null);
+  assert.strictEqual(tool.getAttribute('title'), 'Draw (B)');
+  assert.strictEqual(keyed.getAttribute('title'), 'Ctrl+S');
+  assert.strictEqual(plain.getAttribute('title'), 'Fit (0)');
+  assert.strictEqual(owned.getAttribute('title'), 'Fits in __map__ (128×32)');
+  assert.strictEqual(disabled.getAttribute('title'), null, 'an unclaimed registry control follows Off too');
+  // While Off, a module sets new text on a shortened control: restoring must keep the module's text.
+  tool.setAttribute('title', 'Draw (B) · status from a module');
+  f.setLevel('detailed');
+  assert.strictEqual(named.getAttribute('title'), 'Cell grid (8×8 pixels)');
+  assert.strictEqual(keyed.getAttribute('title'), 'Save into the file (Ctrl+S)');
+  assert.strictEqual(tool.getAttribute('title'), 'Draw (B) · status from a module');
+  assert.strictEqual(disabled.getAttribute('title'), 'Re-derive every tile from all its uses');
+  f.setLevel('off'); f.setLevel('concise');
+  assert.strictEqual(named.getAttribute('title'), 'Cell grid (8×8 pixels)', 'repeat toggles are stable');
+  // A disabled registry control keeps its native title; once enabled, targeting it claims the
+  // title so it never shows both a native and a registry tooltip.
+  f.doc.emit('pointerover', { target: disabled });
+  assert.strictEqual(disabled.getAttribute('title'), 'Re-derive every tile from all its uses');
+  disabled.disabled = false;
+  f.doc.emit('pointerover', { target: disabled });
+  assert.strictEqual(disabled.getAttribute('title'), null);
+  assert.strictEqual(disabled.dataset.titleOrig, 'Re-derive every tile from all its uses');
+  f.setLevel('off'); f.setLevel('concise');
+  assert.strictEqual(disabled.getAttribute('title'), null, 'a claimed control is left to the registry tip');
 });

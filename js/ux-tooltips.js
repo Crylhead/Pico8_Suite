@@ -11,6 +11,13 @@
 // - A native `title` on an opted-in control that already has visible text or an aria-label is
 //   moved to data-title-orig: the registry tip replaces it so one control never shows two
 //   tooltips and Off applies consistently. Controls without such a name keep their title.
+// - Legacy native titles authored in index.html (#107): with Off, a title's optional explanation is
+//   dropped while names and shortcut keys stay (offTitle). "Draw (B) · paints the selected tile"
+//   becomes "Draw (B)"; "Save into the file (Ctrl+S)" on a button already named Save becomes
+//   "Ctrl+S"; a long description on a named control is removed; a control with no other accessible
+//   name keeps its title's name part. Titles set by JavaScript (status, values, save state, error
+//   details) are never touched, nor is a static title a module has since replaced. Mark an authored
+//   title that must always stay with data-title-keep. Concise/Detailed restore the original.
 // - Unknown ids fail quietly. Preference changes apply without a reload.
 //
 // resolveTip() is pure and runs in Node (tests/tooltips.test.js).
@@ -19,6 +26,40 @@
 
 const P8Tips = (() => {
   const DEFAULTS = { hoverDelay: 600, focusDelay: 250 };
+  // Scripts load at the end of <body>, so this runs once the authored markup exists and before any
+  // tool module has set a title of its own: exactly the titles written in index.html.
+  const AUTHORED = typeof document !== 'undefined' && typeof document.body?.querySelectorAll === 'function'
+    ? new Map([...document.body.querySelectorAll('[title]')].map((el) => [el, el.getAttribute('title')]))
+    : new Map();
+
+  // A trailing "(Ctrl+S)", "(F3 / Enter)", "(B)" or "(M twice)" is a shortcut, not an explanation.
+  const KEY = String.raw`(?:[^()]*\b(?:Ctrl|Alt|Shift|Cmd|Enter|Esc|Tab|Space|Del|F\d{1,2})\b[^()]*)|[A-Z0-9](?: twice)?`;
+  const SHORTCUT = new RegExp(String.raw`\s*\((${KEY})\)\s*$`);
+  // "Pixel perfect (P): no L-shaped corners" / "Read the folder again (F5). A folder…": the
+  // explanation follows a key in mid-sentence.
+  const KEY_THEN_TEXT = new RegExp(String.raw`\((?:${KEY})\)(?=[:.]\s)`);
+
+  /**
+   * The native title to keep while help detail is Off (#107): the same string when nothing is
+   * optional, a shortened one, or null to remove it. `named`: the control has another accessible
+   * name (visible text, aria-label/-labelledby or a label), so the title is not its only name.
+   */
+  function offTitle(title, named) {
+    let head = String(title).split(' · ')[0].trim();
+    const cut = KEY_THEN_TEXT.exec(head);
+    if (cut) head = head.slice(0, cut.index + cut[0].length);
+    if (!named) return head; // the title is the name: keep it, drop only the "· explanation" part
+    const m = SHORTCUT.exec(head);
+    const core = m ? head.slice(0, m.index) : head;
+    if (core.split(/\s+/).filter(Boolean).length <= 3) return head; // a name or name + key
+    return m ? m[1] : null;
+  }
+
+  function hasName(el) {
+    if (el.hasAttribute('aria-label') || el.hasAttribute('aria-labelledby')) return true;
+    if ((el.textContent || '').trim()) return true;
+    return [...(el.labels || [])].some((l) => (l.textContent || '').trim());
+  }
 
   /** { text, topic } for a level, or null when nothing should be shown */
   function resolveTip(help, id, level) {
@@ -187,22 +228,49 @@ const P8Tips = (() => {
     window.addEventListener('resize', hide);
     window.addEventListener('blur', hide);
 
-    // one tooltip per control: the registry tip replaces a duplicate native title
+    // one tooltip per control: the registry tip replaces a duplicate native title. A disabled
+    // control keeps it (browsers may show no custom tip on it) until it is enabled and targeted.
+    function claim(el) {
+      if (typeof el?.hasAttribute !== 'function' || !el.hasAttribute('title') || el.disabled) return;
+      const named = el.hasAttribute('aria-label') || (el.textContent || '').trim();
+      if (!named) return;
+      el.dataset.titleOrig = el.getAttribute('title');
+      el.removeAttribute('title');
+    }
     function claimTitles(root = document) {
-      for (const el of root.querySelectorAll('[data-help-id][title]')) {
-        const named = el.hasAttribute('aria-label') || (el.textContent || '').trim();
-        if (!named) continue;
-        el.dataset.titleOrig = el.getAttribute('title');
-        el.removeAttribute('title');
-      }
+      for (const el of root.querySelectorAll('[data-help-id][title]')) claim(el);
     }
     claimTitles();
+    // Controls generated later are claimed when they first become a tip target.
+    document.addEventListener('pointerover', (e) => claim(target(e.target)), true);
+    document.addEventListener('focusin', (e) => claim(target(e.target)), true);
 
-    prefs.subscribe(() => hide());
-    return { hide, claimTitles, show, configure: (d) => Object.assign(cfg, d) };
+    // #107: Off also governs the explanations in authored native titles (see offTitle).
+    const shortened = new Map(); // element -> the value set while Off (null = removed)
+    function applyTitleLevel(authored = AUTHORED) {
+      const off = level() === 'off';
+      for (const [el, full] of authored) {
+        if (el.dataset.titleOrig != null || el.hasAttribute('data-title-keep')) continue; // claimed by a registry tip
+        if (off) {
+          if (shortened.has(el) || el.getAttribute('title') !== full) continue; // done, or a module owns it now
+          const value = offTitle(full, hasName(el));
+          if (value === full) continue;
+          shortened.set(el, value);
+          if (value == null) el.removeAttribute('title'); else el.setAttribute('title', value);
+        } else if (shortened.has(el)) {
+          const value = shortened.get(el);
+          shortened.delete(el);
+          if (el.getAttribute('title') === value) el.setAttribute('title', full); // unless a module set a new one
+        }
+      }
+    }
+    applyTitleLevel();
+
+    prefs.subscribe(() => { hide(); applyTitleLevel(); });
+    return { hide, claimTitles, show, applyTitleLevel, configure: (d) => Object.assign(cfg, d) };
   }
 
-  return { init, resolveTip, place, inHoverArea, DEFAULTS };
+  return { init, resolveTip, place, inHoverArea, offTitle, DEFAULTS };
 })();
 
 if (typeof module !== 'undefined') module.exports = P8Tips;
