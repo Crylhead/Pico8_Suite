@@ -28,12 +28,26 @@ const P8ProjectContext = (() => {
     unsupported: 'This browser gives no folder handle; the project is known by name only.',
   });
 
+  /**
+   * Permission belongs to the handle, not to the folder: a moved, renamed or deleted folder still answers
+   * "granted" (#68). With access granted, reading one entry (or the file) proves the folder is still there;
+   * a failure means it is gone ('stale'). Handles without these methods are not probed.
+   */
+  const canProbe = (handle) => typeof handle.entries === 'function' || typeof handle.getFile === 'function';
+  async function stillThere(handle) {
+    try {
+      if (typeof handle.entries === 'function') { for await (const entry of handle.entries()) { void entry; break; } } else if (typeof handle.getFile === 'function') await handle.getFile();
+      return true;
+    } catch { return false; }
+  }
+
   async function queryAccess(handle, mode = 'readwrite') {
     if (!handle) return 'unsupported';
     if (typeof handle.queryPermission !== 'function') return 'unsupported';
     try {
       const r = await handle.queryPermission({ mode });
-      return r === 'granted' ? 'granted' : r === 'denied' ? 'denied' : 'prompt';
+      if (r === 'granted') return !canProbe(handle) || (await stillThere(handle)) ? 'granted' : 'stale';
+      return r === 'denied' ? 'denied' : 'prompt';
     } catch { return 'stale'; }
   }
 
@@ -139,7 +153,8 @@ const P8ProjectContext = (() => {
         let access;
         try {
           const r = await p.handle.requestPermission({ mode });
-          access = r === 'granted' ? 'granted' : r === 'denied' ? 'denied' : 'prompt';
+          // granted for a folder that no longer exists is still unusable (#68)
+          access = r === 'granted' ? (!canProbe(p.handle) || (await stillThere(p.handle)) ? 'granted' : 'stale') : r === 'denied' ? 'denied' : 'prompt';
         } catch (err) { access = err && err.name === 'AbortError' ? 'prompt' : 'stale'; }
         if (project === p && access !== p.access) {
           const previous = project;

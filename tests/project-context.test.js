@@ -137,3 +137,21 @@ t('#55 delayed storage cannot restore an older project after a newer selection',
   assert.deepStrictEqual(events, ['Old', 'New']);
   assert.strictEqual(writes.at(-1).name, 'New');
 });
+
+t('#68 a granted handle whose folder was moved or deleted is stale, on check and on reconnect', async () => {
+  const gone = () => ({ name: 'demo', kind: 'directory', perm: 'granted', async queryPermission() { return this.perm; }, async requestPermission() { return 'granted'; },
+    // the browser still grants the handle, but reading the folder fails
+    async *entries() { throw Object.assign(new Error('A requested file or directory could not be found'), { name: 'NotFoundError' }); } });
+  const { context, publisher } = C.create();
+  await publisher.select({ name: 'demo', source: 'cartbuilder', handle: gone() });
+  assert.strictEqual(context.get().access, 'stale', 'select');
+  assert.strictEqual((await context.check()).access, 'stale', 'check');
+  assert.strictEqual((await publisher.reconnect()).access, 'stale', 'reconnect');
+  // an existing folder (one readable entry, or none) stays granted
+  const here = { name: 'ok', kind: 'directory', async queryPermission() { return 'granted'; }, async *entries() { yield ['main.p8', {}]; } };
+  await publisher.select({ name: 'ok', source: 'cartbuilder', handle: here });
+  assert.strictEqual((await context.check()).access, 'granted');
+  const empty = { name: 'empty', kind: 'directory', async queryPermission() { return 'granted'; }, async *entries() {} };
+  await publisher.select({ name: 'empty', source: 'cartbuilder', handle: empty });
+  assert.strictEqual((await context.check()).access, 'granted');
+});
