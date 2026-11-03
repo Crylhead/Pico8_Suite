@@ -15,6 +15,13 @@ Browser-based PICO-8 graphics suite, developed in this standalone repository. It
 | **Data Carts** | Exact reader / writer for the cart data area (0x0000–0x42ff incl. `__sfx__` / `__music__`), memory map per cart with the ranges the project's `reload()` calls read, sections per cart (what each fx cuts out with `mem_store`), viewer in the palette and fade row the fx uses (read from its code and data), hex, fixed-point plots, packer for new data carts (raw or LZ per entry) with generated `reload()` lines |
 | **Extra Tools** | Smaller tools behind one tab bar: **LUT Creator** (port of `lut_creator`: 2D motion paths, 3D ball formations incl. OBJ models, slots, `.p8` data cart / Lua / Picotron POD), **Wave Designer** (port of `osc_designer`: 16 scope waveforms → `waves.p8`), **Line Tool** (port of `line_tool`: 128×128 lines → Lua table, pixels → library), **Terrain Lab** (port of `terrain_lab_v0_4`: seamless terrain from noise or an imported heightmap, brushes, text / image / SVG stamps, erosion, terraces and sea level, baked light → 128×128 PICO-8 color map in the best 16/12/8/4 of 32 colors or the live palette of Palette & Fades / Pixel Studio, optionally shaded along their fade tables, + 16-level height map, `.p8` viewer cart, library; history window, status bar, any installed font) |
 
+## Planned Minifier workspace
+
+A proposed **Minifier** tool would extend the **Develop** group with a browser-based Shrinko8 integration. Its design specifies non-destructive optimization, a default **Minimal** profile focused on **Tokens**, Code Editor handoff, comparisons, diagnostics, and exports. **This is a design proposal, not an implemented workspace.**
+
+- [Minifier UI/UX technical specification](docs/MINIFIER_UI_SPEC.md)
+- [Minifier navigation icon (SVG)](assets/icons/minifier.svg)
+
 ## Run locally
 
 The web app has no build step, package installation or third-party runtime dependencies. Open `index.html` directly for basic use. For a stable local origin and the broadest browser API support, serve the repository root:
