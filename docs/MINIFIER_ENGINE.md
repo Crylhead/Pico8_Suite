@@ -1,6 +1,6 @@
-# Minifier engine foundation — MIN-01 / #119
+# Minifier engine foundation and job adapter — MIN-01 / #119, MIN-02 / #120
 
-Real Shrinko8 runs in a local browser **module Web Worker**. This foundation has no production workspace, editor handoff or download UI. MIN-02 (#120) adds the application job/revision/cancellation adapter; subsequent roadmap issues build the user-facing workflows.
+Real Shrinko8 runs in a local browser **module Web Worker**. The DOM-free model and adapter below manage application jobs, revisions and cancellation. There is no production workspace, editor handoff or download UI yet; subsequent roadmap issues build those workflows.
 
 ## Pins and package scope
 
@@ -87,7 +87,49 @@ diagnostic: {severity: 'error'|'warning', code, message, file?, line?, column?}
 
 Errors do not contain generated output. Submitted Lua is parsed/minified, never executed. There is no eval/custom-script/editor interface. Requests are serialized inside one worker. Output text/diagnostics are plain data, never trusted HTML.
 
-MIN-02 owns immutable application snapshots, stale-result rejection, options validation beyond this capability set, cancellation, retry/dispose and UI state transitions. **Echoed revisions alone are not a stale-result guard.** Cancellation should terminate this worker; retry should create a fresh one and send `init`. Initialization failure clears the internal bootstrap promise; no failure changes the Suite shell or an editor document.
+The MIN-02 adapter owns immutable application snapshots, stale-result rejection, capability validation, cancellation, retry/dispose and application state transitions. **Echoed revisions alone are not a stale-result guard.** The adapter also checks request identity and the actual worker instance. Cancellation terminates the worker; Retry creates a fresh one and sends `init`. No failure changes the Suite shell or an editor document.
+
+## Shared model and adapter — MIN-02
+
+Load classic scripts in this order: `js/minifier-core.js`, `js/minifier-worker-host.js`, `js/minifier-engine.js`. They export `P8MinifierCore`, `P8MinifierWorkerHost` and `P8MinifierEngine`; core and adapter also support CommonJS for Node tests. Loading them, changing source/settings or subscribing never constructs a worker. They are not wired into `index.html` until MIN-03.
+
+```js
+const minifier = P8MinifierEngine.create();
+const unsubscribe = minifier.subscribe((state) => {
+  const controls = P8MinifierCore.describe(state);
+  // Render plain text diagnostics and controls. No automatic optimize/export here.
+});
+minifier.setSource({ kind: 'lua', entryPath: 'demo.lua',
+  files: [{ path: 'demo.lua', text: 'cls()' }] });
+await minifier.initialize(); // await actual worker readiness before enabling Optimize
+// Only the user's Optimize action calls this:
+const result = await minifier.optimize();
+// result: {job, engine, lua, cartText, metrics, diagnostics, flags}, deeply frozen
+// On teardown: unsubscribe(); minifier.dispose();
+```
+
+Callers must handle rejected promises. Cancellation rejects with `E_CANCELLED`, input/settings changes reject an active optimization with `E_STALE`, and disposal rejects it with `E_DISPOSED`. Engine errors carry plain `diagnostics`; normal parse errors keep the worker available. Invalid protocol/output, crashes, message errors and timeouts discard it. The default per-request timeout is 120 seconds; tests can inject `workerFactory`, `setTimer`, `clearTimer` and `timeoutMs`.
+
+| API | Behavior |
+| --- | --- |
+| `getState()` / `subscribe(fn)` | Immutable current state / unsubscribe function; observer errors cannot break transport cleanup |
+| `setSource(snapshotOrNull)` | Copies relative file paths/text only; replaces the document even if the filename is unchanged |
+| `setOptions({profile?, target?})` | Validates named options; defaults Minimal + Tokens; identical settings are a no-op |
+| `initialize()` | Shared pending promise; initializes only, never sends source |
+| `optimize()` | Captures an immutable job before any await; initializes lazily if needed; rejects simultaneous runs |
+| `cancel()` | Terminates pending initialization/CPU work and rejects it; idle cancellation is a no-op |
+| `retry()` | Replaces the worker and initializes it; a new Optimize action is still required |
+| `dispose()` | Terminates work and clears observers; terminal, create another adapter to reuse |
+
+Only Minimal + Tokens is mapped, to the five flags documented above. Unsupported names produce `unsupported`, and unknown settings keys are rejected rather than silently passed to the CLI. The current engine refuses multiple-file/include jobs explicitly; the immutable file-map contract is ready for MIN-07, but does not claim to resolve includes now.
+
+One monotonic clock supplies `sourceRevision`, `optionsRevision` and job identities. A source/options change invalidates the active job immediately. During bootstrap, the source-free initialization can finish for the newly loaded input; after source has been posted, the worker is terminated. Replaced workers' saved callbacks and out-of-order request replies cannot make old output current.
+
+`state.status` is one of `empty`, `loading`, `ready`, `running`, `success`, `unchanged`, `stale`, `cancelled`, `error`, `unsupported`. A loaded source may be `ready` while `enginePhase` is still `cold`; **use `describe(state).canOptimize`**, which requires an actual initialized engine. `describe` also supplies `busy`, `stale` and `canExport`. Prior output is retained for review but loses current-result eligibility during a run, after input/settings changes, or on cancellation/error. An equal token count is valid `unchanged` output; increased counts remain valid and `metricDelta` labels them as an increase. Missing measurements stay `null` with an explanation; zero delta formats as `0 (0%)`.
+
+`canExport(state)` is the default **current revision guard**, not an exporter or proof of cart preservation. MIN-08 must still validate supported content, preserve non-Lua sections, and obtain the explicit user export action. `outputFilename(path, kind)` suggests a distinct `.min.lua` / `.min.p8` name; it writes nothing. No core/adapter action saves, downloads, executes Lua or modifies Code Editor.
+
+Validation: 18 focused Node regressions cover immutable snapshots, all state categories, preset flags, stale/cancelled callbacks, malformed replies, crash-after-reply races, timeouts and fresh-worker retry. A real Chromium 153.0.8010.0 adapter check matched both CLI fixtures below, retained the invalid fixture's file/line/column, cancelled after an optimize message was posted, then initialized a second worker and accepted a zero-token-saving `cls()` result (2 → 2 tokens). It used only same-origin GET requests. Real PICO-8 validation remains #128.
 
 ## Hosting and offline behavior
 
