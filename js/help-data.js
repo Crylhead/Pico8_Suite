@@ -259,10 +259,10 @@ const P8HelpData = (() => {
       related: ['suite'], keywords: ['p8', 'png', 'json', 'csv', 'format'], legacy: 'doc-formats',
     },
     {
-      id: 'settings', kind: 'reference', title: 'Settings', rev: 1,
+      id: 'settings', kind: 'reference', title: 'Settings', rev: 2,
       summary: 'Help › Settings… changes help detail, tour offers, compact navigation and motion; kept in this browser only.',
       inputs: [], outputs: [], tasks: ['turn optional help off', 'reduce motion'],
-      actions: [], controls: [{ id: 'settings.helpLevel', label: 'Help detail', text: 'Off, Concise or Detailed optional hints. Labels, warnings and errors are always shown.' }], shortcuts: [],
+      actions: [], controls: [{ id: 'settings.helpLevel', label: 'Help detail', text: 'Off, Concise or Detailed optional hints. Labels, warnings and errors are always shown.', detail: 'Explanatory tips stay open while the pointer is over the control, the tip or the gap between them, or while the control retains focus. Escape dismisses the tip without changing focus or editing. F1 provides the same help when there is not enough room for a tip.' }], shortcuts: [],
       restrictions: ['If the browser blocks storage, changes last until reload.'], related: ['suite'], keywords: ['preferences', 'theme', 'motion', 'help level'], legacy: 'doc-settings',
     },
     {
