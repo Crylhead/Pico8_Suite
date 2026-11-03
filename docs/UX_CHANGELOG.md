@@ -106,7 +106,7 @@ Keep these issues open rather than treating a green model test as full acceptanc
 | #56 | Real folder-adoption/permission walkthrough. Data Carts currently delegates adoption to Project Audit and therefore replaces its scan too; independence between those tools needs review. |
 | #57 | Addressed in the follow-up below (browser journey; prompt buttons fixed). |
 | #59 | Addressed in the follow-up below (browser F1/search/legacy/keyboard walkthrough). |
-| #60 | Browser hover/focus/Escape, touch and narrow-viewport checks. |
+| #60 | Addressed in the follow-up below (browser walkthrough; placement fallback fixed). |
 | #61 | Browser welcome/replay/keyboard/missing-target smoke; asynchronous engine cancellation and help-text lookup are covered by regressions. |
 | #62 | Addressed in the follow-up below (allowlisted default export). Manual browser check of the Report dialog opt-in remains. |
 | #63 | Addressed in the follow-up below (browser/offline walkthrough, issue-form fields). |
@@ -215,3 +215,23 @@ Headless Chrome on `main` at `cf4b944`, driven over the DevTools protocol with r
 - No exceptions were thrown and no diagnostics were recorded.
 
 Not covered: a physical touch screen or pen, browser zoom through the UI (it was emulated with the device scale factor), and non-Chromium browsers.
+
+## Follow-up: #60 Tooltip walkthrough (2026-11-03)
+
+Headless Chrome, driven over the DevTools protocol with real mouse, keyboard and touch input, covering the five opted-in controls (`studio.tiled`, `studio.transparent`, `cartbuilder.open`, `cartbuilder.pack`, `cartbuilder.write`). A temporary script outside the repo was used.
+
+**Fixed in this pass:**
+- **Placement could cover the control.** When a tip fit neither below nor above its control, `place()` put it at the viewport edge, which can cover the control (for example a 131 px Detailed tip at 320×150). This contradicted its own "never over the target" contract and the issue's "avoid obscuring" criterion. The fallback order is now: beside the control; then the larger free side with a `maxHeight` that stops short of the control (the tip clips with `overflow: hidden`); then no tip at all when not even two lines fit (F1 still has the text). Checked in the browser: at 320×150 the tip sits above the control (rows 4–88, control 96–130); at 320×110 no tip is shown. `tests/tooltips.test.js` adds the beside, shortened and null cases; they fail on the old code.
+- **Lost title text.** The `cartbuilder.write` registry text did not mention what its replaced native `title` said: the carts are checked byte for byte and the `--@data` anchor lines are rewritten. In every mode that title text was gone. It is now in the registry text (Cart Builder topic `rev` 2). The other four moved titles were already covered by their registry text (compared side by side).
+
+**Results (all pass):**
+- **Concise:** hover shows the exact registry text after the delay (not before), links `aria-describedby`, has `pointer-events: none`, never covers the control, and hides when the mouse leaves. This holds for all five controls.
+- **Keyboard:** Tab focus shows the tip. Escape hides it while keeping focus on the control and the active tool (still `pencil`), and Tab moves on (no focus trap). Escape with no tip showing still reaches the app (an open menu closes).
+- **Detailed:** the same registry entry plus its `detail` and *"Press F1 for "Pixel Studio" help."*
+- **Off:** no tip on hover or focus, and every control keeps its accessible name. Switching the level applies at once, and a showing tip hides when the level is set to Off.
+- **Touch:** a tap focuses the control and shows its tip.
+- **320 px wide:** tips stay inside the viewport and off their control.
+- **Unknown `data-help-id`:** no tip and no error.
+- No exceptions were thrown and no diagnostics were recorded.
+
+Not covered: a physical touch device, a screen reader announcing `aria-describedby`, and non-Chromium browsers.

@@ -35,15 +35,26 @@ const P8Tips = (() => {
     return { label, text: `${base} ${more}`, topic: hit.topic.id };
   }
 
-  /** where to put a tip of size (w, h) next to rect r in viewport (vw, vh): never over the target */
+  /**
+   * Where to put a tip of size (w, h) next to rect r in viewport (vw, vh): never over the target.
+   * Below, else above, else beside it; when it fits nowhere whole, the larger free side with a
+   * maxHeight that stops short of the target. null when not even two lines fit (F1 still has the text).
+   */
   function place(r, w, h, vw, vh, gap = 8) {
-    const below = r.bottom + gap + h <= vh;
-    const above = r.top - gap - h >= 0;
-    let top;
-    if (below) top = r.bottom + gap; else if (above) top = r.top - gap - h; else top = Math.max(0, vh - h);
-    let left = r.left + r.width / 2 - w / 2;
-    left = Math.max(4, Math.min(left, vw - w - 4));
-    return { top, left, side: below ? 'below' : above ? 'above' : 'edge' };
+    const right = r.right ?? r.left + r.width;
+    const centered = Math.max(4, Math.min(r.left + r.width / 2 - w / 2, vw - w - 4));
+    if (r.bottom + gap + h <= vh) return { top: r.bottom + gap, left: centered, side: 'below' };
+    if (r.top - gap - h >= 0) return { top: r.top - gap - h, left: centered, side: 'above' };
+    const beside = Math.max(4, Math.min(r.top + (r.bottom - r.top) / 2 - h / 2, vh - h - 4));
+    if (right + gap + w <= vw - 4) return { top: beside, left: right + gap, side: 'right' };
+    if (r.left - gap - w >= 4) return { top: beside, left: r.left - gap - w, side: 'left' };
+    const roomBelow = vh - r.bottom - gap - 4;
+    const roomAbove = r.top - gap - 4;
+    const MIN = 36; // about two lines
+    if (Math.max(roomBelow, roomAbove) < MIN) return null;
+    return roomBelow >= roomAbove
+      ? { top: r.bottom + gap, left: centered, side: 'below', maxHeight: roomBelow }
+      : { top: r.top - gap - roomAbove, left: centered, side: 'above', maxHeight: roomAbove };
   }
 
   function init({ prefs, help, delays = {} }) {
@@ -81,13 +92,16 @@ const P8Tips = (() => {
       tip.textContent = '';
       if (t.label) { const b = document.createElement('strong'); b.textContent = `${t.label}. `; tip.append(b); }
       tip.append(document.createTextNode(t.text));
+      tip.style.maxHeight = '';
       tip.hidden = false;
       const r = el.getBoundingClientRect();
       const w = tip.offsetWidth;
       const h = tip.offsetHeight;
       const p = place(r, w, h, document.documentElement.clientWidth, document.documentElement.clientHeight);
+      if (!p) { tip.hidden = true; return; } // no room that leaves the control visible
       tip.style.top = `${p.top}px`;
       tip.style.left = `${p.left}px`;
+      tip.style.maxHeight = p.maxHeight ? `${p.maxHeight}px` : '';
       current = { el, prev: el.getAttribute('aria-describedby') };
       el.setAttribute('aria-describedby', current.prev ? `${current.prev} ${tip.id}` : tip.id);
     }
