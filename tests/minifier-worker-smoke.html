@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MIN-01 real worker smoke fixture</title>
+<h1>MIN-01 real worker smoke fixture</h1>
+<p>Development fixture only. Package the local assets first. This does not add a Suite workspace or save user files.</p>
+<button id="run">Run worker fixtures</button>
+<button id="offline" disabled>Run cached input (also works offline)</button>
+<button id="dispose">Terminate test worker</button>
+<pre id="result" role="status">Idle: no worker/runtime loaded.</pre>
+<script src="../js/minifier-worker-host.js"></script>
+<script src="minifier-worker-smoke.js"></script>
+</html>
