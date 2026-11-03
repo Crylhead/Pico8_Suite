@@ -36,13 +36,21 @@
     sys.path.insert(0, '/suite-engine');
     sys.destroy();
     const bridge = python.pyimport('suite_bridge');
+    let png = null;
+    try {
+      const response = await fetch(local('../vendor/shrinko8/suite_png.py'));
+      if (response.ok) {
+        python.FS.writeFile('/suite-engine/suite_png.py', await response.text());
+        png = python.pyimport('suite_png');
+      }
+    } catch (_) { /* Optional PNG must not prevent text/Lua processing. */ }
     const info = JSON.parse(bridge.engine_info());
     if (info.version !== lock.shrinko8.version || info.pythonVersion !== lock.pyodide.pythonVersion) throw failure('E_ENGINE_VERSION', 'Packaged Python/Shrinko8 versions do not match their pins.');
-    return { python, bridge, metadata: {
+    return { python, bridge, png, metadata: {
       shrinko8Version: info.version, shrinko8Commit: lock.shrinko8.commit,
       pyodideVersion: python.version, pythonVersion: info.pythonVersion,
       startupMs: Math.round(performance.now() - start), wasmHeapBytes: python._module.HEAP8.byteLength,
-      capabilities: { p8: true, lua: true, png: false, includes: true, profiles: ['minimal'], targets: ['tokens'] },
+      capabilities: { p8: true, lua: true, png: !!png, includes: true, profiles: ['minimal'], targets: ['tokens'] },
     } };
   }
 
@@ -55,11 +63,15 @@
     const envelope = { protocol: PROTOCOL, requestId: message?.requestId,
       jobId: message?.job?.jobId, sourceRevision: message?.job?.sourceRevision, optionsRevision: message?.job?.optionsRevision };
     try {
-      if (message?.protocol !== PROTOCOL || !['init', 'optimize'].includes(message?.type)) throw failure('E_PROTOCOL', 'Unsupported Minifier worker request. Use protocol 1 and init/optimize.');
-      if (message.type === 'optimize' && (!message.job || typeof message.job !== 'object')) throw failure('E_INPUT_INVALID', 'An optimize request needs a plain job snapshot.');
+      if (message?.protocol !== PROTOCOL || !['init', 'optimize', 'png'].includes(message?.type)) throw failure('E_PROTOCOL', 'Unsupported Minifier worker request. Use protocol 1 and init/optimize/png.');
+      if (message.type !== 'init' && (!message.job || typeof message.job !== 'object')) throw failure('E_INPUT_INVALID', 'Processing/export requests need a plain job snapshot.');
       const ready = await engine();
       if (message.type === 'init') {
         self.postMessage({ ...envelope, type: 'ready', engine: ready.metadata });
+      } else if (message.type === 'png') {
+        if (!ready.png) throw failure('E_PNG_UNAVAILABLE', 'Optional PNG encoder is unavailable. Restore vendor/shrinko8/suite_png.py and Retry; text exports remain available.');
+        const result = JSON.parse(ready.png.export_png(message.job.cartText));
+        self.postMessage({ ...envelope, type: result.ok ? 'png' : 'error', engine: ready.metadata, result });
       } else {
         const result = JSON.parse(ready.bridge.optimize(JSON.stringify(message.job)));
         self.postMessage({ ...envelope, type: result.ok ? 'result' : 'error', engine: ready.metadata, result });
