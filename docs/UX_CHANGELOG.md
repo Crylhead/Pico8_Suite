@@ -105,7 +105,7 @@ Keep these issues open rather than treating a green model test as full acceptanc
 | --- | --- |
 | #56 | Real folder-adoption/permission walkthrough. Data Carts currently delegates adoption to Project Audit and therefore replaces its scan too; independence between those tools needs review. |
 | #57 | Browser transfer/cancel/unsupported-dimension journey and destination state verification. |
-| #59 | Browser F1, search, legacy-reference and keyboard walkthrough. |
+| #59 | Addressed in the follow-up below (browser F1/search/legacy/keyboard walkthrough). |
 | #60 | Browser hover/focus/Escape, touch and narrow-viewport checks. |
 | #61 | Browser welcome/replay/keyboard/missing-target smoke; asynchronous engine cancellation and help-text lookup are covered by regressions. |
 | #62 | Addressed in the follow-up below (allowlisted default export). Manual browser check of the Report dialog opt-in remains. |
@@ -133,3 +133,18 @@ Builds on the #62 follow-up above (allowlisted default export).
 - **Issue form** (`.github/ISSUE_TEMPLATE/bug_report.yml`): separate required *Affected workspace / tool*, optional *Suite version* and *Browser and version*, required *Expected vs. actual*, an *Attachments* field explaining that files are added manually, and a required privacy confirmation. The privacy notice says the issue is public. No YAML parser was available offline; the file was checked for ambiguous plain scalars and duplicate IDs, and renders on GitHub only after merge to the default branch.
 - **Regressions** (`tests/report.test.js`): the real dialog code with empty diagnostics while offline (environment fields, zero records, offline GitHub message), and a recorded error whose summary carries the Error ID but not the message's user text until *Include full error messages* is ticked, and again after it is unticked.
 - **Browser walkthrough** (headless Chrome via the DevTools protocol, local `http.server`, temporary script outside the repo): no errors on load. With empty diagnostics, Help › Report a problem shows zero records and the environment section, and focuses Close. While offline, *Open GitHub issue form* reports the offline state and opens only the bare template URL. In headless Chrome, *Copy summary* reaches the select-and-press-Ctrl+C fallback. A synthetic window error and an unhandled rejection with hostile text (identifier, Windows user path, token-like word) appear with Error IDs and `[…]`/`[path]` placeholders, and nothing hostile leaks into either preview. The opt-in shows full text (path still scrubbed) and a warning. After typing a description, *Clear diagnostics* and Close, localStorage, sessionStorage and IndexedDB hold none of the description, message text or error codes. The app threw no other exceptions. Not covered: a real clipboard grant, a real download prompt, a screen reader.
+
+## Follow-up: #59 Help registry browser walkthrough (2026-11-03)
+
+Headless Chrome, driven over the DevTools protocol with real key events, against a local `http.server`. The script was temporary and kept outside the repo. No code change was needed. Results on `main` at `c532fbc`:
+
+- **F1 in every workspace tab** (all 11: Home, Pixel Studio, Palette & Fades, Tile Maker, Map Editor, Code Editor, Cart Builder, Project Audit, Data Carts, Data Tools, Extra Tools) opens Help on that workspace's canonical topic (`P8Help.forWorkspace`), with focus in the search field; Escape closes it. F1 also works while typing in a Code Editor field, and F1 inside an open Help dialog does not stack a second dialog.
+- **Search** finds controls, tasks and shortcuts: *tile reduction* → Tile Maker; *count tokens* → Project Audit, Code Editor; *ctrl+r* → Code Editor; *report* → Report a problem first. *zzzqqq* gives the "No results" state with suggestions and working *Browse the Help index* / *Open the full documentation* links. The index link clears the query and moves focus to the heading.
+- **Keyboard:** Tab from the search field reaches the first index link, and Enter opens that topic and focuses its heading. Related-topic and *← Help index* links work.
+- **Legacy reference:** Code Editor's *Detailed reference* opens Full documentation scrolled to `#doc-code`, and *Search Help* returns to Help with a single dialog open.
+- **Offline:** with network emulated offline, Help › Help and search work (everything is local).
+- **Narrow layout:** at 360 px the dialog fits (326 px) without horizontal page overflow.
+- Escape in a non-empty search field first clears the query (native `type=search` behavior); a second Escape closes the dialog.
+- No exceptions were thrown, and `P8App.diagnostics` stayed empty throughout.
+
+Not covered: screen reader announcement of the live region, touch input, and a real non-Chromium browser.
