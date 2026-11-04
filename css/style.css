@@ -769,6 +769,10 @@ dialog.modal::backdrop { background: rgba(5, 5, 10, 0.6); }
 }
 .tm-view, .tm-tileset { margin: 0; min-width: 0; display: grid; grid-template-rows: subgrid; grid-row: span 2; row-gap: var(--space-3); }
 .tm-view figcaption, .tm-tileset figcaption { color: var(--muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+/* #186: how the shown result was colored; expected behavior, so no warning tone */
+.tm-mode-caption { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin-top: 2px; }
+.tm-mode-caption[hidden] { display: none; }
+.tm-mode-caption .btn { padding-block: 1px; }
 .tm-frame {
   position: relative;
   aspect-ratio: 1;
