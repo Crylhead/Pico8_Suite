@@ -31,14 +31,14 @@ const P8HelpData = (() => {
       related: ['suite', 'library', 'shortcuts'], keywords: ['start', 'launcher', 'welcome'], legacy: 'doc-suite',
     },
     {
-      id: 'studio', kind: 'tool', ws: 'studio', title: 'Pixel Studio', rev: 8,
+      id: 'studio', kind: 'tool', ws: 'studio', title: 'Pixel Studio', rev: 9,
       summary: 'Pixel editor for sprites, sprite sheets and whole-map images with 16 palette slots mapped to the 32 PICO-8 colors, layers and frames.',
       inputs: ['PNG images', 'Library images', 'the gfx of a .p8 cart'],
       outputs: ['Library images', 'PNG', '.p8 gfx section'],
       tasks: ['draw a sprite', 'edit a sprite sheet', 'remap palette colors', 'animate with frames', 'create a tileable texture', 'save an image to the Library'],
       actions: [
         { id: 'studio.panel-layout', name: 'Panels in smaller windows', text: 'A side panel stops widening before it crowds out the canvas. In small windows it stacks below the work and stays available even if hidden on desktop. Returning to a wider window restores the chosen width and hidden/shown state.' },
-        { id: 'studio.bar-layout', name: 'Controls in smaller windows', text: 'The two options rows scroll horizontally when needed; Tab brings a focused option into view. Status readouts reserve space, and the view/zoom button groups wrap in smaller windows so every control remains reachable.' },
+        { id: 'studio.bar-layout', name: 'Controls in smaller windows', text: 'The two options rows scroll horizontally when needed; Tab brings a focused option into view. Status readouts reserve space, and the view controls wrap in smaller windows so every control remains reachable. Timeline, Pixels, Grid and Tiled work independently. Grid cycles 8×8, 16×16 and off and labels its current state; the apostrophe shortcut toggles the current grid size. The joined zoom buttons change magnification.' },
         { id: 'studio.canvas', name: 'Canvas size', text: '1×1 to 1024×1024 with presets (sprite, 128×128 sheet, half sheet, whole map 1024×512). Orange dashed boxes mark 128×128 screens. The artwork surround stays dark neutral in every theme; the checker shows empty pixels.' },
         { id: 'studio.tools', name: 'Drawing tools', text: 'Pencil, eraser, line, rectangle, ellipse, fill, color picker, selection tools, pan. Brush sizes 1–4 or a custom brush; mirror X/Y.' },
         { id: 'studio.ink', name: 'Ink', text: 'How the pencil, line, shapes and fill put their color down: normal, lock alpha, behind, shade and shade along the fades.' },
