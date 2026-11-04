@@ -433,6 +433,9 @@ canvas.thumb {
 
 .ps-status-info { display: flex; align-items: center; gap: var(--bar-gap); flex: 1 1 180px; min-width: 0; min-height: var(--bar-line); overflow: hidden; }
 .ps-status-info > span { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Keep the focus ring inside the compact status row and its clipped card. */
+.ps-status .btn:focus-visible { outline-offset: -2px; }
+.ps-status-controls { display: inline-flex; gap: var(--space-2); align-items: center; }
 .ps-status-view { font: 13px/var(--bar-line) var(--font); flex: none; }
 /* the status texts give way to the buttons when the bar gets narrow */
 #psPos, #psCell, #psColor, #psSelInfo { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

@@ -36,6 +36,7 @@ Adopt tokens and primitives incrementally when you touch a surface. Do not re-sk
 Rules:
 
 - Never convey state by colour or hover (`title`) alone; pair it with text, a symbol or an ARIA state.
+- Use fused `.btn-group` controls for related momentary actions (for example − / Fit / 1:1 / +), with square middle corners and raised focus outlines. Single-button groups retain all corners and borders. Compact status rows inset the focus ring so their card cannot clip it. Independent view toggles keep separate borders with `--space-2` between them; they must not resemble an exclusive choice.
 - Focus styles use `:focus-visible` and the focus tokens; do not remove outlines without an equivalent replacement.
 - Announcements: dialogs and toasts are covered by the shell (`App.modal`, `App.toast`); a `.status-line` that is the only report of a one-off result may use `role="status"`, but do not put live regions on text that updates during drags or sliders.
 - Document-save state uses `P8DocStatus` and `.doc-status` (see [EXTENDING.md](../EXTENDING.md#document-save-status)), not ad-hoc status lines.

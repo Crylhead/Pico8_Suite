@@ -914,13 +914,13 @@
       </div>
       <footer class="ps-status">
         <div class="ps-status-info"><span id="psPos">–</span><span id="psCell"></span><span id="psColor"></span><span id="psSelInfo"></span></div>
-        <div class="btn-group ps-status-view" role="group" aria-label="Layout">
+        <div class="ps-status-controls ps-status-view" role="group" aria-label="Layout">
           <button class="btn btn-sm" id="psTimelineBtn" aria-pressed="true" title="Show / hide the animation timeline (T)" aria-keyshortcuts="T">Timeline</button>
           <button class="btn btn-sm" id="psFullBtn" title="Full screen view: pan and zoom only (F) · Esc exits">⛶ View</button>
         </div>
-        <div class="btn-group ps-status-view" role="group" aria-label="View">
+        <div class="ps-status-controls ps-status-view" role="group" aria-label="View">
           <button class="btn btn-sm" id="psGridPx" aria-pressed="true" title="Pixel grid (zoom 600%+)">Pixels</button>
-          <button class="btn btn-sm" id="psGrid8" aria-pressed="true" title="Sprite grid: 8×8 → 16×16 → off (')">8×8</button>
+          <button class="btn btn-sm" id="psGrid8" aria-pressed="true" title="Sprite grid: click cycles 8×8 → 16×16 → off; ' toggles the current size">Grid: 8×8</button>
           <button class="btn btn-sm" id="psTiled" data-help-id="studio.tiled" aria-pressed="false" title="Show as repeating tile; drawing past the edges wraps around">Tiled</button>
         </div>
         <div class="btn-group ps-status-view">
@@ -1480,6 +1480,7 @@
           <li><b>Import Sprite Sheet from .p8</b> (or drop a .p8 on the canvas): opens the cart's <code>__gfx__</code>.</li>
           <li><b>New .p8 Cart</b>: places the image (or all frames as an animation) on the sprite sheet at a sprite number of your choice and adds a small viewer (<code>spr()</code> + the <code>pal()</code> calls of your screen palette). Images larger than 128×128 are exported as a raw data cart.</li>
           <li><b>Write into Existing .p8</b>: replaces only the target area of a cart's <code>__gfx__</code> and downloads the updated cart; code, map and sound stay untouched.</li>
+          <li><b>View controls</b>: Timeline, Pixels, Grid and Tiled are independent controls. Click Grid to cycle 8×8, 16×16 and off; its label shows the current state. The apostrophe shortcut toggles the current grid size. View opens Full View, and the joined − / Fit / 1:1 / + buttons change zoom.</li>
           <li><b>Frames → Sprite Sheet</b>: lays the frames out on a 128×128 sheet in the library and tells you their sprite numbers.</li>
           <li><b>Send to Tile Maker</b>: for big pictures that should become 8×8 tiles + map.</li>
         </ul>

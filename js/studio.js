@@ -1916,7 +1916,7 @@
     dom.mirrorY.setAttribute('aria-pressed', String(ps.mirrorY));
     dom.gridPx.setAttribute('aria-pressed', String(ps.gridPx));
     dom.grid8.setAttribute('aria-pressed', String(ps.grid8));
-    dom.grid8.textContent = `${ps.gridSize}×${ps.gridSize}`;
+    dom.grid8.textContent = ps.grid8 ? `Grid: ${ps.gridSize}×${ps.gridSize}` : 'Grid: off';
     dom.tiled.setAttribute('aria-pressed', String(ps.tiled));
     dom.onion.setAttribute('aria-pressed', String(ps.onion));
     for (const b of dom.previewScale.querySelectorAll('button')) b.setAttribute('aria-checked', String(Number(b.dataset.value) === ps.previewScale));
