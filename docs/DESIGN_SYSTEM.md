@@ -36,6 +36,7 @@ Adopt tokens and primitives incrementally when you touch a surface. Do not re-sk
 Rules:
 
 - Never convey state by colour or hover (`title`) alone; pair it with text, a symbol or an ARIA state.
+- Use fused `.btn-group` controls for related momentary actions (for example − / Fit / 1:1 / +), with square middle corners and raised focus outlines. Single-button groups retain all corners and borders. Compact status rows inset the focus ring so their card cannot clip it. Independent view toggles keep separate borders with `--space-2` between them; they must not resemble an exclusive choice.
 - Focus styles use `:focus-visible` and the focus tokens; do not remove outlines without an equivalent replacement.
 - Announcements: dialogs and toasts are covered by the shell (`App.modal`, `App.toast`); a `.status-line` that is the only report of a one-off result may use `role="status"`, but do not put live regions on text that updates during drags or sliders.
 - Document-save state uses `P8DocStatus` and `.doc-status` (see [EXTENDING.md](../EXTENDING.md#document-save-status)), not ad-hoc status lines.
@@ -152,6 +153,12 @@ Normalize the outer frame, not the pixel data. Reuse the shared spacing/radius t
 Tile Maker uses shared caption and frame rows (CSS subgrid): long captions reserve the same space above compared views. Above 1100px the 256px sheet column shares the comparison frame's top/bottom edges; size containment keeps its bitmap from dictating that row's height. At 641–1100px the comparison pair stays together and the sheet moves to a separate 256px square frame. At 640px and below the views stack. Only the sheet's outer frame changes size; canvas bitmap dimensions and tile packing do not.
 
 Palette cards share caption, image, action and settings rows. Preview images remain square; the settings row takes the height needed by either card, so extra greyscale controls do not shift the image edges. Actions wrap at their normal control height. On phones the cards stack and may have different heights according to their own settings; matching heights across separate rows would add empty space. The two `.preview-settings` wrappers group existing controls without changing their IDs or event ownership.
+
+### Artwork surround (#198)
+
+`--stage-bg` is the hue-free dark neutral `#101010` in System, Light and Dark themes. Pixel Studio and Map Editor share it through `.ps-stage`; Pixel Studio's full view and preview use the same token. Light-theme panels keep their normal theme colors. The canvas renderers clear to transparency outside the document, so no theme-dependent surround is painted into artwork or exports.
+
+Keep the existing transparency checker (`#2a2a30` / `#3a3a42`) and document outline visible. Against `#101010`, the Pixel Studio outline (`rgba(255,255,255,0.75)`) is approximately **3.50:1** even at half-pixel coverage, and Map Editor's (`rgba(255,255,255,0.35)`) is **3.20:1**. Both exceed the 3:1 boundary target. Stage overlays retain their own contrasting colors/backplates; do not apply light-theme panel text colors directly over the stage.
 
 ## Adoption
 
