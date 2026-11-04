@@ -85,7 +85,7 @@ const P8HelpData = (() => {
       outputs: ['tiles + map as .p8 cart', 'Library images and maps (Open in Map Editor)'],
       tasks: ['pack an image into tiles', 'reduce the unique tile count', 'check a screen-sized viewport against 256 tiles', 'edit tiles'],
       actions: [
-        { id: 'tiles.import', name: 'Import Image', text: 'Converts to 16 colors (brightness ramp, custom palette by brightness, or nearest color); optional Floyd–Steinberg dither. A Library image with its own palette brings that palette and its fades along (nearest color) only once you accept replacing an unsaved tile set; Cancel changes nothing.' },
+        { id: 'tiles.import', name: 'Import Image', text: 'Converts to 16 colors (brightness ramp, custom palette by brightness, or nearest color); optional Floyd–Steinberg dither. The brightness modes change hues on purpose; the line under Reconstructed names the mode that built the result. A Library image with its own palette brings that palette and its fades along (nearest color) only once you accept replacing an unsaved tile set; Cancel changes nothing.' },
         { id: 'tiles.reduce', name: 'Tile reduction (MAE)', text: 'Raise it and press Rebuild to merge similar tiles until you are within 256.' },
         { id: 'tiles.viewport', name: 'Viewport and heatmap', text: 'Shows how many unique tiles a screen-sized window needs and where it is expensive.', detail: 'Original and Reconstructed use aligned square frames. The tileset retains its display scale inside a scroll frame. Focus that preview and use arrow/Page keys, or scroll with the wheel, to see the remaining tiles.' },
         { id: 'tiles.edit', name: 'Edit Tiles…', text: 'Pixel editor for single tiles; Save Changes applies them.' },
@@ -93,6 +93,7 @@ const P8HelpData = (() => {
       ],
       controls: [
         { id: 'tiles.mae', label: 'Tile reduction (MAE)', text: 'Higher values merge more similar tiles.' },
+        { id: 'tiles.match', label: 'Match source colors', text: 'Shown under Reconstructed after a brightness-mode build when your custom palette has colors. Switches to Custom palette · nearest color and rebuilds: the nearest available colors, not an exact copy of the source. The image stays loaded, the palette is not changed, and Rebuild still asks before discarding tile edits.' },
         { id: 'tiles.dither', label: 'Dither', text: 'Floyd–Steinberg dithering gives smoother gradients but creates more unique tiles.' },
         { id: 'tiles.autogen', label: 'Auto Generate Tiles', text: 'Re-derives every tile from all of its uses in the image: the per-pixel median, snapped to the image colors. Available after a build.' },
       ],

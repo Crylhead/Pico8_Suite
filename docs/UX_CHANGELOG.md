@@ -292,3 +292,18 @@ Not covered: the native folder picker and permission prompt UI (stubbed), a real
 **Behaviour change:** the timeline toggle is now `T` (it was `Tab`). `Tab` and `Shift+Tab` always move focus, also from the drawing canvas and from the page body, following the rule in `docs/ACCESSIBILITY.md`. `T` is ignored while typing in a field. The canvas shows a `:focus-visible` ring when reached by keyboard. A pointer press focuses it with `focusVisible: false`, so drawing does not show the ring. The menu `<kbd>`, the **Timeline** button title (`aria-keyshortcuts="T"`), the F1 text and table and the help registry were updated.
 
 **Checked** in headless Chrome 156 (fresh profile, real key and pointer input, 1440×900): Tab onto the canvas shows the ring, the next Tab moves to **Timeline** and Shift+Tab returns, and the timeline is unchanged throughout. `T` on the canvas or body toggles it (canvas height 528↔671), with `aria-pressed` following. Typing `t` in the image name field does not toggle it. A mouse-only draw and a tool key afterwards show no ring. `F` opens Full View and `Esc` closes it. Ctrl+A and → nudge the selection, and holding Space enters pan mode. No exceptions were thrown. The ring was inspected in the light and dark themes. Manual keyboard script step 16 was added. Not covered: screen readers, non-Chromium browsers.
+
+## Follow-up: #186 Tile Maker explains its color conversion (2026-11-04)
+
+**Behaviour change:** after a build, a line under **Reconstructed** names the color mode the shown result was built with. *PICO-8 brightness ramp* and *Custom palette · brightness levels* say that hues change on purpose. *Nearest color* says each pixel uses the nearest custom palette color. The result records its mode, so a changed but not yet rebuilt setting doesn't change the line; the existing "Press Rebuild" notice covers that. There is no line before a result exists or in the Viewport heatmap. In a brightness mode, when the custom palette has colors, **Match source colors** switches to nearest color and rebuilds. It doesn't change the palette or the loaded image, and Rebuild still asks before discarding edited tiles. A cancelled or failed rebuild restores the previous mode. The default mode and all conversion code are unchanged. The help registry (`tiles.import`, new `tiles.match`) and the F1 Tile Maker text were updated.
+
+**Checked** in headless Chrome 156 (fresh profile, real key input, file chooser intercepted) with a navy/orange/green 128×128 PNG:
+- Empty: no line. After import, the PICO-8 ramp line appears with no button, because the custom palette is empty.
+- Selecting levels without a rebuild keeps the ramp line and shows the pending notice.
+- With a 16-color custom palette the button appears. `Tab` reaches it and `Enter` rebuilds in nearest: the colors become navy/orange/green (29,43,83 · 255,163,0 · 0,135,81), and the palette is unchanged.
+- After a levels rebuild, the levels line appears. With tiles modified by Auto Generate, Match asks "Tileset Modified", and Cancel keeps the levels result and mode.
+- Contrast: 6.06:1 light, 6.31:1 dark.
+- Layout: one line with the button at 1440 wide; at 1280 and below the button wraps to a second line. The figure frames stay aligned because the line sits inside the shared caption row.
+- No exceptions.
+
+Not covered: screen readers, non-Chromium browsers.

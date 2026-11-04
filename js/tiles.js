@@ -65,6 +65,9 @@
     origCanvas: $('#tmOrigCanvas'),
     outCanvas: $('#tmOutCanvas'),
     outTitle: $('#tmOutTitle'),
+    modeCaption: $('#tmModeCaption'),
+    modeCaptionText: $('#tmModeCaptionText'),
+    matchColors: $('#tmMatchColors'),
     drop: $('#tmDrop'),
     tileset: $('#tmTilesetCanvas'),
     tilesetMsg: $('#tmTilesetMsg'),
@@ -85,6 +88,14 @@
   };
 
   const usesCustomPalette = () => tm.colorMode !== 'pico8';
+  const customHasColors = () => App.state.custom.some((p) => p != null);
+
+  /** #186: one line under Reconstructed saying how the shown result was colored */
+  const MODE_CAPTIONS = {
+    pico8: 'Mapped by brightness to the PICO-8 ramp: hues change on purpose.',
+    levels: 'Mapped by brightness to your palette levels: hues change on purpose.',
+    nearest: 'Each pixel uses the nearest color of your custom palette.',
+  };
 
   function persistSettings() {
     store.set(KEYS.settings, {
@@ -463,6 +474,11 @@
     for (const b of dom.viewSeg.querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.value === tm.view));
     dom.outTitle.textContent = tm.view === 'heatmap' ? 'Viewport heatmap' : fadeActive() ? 'Reconstructed · fade preview' : 'Reconstructed';
     dom.heatLegend.hidden = tm.view !== 'heatmap';
+    // #186: describes the mode the shown result was built with (a changed, unbuilt mode has its own notice)
+    const builtMode = tm.view === 'reconstructed' ? tm.result?.colorMode : null;
+    dom.modeCaption.hidden = !MODE_CAPTIONS[builtMode];
+    dom.modeCaptionText.textContent = MODE_CAPTIONS[builtMode] || '';
+    dom.matchColors.hidden = !MODE_CAPTIONS[builtMode] || builtMode === 'nearest' || !customHasColors();
     dom.showSel.checked = tm.showSelection;
     dom.fadeWrap.hidden = !usesCustomPalette();
     dom.fadeOn.checked = tm.fadeOn;
@@ -475,7 +491,7 @@
     const notes = [];
     if (tm.stale) notes.push('The custom palette changed since this tileset was built. Rebuild to apply it.');
     else if (tm.pending && tm.result) notes.push('Settings changed. Press Rebuild to apply them.');
-    if (usesCustomPalette() && !App.state.custom.some((p) => p != null)) {
+    if (usesCustomPalette() && !customHasColors()) {
       notes.push('Your custom palette is empty. Add colors in the Palette & Fades workspace, or use the PICO-8 brightness ramp.');
     }
     dom.notice.hidden = !notes.length;
@@ -532,6 +548,7 @@
     }
     if (job) job.cancelled = true;
 
+    const colorMode = tm.colorMode; // #186: the caption names the mode of the result, not a later setting
     let source;
     try {
       source = convertSource();
@@ -566,7 +583,7 @@
 
     const r = builder.result();
     tm.source = source;
-    tm.result = { ...r, recon: T.reconstruct(r.tiles, r.map, r.mapW, r.mapH) };
+    tm.result = { ...r, recon: T.reconstruct(r.tiles, r.map, r.mapW, r.mapH), colorMode };
     Object.assign(tm.result, T.errorMetrics(source, tm.result.recon));
     tm.modified = false;
     tm.pending = false;
@@ -739,7 +756,7 @@
     if (Array.isArray(web.mapping) && web.mapping.length === 16) tm.mapping = web.mapping.map((v) => (isValidPico(v) ? v : null));
     if (Array.isArray(web.viewport)) [tm.vpW, tm.vpH] = web.viewport.map((v) => Math.max(1, Math.min(512, v | 0 || 16)));
 
-    tm.result = { tiles, map, mapW, mapH, recon: T.reconstruct(tiles, map, mapW, mapH) };
+    tm.result = { tiles, map, mapW, mapH, recon: T.reconstruct(tiles, map, mapW, mapH), colorMode: tm.colorMode };
     Object.assign(tm.result, T.errorMetrics(source, tm.result.recon));
     tm.modified = !!web.modified;
     tm.pending = false;
@@ -1203,6 +1220,23 @@ Increase the tile reduction (MAE) threshold and rebuild.`);
   // Bindings                                                           //
   // ------------------------------------------------------------------ //
 
+  /**
+   * #186 Match source colors: switch to nearest color in the custom palette and rebuild in one step.
+   * The image stays loaded; Rebuild still asks before discarding tile edits, and a cancelled or failed
+   * rebuild restores the previous mode, so nothing changes. The palette itself is never modified.
+   */
+  async function matchSourceColors() {
+    if (!tm.original || !customHasColors() || tm.result?.colorMode === 'nearest') return; // follows the shown result, like the button
+    const prev = { colorMode: tm.colorMode, pending: tm.pending };
+    tm.colorMode = 'nearest';
+    invalidate('fadeSlots');
+    await rebuild();
+    if (tm.result?.colorMode !== 'nearest') Object.assign(tm, prev);
+    invalidate('fadeSlots');
+    persistSettings();
+    renderControls();
+  }
+
   function markPending() {
     tm.pending = true;
     persistSettings();
@@ -1389,6 +1423,7 @@ Increase the tile reduction (MAE) threshold and rebuild.`);
       if (out) showMessage('Tiles Optimized', `Generated ${out.tiles.length} optimized tiles using ${out.paletteSize} colors`);
     },
     'tiles-mapping': editMapping,
+    'tiles-match-colors': matchSourceColors,
   });
 
   bind();

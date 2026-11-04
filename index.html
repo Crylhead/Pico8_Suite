@@ -571,7 +571,10 @@
           </div>
         </figure>
         <figure class="tm-view">
-          <figcaption id="tmOutTitle">Reconstructed</figcaption>
+          <figcaption><span id="tmOutTitle">Reconstructed</span>
+            <span class="tm-mode-caption" id="tmModeCaption" hidden><span id="tmModeCaptionText"></span>
+              <button class="btn btn-ghost btn-sm" id="tmMatchColors" data-action="tiles-match-colors" data-help-id="tiles.match" hidden
+                      title="Switch to Custom palette · nearest color and rebuild: each pixel takes the closest color of your custom palette (the nearest available colors, not an exact copy of the source)">Match source colors</button></span></figcaption>
           <div class="tm-frame" id="tmOutFrame"><canvas id="tmOutCanvas"></canvas></div>
         </figure>
         <figure class="tm-tileset">
@@ -1700,6 +1703,7 @@
               <li><i>Custom palette · brightness levels</i>: 16 brightness levels mapped onto your custom palette. <b>Level mapping…</b> opens the same mapping dialog as the greyscale conversion.</li>
               <li><i>Custom palette · nearest color</i>: every pixel snaps to the closest color of your custom palette.</li>
             </ul>
+            The brightness modes change hues on purpose. A line under <i>Reconstructed</i> names the mode that built the result; in a brightness mode, with colors in your custom palette, <b>Match source colors</b> switches to nearest color and rebuilds (the nearest available colors, not an exact copy).
             <b>Dither</b> applies Floyd–Steinberg dithering (smoother, but more unique tiles).</li>
           <li>Identical tiles are merged. Raise <b>Tile reduction (MAE)</b> and press <b>Rebuild</b> to merge similar tiles too, until you are within 256 tiles.</li>
           <li>Set the <b>Viewport</b> to your on-screen area (16×16 tiles = full screen). The stats show how many unique tiles any screen-sized window needs. The <i>Viewport heatmap</i> shows where the expensive areas are. If the whole image needs more than 256 tiles but every viewport fits, you can stream tiles (“YES (Streaming)”).</li>
