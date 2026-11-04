@@ -649,7 +649,15 @@
     <section class="home-section" aria-labelledby="homeContinueH">
       <h3 id="homeContinueH">Continue</h3>
       <div class="home-continue" id="homeContinue"></div>
-      <p class="hint" id="homeStorage"></p>
+      <!-- #193: one storage line; the backup guidance stays visible, the details are in Help -->
+      <p class="home-storage"><span id="homeStorage"></span>
+        <button class="btn btn-sm" data-action="library-export" title="Download all Library assets as one backup file">Back up</button>
+        <button class="btn btn-sm btn-ghost" data-action="docs" data-help-id="home.storage">How storage works</button></p>
+    </section>
+
+    <section class="home-section" id="homeRecentSection" aria-labelledby="homeRecentH" hidden>
+      <h3 id="homeRecentH">Recent in the library</h3>
+      <div class="asset-grid" id="homeRecent"></div>
     </section>
 
     <section class="home-section" aria-labelledby="homeTasksH">
@@ -657,19 +665,13 @@
       <div class="home-tasks" id="homeTasks"></div>
     </section>
 
-    <section class="home-section">
-      <h3>All tools</h3>
+    <details class="home-section home-more" id="homeToolsMore" data-pref="tools">
+      <summary><h3>All tools</h3></summary>
       <div class="tool-groups" id="homeTools"></div>
-    </section>
+    </details>
 
-    <section class="home-section">
-      <h3>Recent in the library <span class="muted">(saved in this browser, not files on disk)</span></h3>
-      <div class="asset-grid" id="homeRecent"></div>
-    </section>
-
-    <section class="home-section home-two">
-      <div class="card home-card">
-        <h3>How the tools talk to each other</h3>
+    <details class="home-section home-more" id="homeHowMore" data-pref="how">
+      <summary><h3>How the tools work together</h3></summary>
         <ul class="home-list">
           <li><b>Library</b> (button at the top right): every saved image and palette, with <i>Open in…</i> for every tool that can use it. Drag a library thumbnail onto a tool's canvas to load it there.</li>
           <li><b>Pixel Studio → Tile Maker / fade preview</b>: File → Send to.</li>
@@ -678,13 +680,7 @@
           <li><b>Any image → code</b>: Data Tools turns library images into PICO-8 string literals.</li>
           <li><b>Line Tool → library</b>: <i>Pixels → Library</i> saves the drawn lines as an image; <i>Trace library image</i> shows any library image under the lines.</li>
         </ul>
-      </div>
-      <div class="card home-card">
-        <h3>Desktop tools outside the suite</h3>
-        <p class="muted">Historical desktop tools from Demotools are not bundled in this standalone repository.</p>
-        <ul class="home-list" id="homeDesktop"></ul>
-      </div>
-    </section>
+    </details>
   </main>
 
   <!-- ================================================================ -->
@@ -1455,6 +1451,7 @@
           <li><b>Links</b>: the address follows the open tool (e.g. <code>index.html#map</code> or <code>index.html#extras/terrain</code>); open or bookmark such a link to start in that tool. Without one, the Suite reopens the tool you used last.</li>
           <li><b>Library</b> (button at the top right): images, palettes and maps shared by all tools. Click an asset for <i>Open in…</i>, rename, duplicate, PNG download and delete; the trash button next to each entry deletes it directly (after asking). Palette &amp; Fades saves and loads palettes with the <i>Save to Library…</i> / <i>From Library…</i> buttons of the custom palette. Drag an asset thumbnail onto a tool's canvas to load it there. Drop image files onto the library to import them (colors snap to the nearest PICO-8 color).</li>
           <li>Images are stored as palette slots (0–15) plus the screen palette (which of the 32 PICO-8 colors each slot shows) and the transparent slot, just like PICO-8 memory + <code>pal()</code>/<code>palt()</code>.</li>
+          <li><b>Desktop tools outside the suite</b>: historical Demotools desktop tools, such as the Filename Optimizer (batch-renames carts and updates code references), are not bundled in this standalone repository.</li>
           <li>The library lives in this browser and origin (IndexedDB). Use <b>Library → Export Library Backup</b> to keep saved assets or move them to another browser/origin; tool working sessions and demo-folder files are not included. Open tabs on the same origin share asset changes. If storage is unavailable, the library is memory-only.</li>
         </ul>
 

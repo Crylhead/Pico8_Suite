@@ -1050,11 +1050,6 @@ This cannot be undone.`, 'Delete')) {
     updateFindButton();
   }
 
-  // Historical Demotools desktop tools; not bundled in this standalone repository.
-  const DESKTOP_TOOLS = [
-    { name: 'Filename Optimizer', dir: 'Demotools/filename_optimizer', desc: 'External historical tool; not included here. Batch-renames carts and updates code references.' },
-  ];
-
   /**
    * Home (#68): "Continue" (last tool, active project), task shortcuts grouped from the registry and the
    * storage notice. Nothing here opens a folder or changes another tool's work: a shortcut only switches
@@ -1071,7 +1066,8 @@ This cannot be undone.`, 'Delete')) {
     if (p.action) {
       rows.push(el('button', { type: 'button', className: 'btn', textContent: p.label, dataset: { project: p.action, ws: p.ws || '' }, disabled: p.action === 'open' && !p.ws }));
     }
-    rows.push(el('p', { className: `home-note${p.kind === 'blocked' || p.kind === 'missing' ? ' home-note-warn' : ''}`, textContent: p.text }));
+    // #193: with no project the explanation lives in Help (How storage works); project states keep their note
+    if (p.kind !== 'none') rows.push(el('p', { className: `home-note${p.kind === 'blocked' || p.kind === 'missing' ? ' home-note-warn' : ''}`, textContent: p.text }));
     if (!last) rows.unshift(el('p', { className: 'muted', textContent: 'Pick a task below to start. Your last tool will be offered here next time.' }));
     cont.replaceChildren(...rows);
 
@@ -1082,7 +1078,7 @@ This cannot be undone.`, 'Delete')) {
     if (note.tone === 'warn') sn.setAttribute('role', 'alert'); else sn.removeAttribute('role');
 
     const box = $('#homeTasks');
-    box.replaceChildren(...P8Home.taskGroups(tools).map((g) => el('section', { className: 'home-task-group', attrs: { 'aria-label': g.label } },
+    box.replaceChildren(...P8Home.taskGroups(tools).map((g) => el('section', { className: 'home-task-group', dataset: { group: g.id }, attrs: { 'aria-label': g.label } },
       el('h4', { textContent: g.label }),
       ...g.tasks.map((k) => el('button', { type: 'button', className: 'home-task', dataset: { ws: k.ws, ...(k.open?.click ? { click: k.open.click } : {}) } },
         el('strong', { textContent: k.label }),
@@ -1102,14 +1098,23 @@ This cannot be undone.`, 'Delete')) {
       el('h4', { id: `home-cat-${g.category.id}` }, g.category.label, el('span', { className: 'muted', textContent: ` · ${g.category.desc}` })),
       el('div', { className: 'tool-grid' }, ...g.entries.map(card)))));
 
-    const recent = $('#homeRecent');
+    // #193: Recent is shown only when the Library has something
     const list = assets.list().slice(0, 12);
-    recent.replaceChildren(...(list.length
-      ? list.map((a) => assetCard(a))
-      : [el('p', { className: 'muted asset-empty', textContent: 'Nothing yet. Everything you save to the library shows up here and in every tool.' })]));
+    $('#homeRecentSection').hidden = !list.length;
+    $('#homeRecent').replaceChildren(...list.map((a) => assetCard(a)));
+  }
 
-    $('#homeDesktop').replaceChildren(...DESKTOP_TOOLS.map((t) => el('li', {},
-      el('strong', { textContent: t.name }), ' ', el('code', { textContent: `${t.dir}/` }), el('span', { className: 'muted', textContent: ` · ${t.desc}` }))));
+  // #193: All tools and How the tools work together are collapsed; their open state is remembered
+  const HOME_SECTIONS_KEY = 'p8suite.homeSections';
+  function bindHomeSections() {
+    const open = App.store.get(HOME_SECTIONS_KEY, {}) || {};
+    for (const d of document.querySelectorAll('main[data-ws="home"] details[data-pref]')) {
+      d.open = open[d.dataset.pref] === true;
+      d.addEventListener('toggle', () => {
+        const now = App.store.get(HOME_SECTIONS_KEY, {}) || {};
+        App.store.set(HOME_SECTIONS_KEY, { ...now, [d.dataset.pref]: d.open });
+      });
+    }
   }
 
   function bindHome() {
@@ -1302,6 +1307,7 @@ This cannot be undone.`, 'Delete')) {
 
   bindLibrary();
   bindHome();
+  bindHomeSections();
   bindNavigation();
   registerTool({ ws: 'palette', category: 'create', name: 'Palette & Fades', desc: '16-color custom palettes from all 32 PICO-8 colors, dark/bright fade tables, greyscale conversion.', tasks: [{ group: 'create', label: 'Make a palette', hint: '16 of the 32 PICO-8 colors, with fade tables' }], color: '#ff004d', tags: ['palette', 'fades', 'Lua'] });
   registerTool({ ws: 'tiles', category: 'create', name: 'Tile Maker', desc: 'Packs images into 8×8 tiles + map, VRAM viewport heatmap, tile editor, .p8 carts.', tasks: [{ group: 'create', label: 'Turn an image into tiles', hint: 'Tile sheet and map from any picture' }], color: '#00e436', tags: ['tiles', 'map', '.p8'] });
