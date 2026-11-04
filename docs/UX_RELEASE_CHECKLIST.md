@@ -150,3 +150,29 @@ After-case DOMRect assertions passed for square comparisons, paired-frame edges,
 ## Handoff
 
 State exactly which automated checks ran and which human rows were covered; list gaps once (for example "no PICO-8 available", "touch not tested").
+
+
+## Workspace geometry (#168)
+
+Recorded 2026-11-04, Chromium 153.0.8010.0 on Linux/headless, base `574443f` plus this fix. Compare each tool at the same viewport/theme, with tours and tooltips off. Check wrapper edges independently of tool-specific card padding. At 1920px the regular dashboard wrapper is x=340/width=1240, the wide dashboard is x=140/width=1640, and the fluid wrapper is x=0/width=1920; the first content rails are respectively 356, 156 and 16px.
+
+| Workspace / screenshot comparison | Before → after outer padding (top/right/bottom/left) | Before → after outer gap | Width behavior |
+| --- | --- | --- | --- |
+| Home | 22/16/40/16 → 16/16/16/16 | 22 → 16 | Centered 1240px, unchanged |
+| Palette & Fades | 16 all → 16 all | 16 → 16 | Centered 1640px, unchanged |
+| Tile Maker | 16 all → 16 all | 16 → 16 | Centered 1640px, unchanged |
+| Data Tools | 16 all → 16 all | 16 → 16 | Centered 1240px, unchanged |
+| Pixel Studio | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
+| Map Editor | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
+| Code Editor | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
+| Minifier | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
+| Project Audit | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
+| Cart Builder | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
+| Data Carts | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
+| Extra Tools: LUT / Wave / Line / Terrain | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
+
+Baseline: 75 measured cases (15 contexts × 360/640/768/1280/1920px, light). Final: 150 cases (same widths, light/dark). Each final case checks mode, centering/width ceiling, four gutters, gap and absence of horizontal page overflow. Before/after screenshots at 1280×900/light were compared across every built-in workspace and all four Extra Tools tabs; narrow final screenshots at 360×900/dark also checked stacking. Home becomes slightly more compact vertically; editors move their cards 6px inward, with useful stages still filling the remaining area. Existing dashboard ceilings and specialized grids remain intact.
+
+A further 15-context pass at 640×450 CSS px and device scale 2 checks the reflow/pixel-density equivalent of a 1280×900 window at 200% zoom. It passes the same geometry and horizontal-overflow assertions. This emulates doubled-scale reflow; physical browser zoom and native Windows/macOS were not exercised.
+
+Pixel Studio, Map and Terrain keyboard separators were resized, collapsed, switched away/back, restored and reset: chosen widths and collapse survive the switch. Code source, Pixel Studio document and a loaded/optimized Minifier input remained unchanged after switching. Rendering/packing algorithms and canvas scaling were not modified. To repeat manually, load representative assets, visit all contexts at the widths above, resize/collapse panels and scroll the existing panes; at 200% zoom confirm the last action is reachable and pixel content keeps its aspect.

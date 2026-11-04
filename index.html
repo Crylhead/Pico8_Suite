@@ -363,7 +363,7 @@
     </div>
   </header>
 
-  <main class="layout" data-ws="palette" hidden>
+  <main class="layout" data-ws="palette" hidden data-layout="dashboard" data-width-tier="wide">
     <!-- System palette -->
     <section class="card card-system" aria-labelledby="sysTitle">
       <header class="card-head"><h2 id="sysTitle">System palette</h2></header>
@@ -491,7 +491,7 @@
   <!-- ================================================================ -->
   <!-- Tile Maker workspace                                             -->
   <!-- ================================================================ -->
-  <main class="layout-tiles" data-ws="tiles" hidden>
+  <main class="layout-tiles" data-ws="tiles" hidden data-layout="dashboard" data-width-tier="wide">
     <section class="card tm-bar" aria-labelledby="tmTitle">
       <header class="card-head">
         <h2 id="tmTitle">Tile Maker <span class="muted">8×8 tile packing · VRAM streaming analysis</span></h2>
@@ -627,7 +627,7 @@
   <!-- ================================================================ -->
   <!-- Home                                                             -->
   <!-- ================================================================ -->
-  <main class="layout-home" data-ws="home" hidden>
+  <main class="layout-home" data-ws="home" hidden data-layout="dashboard">
     <section class="home-hero">
       <div class="home-logo" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       <div>
@@ -685,7 +685,7 @@
   <!-- ================================================================ -->
   <!-- Pixel Studio                                                     -->
   <!-- ================================================================ -->
-  <main class="layout-map" data-ws="map" hidden>
+  <main class="layout-map" data-ws="map" hidden data-layout="fluid">
     <div class="ps-toolbar card" id="meTools" role="toolbar" aria-label="Map tools" aria-orientation="vertical">
       <button class="ps-tool" data-tool="pencil" title="Draw (B) · paints the selected tile or block" aria-label="Draw"><svg viewBox="0 0 20 20"><path d="M3 17l1.2-4.2L13.5 3.5l3 3-9.3 9.3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M11.5 5.5l3 3" stroke="currentColor" stroke-width="1.6"/></svg></button>
       <button class="ps-tool" data-tool="rect" title="Rectangle fill (U)" aria-label="Rectangle fill"><svg viewBox="0 0 20 20"><rect x="3.5" y="5" width="13" height="10" fill="currentColor" fill-opacity=".35" stroke="currentColor" stroke-width="1.6"/></svg></button>
@@ -750,7 +750,7 @@
     </aside>
   </main>
 
-  <main class="layout-code" data-ws="code" hidden>
+  <main class="layout-code" data-ws="code" hidden data-layout="fluid">
     <section class="card ce-main">
       <header class="ce-bar">
         <button class="btn btn-ghost btn-sm" id="ceBack" hidden title="Back to the cart that includes this file"></button>
@@ -827,7 +827,7 @@
     </aside>
   </main>
 
-  <main class="layout-studio" data-ws="studio" hidden>
+  <main class="layout-studio" data-ws="studio" hidden data-layout="fluid">
     <div class="ps-toolbar card" id="psTools" role="toolbar" aria-label="Drawing tools" aria-orientation="vertical">
       <button class="ps-tool" data-tool="pencil" title="Pencil (B)" aria-label="Pencil"><svg viewBox="0 0 20 20"><path d="M3 17l1.2-4.2L13.5 3.5l3 3-9.3 9.3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M11.5 5.5l3 3" stroke="currentColor" stroke-width="1.6"/></svg></button>
       <button class="ps-tool" data-tool="eraser" title="Eraser (E)" aria-label="Eraser"><svg viewBox="0 0 20 20"><path d="M7 17h10M3.5 12.5l7-7 5 5-6.5 6.5H8z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M6.5 9.5l5 5" stroke="currentColor" stroke-width="1.6"/></svg></button>
@@ -989,7 +989,7 @@
   <!-- ================================================================ -->
   <!-- Data Tools                                                       -->
   <!-- ================================================================ -->
-  <main class="layout-data" data-ws="data" hidden>
+  <main class="layout-data" data-ws="data" hidden data-layout="dashboard">
     <section class="card dt-card" id="bdCard" aria-labelledby="bdTitle">
       <header class="card-head">
         <h2 id="bdTitle">Binary → PICO-8 string <span class="muted">port of binary_data_converter</span></h2>
@@ -1065,7 +1065,7 @@
   <!-- ================================================================ -->
   <!-- Project Audit                                                    -->
   <!-- ================================================================ -->
-  <main class="layout-audit" data-ws="audit" id="auStage" hidden>
+  <main class="layout-audit" data-ws="audit" id="auStage" hidden data-layout="fluid">
     <section class="card au-top">
       <div class="dt-row">
         <button class="btn btn-primary" id="auOpen" data-help-id="audit.scan" title="Ctrl+O">Choose Project Folder…</button>
@@ -1105,7 +1105,7 @@
   <!-- ================================================================ -->
   <!-- ================================================================ -->
   <!-- Minifier: local Shrinko8 comparison, reports and validated build exports. -->
-  <main class="layout-minifier" data-ws="minifier" hidden aria-labelledby="mnHeading">
+  <main class="layout-minifier" data-ws="minifier" hidden aria-labelledby="mnHeading" data-layout="fluid">
     <header class="card mn-command">
       <div class="mn-heading-row">
         <h2 id="mnHeading">Minifier</h2>
@@ -1236,7 +1236,7 @@
 
   <!-- Cart Builder                                                     -->
   <!-- ================================================================ -->
-  <main class="layout-dc" data-ws="cartbuilder" hidden>
+  <main class="layout-dc" data-ws="cartbuilder" hidden data-layout="fluid">
     <section class="card dc-top">
       <div class="dt-row">
         <button class="btn btn-primary" id="cbOpen" data-help-id="cartbuilder.open" title="The demo project folder (contains demo/, tools/, music/); outside AppData so the browser may write to it">Open Demo Project…</button>
@@ -1263,7 +1263,7 @@
     </section>
   </main>
 
-  <main class="layout-dc" data-ws="datacarts" hidden>
+  <main class="layout-dc" data-ws="datacarts" hidden data-layout="fluid">
     <section class="card dc-top">
       <div class="dt-row">
         <button class="btn btn-primary" id="dcOpen" title="Same folder as Project Audit">Open Project Folder…</button>
@@ -1355,7 +1355,7 @@
   <!-- ================================================================ -->
   <!-- Extra Tools                                                      -->
   <!-- ================================================================ -->
-  <main class="layout-extras" data-ws="extras" hidden>
+  <main class="layout-extras" data-ws="extras" hidden data-layout="fluid">
     <div class="ex-head">
       <div class="seg" id="exTabs" role="radiogroup" aria-label="Extra tool">
         <button role="radio" data-value="lut" aria-checked="true" title="Alt+1">LUT Creator</button>
@@ -1436,6 +1436,7 @@
         <p>The PICO-8 Dev Suite combines Pixel Studio, Palette &amp; Fades, the Tile Maker, the Map Editor, the Data Tools and the project tools. Switch tools with the icons at the top (the current tool's name is shown left of them); each tool keeps its work while you switch.</p>
         <ul>
           <li><b>Finding tools</b>: the workspace bar groups the tools as <i>Create</i> (Pixel Studio, Palette &amp; Fades, Tile Maker, Map Editor, Terrain Lab), <i>Develop</i> (Code Editor, Minifier, Cart Builder), <i>Inspect</i> (Project Audit, Data Carts) and <i>Utilities</i> (Data Tools, Extra Tools); Home lists them the same way. On wide screens the tabs show their names. The magnifier button (or <kbd>Ctrl</kbd>+<kbd>K</kbd>, <kbd>⌘</kbd>+<kbd>K</kbd> on a Mac) opens <b>Find tool</b>: type part of a name or task (e.g. <i>tokens</i>, <i>terrain</i>, <i>fade</i>) to search names and descriptions, including the tools inside Extra Tools; <kbd>↑</kbd> <kbd>↓</kbd> choose, <kbd>Enter</kbd> opens, <kbd>Esc</kbd> closes without switching. On narrow screens the tabs are replaced by this button, which shows the current tool's name.</li>
+          <li><b>Workspace layout</b>: editors use the full window width. Home and Data Tools stay centered; Palette &amp; Fades and Tile Maker use a wider centered layout for comparing images. On smaller windows, panels stack and the page scrolls where the tool needs more room.</li>
           <li><b>Links</b>: the address follows the open tool (e.g. <code>index.html#map</code> or <code>index.html#extras/terrain</code>); open or bookmark such a link to start in that tool. Without one, the Suite reopens the tool you used last.</li>
           <li><b>Library</b> (button at the top right): images, palettes and maps shared by all tools. Click an asset for <i>Open in…</i>, rename, duplicate, PNG download and delete; the trash button next to each entry deletes it directly (after asking). Palette &amp; Fades saves and loads palettes with the <i>Save to Library…</i> / <i>From Library…</i> buttons of the custom palette. Drag an asset thumbnail onto a tool's canvas to load it there. Drop image files onto the library to import them (colors snap to the nearest PICO-8 color).</li>
           <li>Images are stored as palette slots (0–15) plus the screen palette (which of the 32 PICO-8 colors each slot shows) and the transparent slot, just like PICO-8 memory + <code>pal()</code>/<code>palt()</code>.</li>

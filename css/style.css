@@ -72,6 +72,8 @@
 /* Theme-independent scales and state tokens; documented in docs/DESIGN_SYSTEM.md. Colours are
    the theme tokens above plus --status-ok/--status-warn/--status-error (css/suite.css). */
 :root {
+  --workspace-gutter: var(--space-7); --workspace-gap-editor: var(--space-5); --workspace-gap-dashboard: var(--space-7);
+  --workspace-width-default: 1240px; --workspace-width-wide: 1640px;
   --preview-square-size: 256px; --preview-sidebar-size: 192px; --preview-sheet-width: 256px;
   --space-1: 2px; --space-2: 4px; --space-3: 6px; --space-4: 8px; --space-5: 10px; --space-6: 12px; --space-7: 16px;
   --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-base: 14px; --fs-lg: 15px;
@@ -335,6 +337,20 @@ legend.panel-heading { padding: 0 var(--space-2); }
     "system custom"
     "fade fade";
 }
+
+/* Outer workspace geometry (#168). Tool classes retain their internal grids and scrolling;
+   their legacy geometry is a fallback for extensions that have not adopted this contract. */
+main[data-layout] {
+  min-width: 0;
+  padding: var(--workspace-gutter);
+  gap: var(--workspace-gap, var(--workspace-gap-editor));
+}
+main[data-layout="fluid"] { width: 100%; max-width: none; --workspace-gap: var(--workspace-gap-editor); }
+main[data-layout="dashboard"] {
+  width: 100%; max-width: var(--workspace-max-width, var(--workspace-width-default)); margin-inline: auto;
+  --workspace-gap: var(--workspace-gap-dashboard);
+}
+main[data-layout="dashboard"][data-width-tier="wide"] { --workspace-max-width: var(--workspace-width-wide); }
 
 .card {
   background: var(--surface);
