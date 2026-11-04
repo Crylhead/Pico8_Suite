@@ -2073,12 +2073,17 @@
     node.classList.toggle('light', rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114 > 150);
   }
 
+  function renderPaletteIndices() {
+    for (const label of dom.palette.querySelectorAll('.ps-sw-n')) label.hidden = !App.state.showIndices;
+  }
+
   function renderPalette() {
     const d = ps.doc;
     dom.palette.replaceChildren();
     for (let i = 0; i < 16; i++) {
       const b = el('button', {
         type: 'button', className: 'ps-sw', dataset: { slot: i },
+        attrs: { 'aria-label': `Slot ${i}, color ${d.pal[i]}${i === d.transparent ? ', transparent' : ''}` },
         title: `Slot ${i} → color ${d.pal[i]}${i === d.transparent ? ' (transparent)' : ''}\nLeft click: primary · Right click: secondary · Double click: change color`,
       }, el('span', { className: 'ps-sw-n', textContent: i }));
       swatchStyle(b, i);
@@ -2091,6 +2096,7 @@
     dom.transp.replaceChildren(el('option', { value: '-1', textContent: 'none' }),
       ...Array.from({ length: 16 }, (_, i) => el('option', { value: String(i), textContent: `slot ${i}` })));
     dom.transp.value = String(d.transparent);
+    renderPaletteIndices();
     renderColors();
   }
 
@@ -3152,6 +3158,7 @@
       pasteFromEvent(e);
     });
 
+    document.addEventListener('p8:indices', renderPaletteIndices);
     document.addEventListener('p8:workspace', () => {
       if (document.body.dataset.workspace !== 'studio') { setPlaying(false); return; }
       requestDraw();
