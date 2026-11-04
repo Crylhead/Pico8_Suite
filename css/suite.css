@@ -1010,7 +1010,8 @@ canvas.thumb {
 .dc-view { display: grid; gap: 8px; min-width: 0; }
 .dc-view h4 { margin: 8px 0 0; font-size: 13px; }
 .dc-view p { margin: 0; }
-.dc-canvas-wrap { overflow: auto; max-height: 52vh; background: var(--surface-2); border-radius: var(--radius-sm); padding: 6px; }
+.dc-canvas-wrap { position: relative; overflow: auto; max-height: 52vh; background: var(--surface-2); border-radius: var(--radius-sm); padding: 6px; }
+.dc-canvas-wrap.is-empty { min-height: 128px; } /* #187: room for the empty-state text */
 .dc-canvas-wrap canvas { display: block; max-width: 100%; }
 .dc-canvas-wrap canvas.pixel { image-rendering: pixelated; width: min(100%, 512px); max-width: none; }
 .dc-hex { margin: 0; font: 12px/1.45 var(--mono); white-space: pre; }

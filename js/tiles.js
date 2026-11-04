@@ -65,6 +65,7 @@
     origCanvas: $('#tmOrigCanvas'),
     outCanvas: $('#tmOutCanvas'),
     outTitle: $('#tmOutTitle'),
+    outEmpty: $('#tmOutEmpty'),
     modeCaption: $('#tmModeCaption'),
     modeCaptionText: $('#tmModeCaptionText'),
     matchColors: $('#tmMatchColors'),
@@ -487,6 +488,9 @@
     const v = App.state.slider;
     dom.fadeReadout.textContent = v === 16 ? 'Normal' : `${v < 16 ? 'Dark' : 'Bright'} · ${sliderToStep(v)}`;
     dom.drop.hidden = !!tm.original;
+    // #187: the result frame says what fills it until a result exists
+    dom.outEmpty.hidden = !!tm.result;
+    dom.outEmpty.textContent = tm.original ? 'Press Rebuild to see the result.' : 'Import an image to see the result.';
 
     const notes = [];
     if (tm.stale) notes.push('The custom palette changed since this tileset was built. Rebuild to apply it.');

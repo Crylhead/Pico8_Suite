@@ -53,6 +53,7 @@
     reads: $('#dcReads'), secList: $('#dcSecs'),
     vStart: $('#dcStart'), vLen: $('#dcLen'), vAs: $('#dcAs'), vWidth: $('#dcWidth'), vWidthWrap: $('#dcWidthWrap'),
     viewer: $('#dcViewer'), hexOut: $('#dcHex'), vInfo: $('#dcViewInfo'),
+    viewerWrap: $('#dcViewerWrap'), viewerEmpty: $('#dcViewerEmpty'), mapEmpty: $('#dcMapEmpty'),
     toLib: $('#dcToLib'), toLayers: $('#dcToLayers'), addPack: $('#dcAddPack'), dlBin: $('#dcDlBin'),
     palRow: $('#dcPalRow'), palSel: $('#dcPal'), swatches: $('#dcSwatches'), palLua: $('#dcPalLua'),
     secondary: $('#dcSecondary'),
@@ -152,6 +153,7 @@
   function drawMap() {
     const c = cur();
     const cv = dom.map;
+    dom.mapEmpty.hidden = !!c; // #187: no cart is not the same as an all-black memory map
     const rows = Math.ceil(ROM / CELL);
     cv.width = CELL;
     cv.height = rows;
@@ -328,7 +330,13 @@
     const sec = dc.secs?.find((x) => x.id === dc.secId);
     const ownNote = sec?.own ? ` · read by the cart's own code${sec.own.whole ? ' (whole region: approximation)' : ''}: ${sec.own.how.join(', ')}${sec.own.values ? ' (as values: they may be data, not colors)' : ''}` : '';
     dom.vInfo.textContent = b.length ? `${b.length} bytes · ${reg.name}${dc.view.start + b.length > reg.end ? ' and following' : ''}${as === 'img4' || as === 'img4g' ? ` · ${width}×${Math.ceil(b.length / (width >> 1))} px` : as === 'tab' ? ` · ${Math.ceil(b.length / 16)} rows of 16` : ''}${ownNote}` : '';
-    if (!b.length) { dom.viewer.width = 1; dom.viewer.height = 1; dom.hexOut.textContent = ''; return; }
+    // #187: no bytes selected says so; selected bytes always show as data, even when they are all black
+    dom.viewerEmpty.hidden = b.length > 0;
+    dom.viewerWrap.classList.toggle('is-empty', !b.length);
+    if (!b.length) {
+      dom.viewerEmpty.textContent = cur() ? 'Select a section or an address range to view its bytes.' : 'Select a cart to view its data.';
+      dom.viewer.width = 1; dom.viewer.height = 1; dom.hexOut.textContent = ''; return;
+    }
     if (as === 'hex') {
       const lines = [];
       const n = Math.min(b.length, 4096);

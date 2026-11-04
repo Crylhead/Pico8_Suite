@@ -341,3 +341,21 @@ Not covered: hex copy (clipboard) was not compared, but it is built by the uncha
 - No exceptions.
 
 Not covered: screen readers, non-Chromium browsers.
+
+## Follow-up: #187 Empty previews say they are empty (2026-11-04)
+
+**Behaviour change:** a shared `.preview-empty` primitive (`css/style.css`) sits inside the existing preview frame, so the frame keeps its loaded size. It is a dark neutral checker in every theme, the same as the Tile Maker drop area, with centered `--fs-md` text (10.32:1 and 11.07:1 on the two checker squares). It is a plain text node for screen readers and `pointer-events: none`, so panning, clicks and drops reach the frame. Uses:
+- **Tile Maker *Reconstructed*:** "Import an image to see the result.", or "Press Rebuild to see the result." when an image is loaded but there is no result.
+- **Palette *Gradient preview*:** "Add colors and fade stops to preview the fade.", shown only while no fade exists. A generated or imported fade never shows it.
+- **Data Carts memory map:** "Select a cart to see its memory map."
+- **Data Carts viewer:** "Select a cart to view its data.", or a range prompt when a cart is open but no bytes are selected. Selected bytes always show as data, even when they are all black.
+
+`docs/DESIGN_SYSTEM.md` documents the primitive (table row plus *Empty previews*), and `docs/design-system.html` has a sample.
+
+**Checked** in headless Chrome 156 (fresh profiles, real input, intercepted file choosers):
+- **Tile Maker:** empty shows the text in dark and light themes (computed color 201,201,211), and the frame center still hit-tests to the canvas. After a PNG import the overlay is hidden. After a reload the Tile Maker keeps no image, so its drop area and this overlay are shown again.
+- **Palette:** a fresh start has a fade, so no overlay. With the fade removed, the overlay appears on the next redraw. With the fade restored, it disappears.
+- **Data Carts:** with no cart, both overlays are shown. After opening and selecting a `.p8`, both are hidden. A selected all-zero `__gfx__` range shows as black data (canvas max 0) with no overlay.
+- No exceptions.
+
+Not covered: the viewer's "cart open, no bytes" text is hard to reach, because a length of 0 is clamped to 1 byte. Screen readers and non-Chromium browsers were not tested.
