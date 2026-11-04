@@ -313,3 +313,18 @@ Not covered: the native folder picker and permission prompt UI (stubbed), a real
 - No exceptions.
 
 Not covered: screen readers, non-Chromium browsers.
+
+## Follow-up: #185 Pixel Studio save status and visible Save (2026-11-04)
+
+**Behaviour change:** Pixel Studio mounts the shared `P8DocStatus` badge between the image name and the size pill, as Map Editor does. It shows Not saved, Unsaved changes, Saving…, Saved to Library, and Save failed with Retry; click it for details. A **Save** button (`.btn-sm`) beside it runs the existing `ps-save` action, the same `saveToLibrary()` as **File › Save to Library** and `Ctrl+S`, so there is still one save path. The #80 document/revision guard is unchanged, and the tracker mirrors it: `loadDoc` opens (a restored unsaved session opens unsaved), `changed` edits (strokes, undo, redo, rename), and `saveToLibrary` begins, then resolves the written revision or rejects with a persistent error. The palette panel button is now **Save palette** and still stores a palette only. The size pill shows only the dimensions. The help registry (`studio.save`), F1 Pixel Studio text, README and EXTENDING were updated.
+
+**Checked** with `tests/studio-save.test.js`, which now uses the real `P8DocStatus` (2 new cases, failing on the old code; the 3 #80 cases still pass). Also checked in headless Chrome 156 (fresh profiles, real pointer and key input) at 1440×900:
+- A fresh image is *Not saved*. A changing stroke makes it *Unsaved changes*. **Save** gives *Saved to Library* with one image asset.
+- Another stroke gives *Unsaved changes*, and so does `Ctrl+Z`.
+- A Library write that rejects once (`Ctrl+S`) gives *Save failed*. The badge's Retry then gives *Saved to Library*, still one image asset.
+- **File › Save** gives *Saved to Library*, still one image asset. **Save palette** adds one palette asset and no image.
+- A reload after an unsaved edit shows *Unsaved changes*, and a reload after saving shows *Saved to Library*.
+- At 900, 641 and 390 px wide, the badge and **Save** are inside the viewport.
+- No exceptions.
+
+Not covered: screen readers, non-Chromium browsers.

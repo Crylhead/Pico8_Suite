@@ -858,7 +858,9 @@
       <header class="ps-options ps-options-rows" id="psOptions">
         <div class="ps-options-row command-row command-row-scroll" aria-label="Tool options">
         <input type="text" id="psName" class="ps-name" spellcheck="false" aria-label="Image name">
-        <span class="badge" id="psSize">128×128</span>
+        <span id="psDocStatus"></span>
+        <button class="btn btn-sm" id="psSave" data-action="ps-save" data-help-id="studio.save" title="Save the image to the Library (Ctrl+S)">Save</button>
+        <span class="badge" id="psSize" title="Image size in pixels">128×128</span>
         <span class="ps-sep"></span>
         <div id="psBrushWrap" class="ps-opt">
           <span class="label">Brush</span>
@@ -946,7 +948,7 @@
           <button class="btn btn-sm" id="psPalEdit" data-help-id="studio.slot" title="Change the screen color of the primary slot (or double-click a slot)">Remap…</button>
           <button class="btn btn-sm" id="psPalFromTool" title="Use the custom palette of Palette &amp; Fades">From Palette &amp; Fades</button>
           <button class="btn btn-sm" id="psPalFromLib">Library…</button>
-          <button class="btn btn-sm" id="psPalSave" title="Save this palette to the library">Save</button>
+          <button class="btn btn-sm" id="psPalSave" title="Save this palette to the library">Save palette</button>
           <button class="btn btn-sm" id="psPalReset" title="Standard PICO-8 palette">Reset</button>
         </div>
       </section>
@@ -1454,6 +1456,7 @@
 
         <h3 id="doc-studio">Pixel Studio</h3>
         <ul>
+          <li><b>Save</b>: the badge next to the image name shows the save state (<i>Not saved</i>, <i>Unsaved changes</i>, <i>Saving…</i>, <i>Saved to Library</i>, <i>Save failed</i> with Retry; click it for details). <b>Save</b> beside it, <i>File › Save to Library</i> and <kbd>Ctrl</kbd>+<kbd>S</kbd> are the same save. <b>Save palette</b> in the Palette panel stores only the palette as its own Library asset. The pill after it is the image size.</li>
           <li><b>Canvas sizes</b>: anything from 1×1 to 1024×1024, with presets for sprites, the screen / sprite sheet (128×128), half sheet, and the whole map in pixels (1024×512). Orange dashed boxes mark 128×128 screens on large canvases.</li>
           <li><b>Colors</b>: 16 slots, each mapped to one of the 32 PICO-8 colors (double-click a slot or <i>Remap…</i>). Left mouse button paints the primary color, right button the secondary. <i>From Palette &amp; Fades</i> takes the custom palette of that tool.</li>
           <li><b>Transparent</b>: empty pixels (checkerboard) export as the transparent slot (default 0, like <code>palt()</code>).</li>
