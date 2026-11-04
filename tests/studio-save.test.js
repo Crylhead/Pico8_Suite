@@ -9,6 +9,7 @@ const { read, fn, same } = require('./source-extract.js');
 function setup() {
   const ctx = vm.createContext({ setTimeout: () => 0, clearTimeout: () => {} });
   vm.runInContext(read('js/studio-core.js'), ctx, { filename: 'js/studio-core.js' });
+  vm.runInContext(read('js/doc-status-core.js'), ctx, { filename: 'js/doc-status-core.js' });
   const studio = read('js/studio.js');
   vm.runInContext(`
     const K = P8Studio;
@@ -37,6 +38,7 @@ function setup() {
     const ps = { doc: K.newDoc(8, 8), name: 'untitled', assetId: null, dirty: false, docSeq: 0, rev: 0, saving: null,
       fades: null, frame: 0, layer: 0, sel: null, floating: null, xform: null, primary: 7, secondary: 0, history: { clear() {} } };
     const setPlaying = () => {}; const afterDocReplaced = () => {}; const requestAnimationFrame = () => {}; const zoomFit = () => {};
+    const status = P8DocStatus.create(); // the real shared tracker the badge shows (#185)
     let sessionTimer = 0;
     ${fn(studio, 'renderTitle')}
     ${fn(studio, 'changed')}
@@ -49,7 +51,8 @@ function setup() {
     /** paint one pixel the way a tool does: change the cel, then report the edit */
     const paint = (v) => { ps.doc.frames[0].cels[0][0] = v; changed(); };
     const open = (name, v, assetId = null) => { const d = K.newDoc(8, 8); d.frames[0].cels[0][0] = v; loadDoc(d, { name, assetId, dirty: !assetId }); };
-    this.env = { ps, log, library, writes, finish, fail, paint, open, saveToLibrary, confirmDiscard, setAnswer: (v) => { promptAnswer = v; } };
+    const badge = () => status.describe().key;
+    this.env = { ps, log, library, writes, finish, fail, paint, open, saveToLibrary, confirmDiscard, status, badge, setAnswer: (v) => { promptAnswer = v; } };
   `, ctx, { filename: 'studio-save-glue.js' });
   return ctx.env;
 }
@@ -132,4 +135,52 @@ t('#80 normal save cleans the document; rejected storage keeps it dirty; overlap
   assert.strictEqual(await p, true);
   assert.strictEqual(env.ps.dirty, false);
   assert.strictEqual(env.library.get(stored.id).pixels[0], 3);
+});
+
+t('#185 the save badge follows the same path: unsaved, saving, saved, failed with Retry, and newer edits stay unsaved', async () => {
+  const env = setup();
+  env.open('A', 1);
+  assert.strictEqual(env.badge(), 'unsaved', 'a new (or restored unsaved) image opens as unsaved');
+  const p = env.saveToLibrary();
+  assert.strictEqual(env.badge(), 'saving');
+  env.finish(0);
+  assert.strictEqual(await p, true);
+  assert.strictEqual(env.badge(), 'saved-library');
+  assert.strictEqual(env.status.dirty(), env.ps.dirty);
+  // a stroke (or undo, which also goes through changed()) marks it unsaved again
+  env.paint(5);
+  assert.strictEqual(env.badge(), 'unsaved');
+  // a failed write leaves a persistent error offering Retry; the retry is the same saveToLibrary
+  let q = env.saveToLibrary();
+  env.fail(1);
+  assert.strictEqual(await q, false);
+  const failed = env.status.describe();
+  assert.strictEqual(failed.key, 'failed');
+  assert.ok(failed.actions.includes('retry'), 'Retry is offered');
+  assert.match(failed.detail || '', /QuotaExceededError/);
+  q = env.saveToLibrary(env.status.error()?.intent || {});
+  env.paint(6); // drawn while the retry is pending
+  env.finish(2);
+  assert.strictEqual(await q, true);
+  assert.strictEqual(env.badge(), 'unsaved', 'the edit made during the save is not marked saved');
+  assert.strictEqual(env.status.dirty(), true);
+  assert.strictEqual(env.ps.dirty, true);
+  assert.strictEqual(env.log.puts.length, 3, 'one Library write per save');
+});
+
+t('#185 a save that finishes after another image was opened never changes the badge of the image open now', async () => {
+  const env = setup();
+  env.open('A', 1);
+  const p = env.saveToLibrary();
+  env.open('B', 4, 'lib-B');
+  assert.strictEqual(env.badge(), 'saved-library', 'B was opened from the Library');
+  env.finish(0);
+  await p;
+  assert.strictEqual(env.badge(), 'saved-library');
+  env.open('C', 2);
+  const r = env.saveToLibrary();
+  env.open('D', 3);
+  env.fail(1);
+  await r;
+  assert.strictEqual(env.badge(), 'unsaved', 'D is not shown as failed by the rejected write of C');
 });
