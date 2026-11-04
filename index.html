@@ -439,10 +439,12 @@
             <div class="preview-actions">
               <button class="btn" id="orientationBtn">↔ Horizontal</button>
             </div>
-            <div class="params">
-              <label class="field"><span>Gamma</span><input type="number" id="gammaInput" data-help-id="palette.fades" min="0.2" max="5" step="0.1" value="1.00" inputmode="decimal"></label>
-              <label class="field"><span>Cov min</span><input type="number" id="covMinInput" min="0" max="16" step="1" value="0" inputmode="numeric"></label>
-              <label class="field"><span>Cov max</span><input type="number" id="covMaxInput" min="0" max="16" step="1" value="16" inputmode="numeric"></label>
+            <div class="preview-settings">
+              <div class="params">
+                <label class="field"><span>Gamma</span><input type="number" id="gammaInput" data-help-id="palette.fades" min="0.2" max="5" step="0.1" value="1.00" inputmode="decimal"></label>
+                <label class="field"><span>Cov min</span><input type="number" id="covMinInput" min="0" max="16" step="1" value="0" inputmode="numeric"></label>
+                <label class="field"><span>Cov max</span><input type="number" id="covMaxInput" min="0" max="16" step="1" value="16" inputmode="numeric"></label>
+              </div>
             </div>
           </figure>
 
@@ -461,22 +463,24 @@
               <button class="btn" data-action="preview-from-library">From Library…</button>
             </div>
 
-            <div class="grey-controls" id="greyControls" data-help-id="palette.greyscale" hidden>
-              <div class="grey-row">
-                <span class="label">Input range</span>
-                <label class="field"><span>Black</span><input type="number" id="greyInBlack" min="0" max="255" value="0" inputmode="numeric"></label>
-                <label class="field"><span>White</span><input type="number" id="greyInWhite" min="0" max="255" value="255" inputmode="numeric"></label>
+            <div class="preview-settings">
+              <div class="grey-controls" id="greyControls" data-help-id="palette.greyscale" hidden>
+                <div class="grey-row">
+                  <span class="label">Input range</span>
+                  <label class="field"><span>Black</span><input type="number" id="greyInBlack" min="0" max="255" value="0" inputmode="numeric"></label>
+                  <label class="field"><span>White</span><input type="number" id="greyInWhite" min="0" max="255" value="255" inputmode="numeric"></label>
+                </div>
+                <div class="grey-row">
+                  <span class="label">Output range</span>
+                  <label class="field"><span>Black</span><input type="number" id="greyOutDark" min="0" max="15" value="0" inputmode="numeric"></label>
+                  <label class="field"><span>White</span><input type="number" id="greyOutBright" min="0" max="15" value="15" inputmode="numeric"></label>
+                </div>
               </div>
-              <div class="grey-row">
-                <span class="label">Output range</span>
-                <label class="field"><span>Black</span><input type="number" id="greyOutDark" min="0" max="15" value="0" inputmode="numeric"></label>
-                <label class="field"><span>White</span><input type="number" id="greyOutBright" min="0" max="15" value="15" inputmode="numeric"></label>
-              </div>
-            </div>
 
-            <div class="fade-slider">
-              <input type="range" id="fadeSlider" data-help-id="palette.slider" min="0" max="31" step="1" value="16" aria-label="Fade position" aria-describedby="sliderReadout">
-              <div class="slider-scale"><span>Darkest</span><span id="sliderReadout">Normal</span><span>Brightest</span></div>
+              <div class="fade-slider">
+                <input type="range" id="fadeSlider" data-help-id="palette.slider" min="0" max="31" step="1" value="16" aria-label="Fade position" aria-describedby="sliderReadout">
+                <div class="slider-scale"><span>Darkest</span><span id="sliderReadout">Normal</span><span>Brightest</span></div>
+              </div>
             </div>
           </figure>
         </div>
@@ -571,7 +575,7 @@
         </figure>
         <figure class="tm-tileset">
           <figcaption>Tileset <span class="muted" id="tmTilesetCount"></span></figcaption>
-          <div class="tm-tileset-frame">
+          <div class="tm-tileset-frame" tabindex="0" role="region" aria-label="Tileset preview; scroll to see all tiles">
             <canvas id="tmTilesetCanvas" width="256" height="512"></canvas>
             <div class="tm-tileset-msg" id="tmTilesetMsg">(no tiles)</div>
           </div>

@@ -51,6 +51,21 @@ Cart Builder and Data Carts share `.layout-dc` and the same body sizing rules in
 
 Capacity charts keep their fixed 430px height and horizontal scrolling for multiple carts. Do not stretch chart data or change packing to fit the viewport. Command rows can wrap as their controls require; this contract does not force identical command content or row counts. Keep the shared Cart Builder/Data Carts body selectors together when changing their breakpoint behavior. See the [browser regression checklist](UX_RELEASE_CHECKLIST.md#cart-builder-viewport-167).
 
+## Preview frame roles (#172)
+
+Normalize the outer frame, not the pixel data. Reuse the shared spacing/radius tokens and these roles instead of assigning all canvases one height:
+
+| Role | Existing surface / sizing contract | Content behavior |
+| --- | --- | --- |
+| Sidebar thumbnail | Pixel Studio `.ps-preview-box`, `--preview-sidebar-size: 192px` high | Existing Fit/1×/2× controls choose the pixel scale; large images scroll |
+| Square comparison | Palette `.canvas-frame` uses `--preview-square-size: 256px`; Tile Maker `.tm-frame` uses available column width with a square aspect | Existing drawing code preserves image aspect and nearest-neighbor rendering; portrait/landscape content is panned or letterboxed, never stretched |
+| Primary editing stage | Pixel/Map `.ps-stage` and Extra Tools/Terrain stages remain fluid in their workspace | Specialized zoom, pan and canvas sizing remain owned by each tool; no fixed preview height is imposed |
+| Native sheet | Tile Maker `.tm-tileset-frame` bounds the native-width sheet (`--preview-sheet-width: 256px`) | The canvas retains its intrinsic display scale; the outer frame scrolls, with a keyboard-focusable, named region |
+
+Tile Maker uses shared caption and frame rows (CSS subgrid): long captions reserve the same space above compared views. Above 1100px the 256px sheet column shares the comparison frame's top/bottom edges; size containment keeps its bitmap from dictating that row's height. At 641–1100px the comparison pair stays together and the sheet moves to a separate 256px square frame. At 640px and below the views stack. Only the sheet's outer frame changes size; canvas bitmap dimensions and tile packing do not.
+
+Palette cards share caption, image, action and settings rows. Preview images remain square; the settings row takes the height needed by either card, so extra greyscale controls do not shift the image edges. Actions wrap at their normal control height. On phones the cards stack and may have different heights according to their own settings; matching heights across separate rows would add empty space. The two `.preview-settings` wrappers group existing controls without changing their IDs or event ownership.
+
 ## Adoption
 
 | Surface | Status |

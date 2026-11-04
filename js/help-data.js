@@ -56,14 +56,14 @@ const P8HelpData = (() => {
       related: ['palette', 'tiles', 'map', 'library'], keywords: ['sprite', 'draw', 'paint', 'pixel', 'gfx', 'layer', 'frame', 'animation'], legacy: 'doc-studio',
     },
     {
-      id: 'palette', kind: 'tool', ws: 'palette', title: 'Palette & Fades', rev: 1,
+      id: 'palette', kind: 'tool', ws: 'palette', title: 'Palette & Fades', rev: 2,
       summary: 'Creates custom 16-color screen palettes from all 32 PICO-8 colors and generates dithered dark/bright fade tables as Lua code.',
       inputs: ['PNG (palette import)', 'saved palettes from the Library'],
       outputs: ['Lua palette / fade code', 'Library palettes', 'project files', 'greyscale-converted images'],
       tasks: ['make a custom palette', 'generate a fade table', 'import a palette from an image', 'convert an image to greyscale levels', 'preview fades on an image'],
       actions: [
         { id: 'palette.ramps', name: 'Ramps and Auto Fill', text: 'Each palette color gets a ramp; presets and Auto Fill propose ramps.' },
-        { id: 'palette.fades', name: 'Fade ramps', text: 'Fade toward a dark and/or bright target with the fade parameters and the slider.' },
+        { id: 'palette.fades', name: 'Fade ramps', text: 'Fade toward a dark and/or bright target with the fade parameters and the slider.', detail: 'The gradient and image use square preview windows. Drag a portrait or landscape image to pan within its window. Extra controls below the previews do not stretch the pixels.' },
         { id: 'palette.export', name: 'Export', text: 'Copies ready-to-paste Lua for the palette and the fade tables.' },
         { id: 'palette.greyscale', name: 'Greyscale conversion', text: 'Maps brightness levels of an image onto palette colors.' },
       ],
@@ -77,7 +77,7 @@ const P8HelpData = (() => {
       related: ['studio', 'tiles', 'extras'], keywords: ['color', 'fade', 'dither', 'pal', 'ramp', 'gradient'], legacy: 'doc-overview',
     },
     {
-      id: 'tiles', kind: 'tool', ws: 'tiles', title: 'Tile Maker', rev: 3,
+      id: 'tiles', kind: 'tool', ws: 'tiles', title: 'Tile Maker', rev: 4,
       summary: 'Checks whether a picture can be built from PICO-8 8×8 tiles and builds the tile sheet and map.',
       inputs: ['any image', 'custom palette from Palette & Fades'],
       outputs: ['tiles + map as .p8 cart', 'Library images and maps (Open in Map Editor)'],
@@ -85,7 +85,7 @@ const P8HelpData = (() => {
       actions: [
         { id: 'tiles.import', name: 'Import Image', text: 'Converts to 16 colors (brightness ramp, custom palette by brightness, or nearest color); optional Floyd–Steinberg dither. A Library image with its own palette brings that palette and its fades along (nearest color) only once you accept replacing an unsaved tile set; Cancel changes nothing.' },
         { id: 'tiles.reduce', name: 'Tile reduction (MAE)', text: 'Raise it and press Rebuild to merge similar tiles until you are within 256.' },
-        { id: 'tiles.viewport', name: 'Viewport and heatmap', text: 'Shows how many unique tiles a screen-sized window needs and where it is expensive.' },
+        { id: 'tiles.viewport', name: 'Viewport and heatmap', text: 'Shows how many unique tiles a screen-sized window needs and where it is expensive.', detail: 'Original and Reconstructed use aligned square frames. The tileset retains its display scale inside a scroll frame. Focus that preview and use arrow/Page keys, or scroll with the wheel, to see the remaining tiles.' },
         { id: 'tiles.edit', name: 'Edit Tiles…', text: 'Pixel editor for single tiles; Save Changes applies them.' },
         { id: 'tiles.tomap', name: 'Tiles + Map → Map Editor', text: 'Opens the tiles as the Map Editor tileset (sprite 0 stays empty when they fit) and the tile map as its map, as a temporary copy that is not in the Library. If the Map Editor has unsaved changes it first asks Replace / Cancel; Cancel changes neither tool.' },
       ],
