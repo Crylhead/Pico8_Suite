@@ -24,12 +24,12 @@
 
   // layout: element holding the grid; side: the panel; reserve: fixed columns + gaps besides side and canvas
   const PANELS = [
-    { id: 'studio', ws: 'studio', layout: () => document.querySelector('.layout-studio'), side: (l) => l.querySelector(':scope > .ps-side'), min: 200, max: 560, def: 272, reserve: 52 + 30, name: 'Pixel Studio' },
-    { id: 'map', ws: 'map', layout: () => document.querySelector('.layout-map'), side: (l) => l.querySelector(':scope > .ps-side'), min: 220, max: 560, def: 290, reserve: 52 + 30, name: 'Map Editor' },
+    { id: 'studio', ws: 'studio', layout: () => document.querySelector('.layout-studio'), side: (l) => l.querySelector(':scope > .ps-side'), min: 200, max: 560, def: 272, reserve: 52 + 20, name: 'Pixel Studio' },
+    { id: 'map', ws: 'map', layout: () => document.querySelector('.layout-map'), side: (l) => l.querySelector(':scope > .ps-side'), min: 220, max: 560, def: 290, reserve: 52 + 20, name: 'Map Editor' },
     { id: 'terrain', ws: 'extras', layout: () => document.querySelector('.tl-split'), side: (l) => l.querySelector(':scope > .ex-controls'), min: 260, max: 640, def: 380, reserve: 10, name: 'Terrain Lab' },
   ];
 
-  const widthOf = (p, layout) => layout.getBoundingClientRect().width;
+  const widthOf = (p, layout) => P.contentWidth(layout.getBoundingClientRect().width, getComputedStyle(layout));
 
   function attach(p) {
     const layout = p.layout();

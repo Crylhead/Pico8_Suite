@@ -13,7 +13,14 @@
 const P8Panels = (() => {
   const KEY = 'p8suite.layout';
   const VERSION = 1;
-  const MIN_CENTER = 320; // the central canvas always keeps at least this much room
+  const MIN_CENTER = 320; // center grid track; the canvas has its own borders/padding
+
+  /** Grid content width from a border-box DOMRect and computed CSS insets (no DOM dependency). */
+  function contentWidth(width, style = {}) {
+    const inset = ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth']
+      .reduce((sum, key) => sum + (parseFloat(style[key]) || 0), 0);
+    return Math.max(0, (Number(width) || 0) - inset);
+  }
 
   /** allowed [lo, hi] for a panel in a container of the given width */
   function bounds(cfg, containerW) {
@@ -66,7 +73,7 @@ const P8Panels = (() => {
     };
   }
 
-  return { KEY, VERSION, MIN_CENTER, bounds, clamp, keyWidth, parse, createStore };
+  return { KEY, VERSION, MIN_CENTER, contentWidth, bounds, clamp, keyWidth, parse, createStore };
 })();
 
 if (typeof module !== 'undefined') module.exports = P8Panels;

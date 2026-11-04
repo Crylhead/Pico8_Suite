@@ -94,7 +94,7 @@ export function measurePage() {
   };
 }
 
-async function serve(root) {
+export async function serve(root) {
   const mime = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.wasm': 'application/wasm', '.png': 'image/png', '.svg': 'image/svg+xml' };
   const server = http.createServer(async (req, res) => {
     try {
@@ -114,7 +114,7 @@ async function bounded(promise, milliseconds) {
   finally { clearTimeout(timer); }
 }
 
-async function fixture(page) {
+export async function fixture(page) {
   await page.waitForFunction(() => window.P8App && window.Suite?.minifier && window.P8StudioDebug);
   await bounded(page.evaluate(async () => {
     P8App.setWorkspace('code', { persist: false });

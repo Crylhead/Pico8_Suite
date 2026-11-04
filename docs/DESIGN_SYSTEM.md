@@ -83,7 +83,27 @@ Both modes use `--workspace-gutter` (16px) on all four edges. A dashboard can ad
 
 The shared rule governs only the outer wrapper. Keep specialized grids, panel widths/collapse, internal spacing, canvas aspect/zoom and scroll owners in tool styles. Legacy `.layout-*` geometry remains a fallback for extensions without the mode annotation; new tools must declare a mode. See [EXTENDING.md](../EXTENDING.md#workspace-geometry) and the [before/after checks](UX_RELEASE_CHECKLIST.md#workspace-geometry-168).
 
-The broader panel-breakpoint audit (#170) remains separate. Use the [opt-in geometry matrix](GEOMETRY_SMOKE.md) for shared layout changes.
+Responsive panel and scroll behavior is documented below (#170). Use the [opt-in geometry matrix](GEOMETRY_SMOKE.md) for shared layout changes.
+
+## Responsive panels and scroll ownership (#170)
+
+Tool breakpoints reflect different working-area needs; do not unify them. Above each stacking breakpoint the document stays fixed and tool panes scroll independently; at/below it the document scrolls. Explicit inner lists/cart rows can still scroll in narrow mode. The root scrollbar rail and workspace gutters remain shared.
+
+| Tool | Stacks at/below (CSS px) | Desktop side/control width |
+| --- | --- | --- |
+| Pixel Studio | 860 | Default 232px through 1100px, then 272px; user range 200–560px |
+| Map Editor | 900 | Default 290px; user range 220–560px |
+| Terrain / Extra Tools | 1000 | Terrain default 380px; user range 260–640px; other Extra Tools retain their own internal grids |
+| Code Editor | 900 | 280px fixed rail |
+| Minifier | 699 | 250px from 700–1199px with stacked comparison panes; 300px from 1200px |
+| Project Audit | 1000 | 360px fixed rail |
+| Cart Builder / Data Carts | 1000 | 280px fixed rail; narrow lists cap at 240px, cart charts keep native sizing/scrolling |
+
+The resizable panels share a 320px minimum **center grid track**, leaving 318px inside Pixel/Map's existing 1px borders. Bounds use border-box width minus computed horizontal padding/borders. Only then subtract fixed toolbar columns/gaps (52px + two 10px gaps for Pixel/Map; one 10px gap for Terrain). Outer gutters must never be counted as stage room. This fixes the formerly 298px center/296px canvas at the first desktop width.
+
+A saved width is the user's preference, not the currently clamped width. Narrowing or switching tools may temporarily limit it; widening restores it. A stored collapse is ignored while stacked: the controls are visible, are not inert, and can be reached through document scrolling. The collapsed state resumes on resize-back; Enter/toggle restores the chosen width. Reset removes that preference and returns to the current CSS default, including Studio's 1100px preset transition. Storage format and the #64 resize model are unchanged.
+
+Extra Tools' tab group wraps within its available width at small sizes instead of extending the document. Keyboard tab selection/order is unchanged. Use the [repeatable audit and manual fallback](GEOMETRY_SMOKE.md#panel-breakpoint-audit-170) and [recorded measurements/screenshots](UX_RELEASE_CHECKLIST.md#panel-breakpoint-stability-170).
 
 ## Workspace bar roles (#169)
 

@@ -58,3 +58,16 @@ t('#64 unavailable storage never throws and the layout still works for the page'
   assert.strictEqual(s.persistent(), false);
   assert.doesNotThrow(() => P.createStore(null).set('a', { w: 1 }));
 });
+
+
+t('#170 border-box gutters are excluded before reserving the 320px center track', () => {
+  const grid = { min: 200, max: 560, def: 272, reserve: 52 + 20 };
+  for (const width of [846, 886]) {
+    const content = P.contentWidth(width, { paddingLeft: '16px', paddingRight: '16px' });
+    const side = P.clamp(grid, content, 560);
+    assert.strictEqual(content - grid.reserve - side, 320);
+  }
+  assert.strictEqual(P.contentWidth(846.5, { paddingLeft: '24px', paddingRight: '24px', borderLeftWidth: '1px', borderRightWidth: '1px' }), 796.5);
+  assert.strictEqual(P.contentWidth(20, { paddingLeft: '16px', paddingRight: '16px' }), 0);
+  assert.strictEqual(P.contentWidth(500, { paddingLeft: 'auto' }), 500);
+});

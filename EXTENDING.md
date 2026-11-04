@@ -243,10 +243,12 @@ A new workspace or tool must, in the same PR: add its help topic and shortcuts (
 `js/panels-core.js` (model, persistence) and `js/panels.js` (UI), #64. Pixel Studio, Map Editor and Terrain Lab get a splitter and a hide/show button at the left edge of their side panel. The width is the CSS variable `--side-w` on the layout element (`.layout-studio`, `.layout-map`, `.tl-split`); the grid column reads `var(--side-w, <old width>)`, so the old width is the default and nothing changes without the script.
 
 - Keyboard: focus the splitter (`role="separator"`, `aria-valuenow/min/max`), ArrowLeft/ArrowRight resize (Shift = 64 px, else 16), Home/End = narrowest/widest, Enter hides/shows, `0` or double-click resets. Settings › Reset to defaults also restores all panels.
-- Bounds: at least the panel minimum and never so wide that the canvas drops below 320 px; the width is re-clamped on resize.
+- Bounds: the grid center track keeps at least 320px (318px drawable inside the existing 1px borders). Pass grid **content width**, not the outer DOMRect, to the bounds model: `P8Panels.contentWidth(rect.width, computedStyle)` removes horizontal padding/borders first. `reserve` then covers only fixed columns and column gaps (Studio/Map: 52 + 20px; Terrain: 10px). The current width is re-clamped on resize without overwriting the saved preference.
 - Persistence: `p8suite.layout` (`{ v, panels: { id: { w, c } } }`); corrupt or out-of-range values fall back per panel; blocked storage only loses persistence.
 - Narrow screens: at each layout's existing breakpoint (studio 860 px, map 900 px, terrain 1000 px) the layout stacks, splitter and toggle are hidden, a stored collapse is ignored and every control is reachable by scrolling. A hidden panel on desktop is `inert` and keeps its toggle.
 - To add a panel: add an entry to `PANELS` in `js/panels.js`, use `var(--side-w, <default>)` in its grid, and give the layout `position: relative` via `.has-splitter` (added automatically).
+
+Repeat breakpoint and saved/collapsed-state checks with [the opt-in panel audit](docs/GEOMETRY_SMOKE.md#panel-breakpoint-audit-170), including resize-back and reload. Do not replace the model with viewport-specific stored widths or change all tools to one breakpoint.
 
 ## Long-running renders: preview / final status
 
