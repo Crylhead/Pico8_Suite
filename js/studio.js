@@ -107,6 +107,7 @@
     secondary: $('#psSecondary'),
     swap: $('#psSwap'),
     name: $('#psName'),
+    docStatus: $('#psDocStatus'),
     size: $('#psSize'),
     brush: $('#psBrush'),
     brushCustom: $('#psBrushCustom'),
@@ -154,6 +155,10 @@
     frameInfo: $('#psFrameInfo'),
   };
   const ctx = dom.canvas.getContext('2d');
+
+  // saved / unsaved / saving / failed state of the open image (shared contract #58, mounted for #185). It
+  // mirrors the #80 document/revision guard: loadDoc opens, changed edits, saveToLibrary begins/resolves.
+  const status = P8DocStatus.create({ storage: () => S.assets.mode() });
 
   // ------------------------------------------------------------------ //
   // Accessors                                                          //
@@ -2423,20 +2428,23 @@
 
   function renderTitle() {
     dom.name.value = ps.name;
-    dom.size.textContent = `${ps.doc.w}×${ps.doc.h}${ps.dirty ? ' · edited' : ''}${ps.assetId ? '' : ' · not in library'}`;
+    dom.size.textContent = `${ps.doc.w}×${ps.doc.h}`; // save state is the status badge (#185)
   }
 
   let sessionTimer = 0;
   function changed() {
     ps.rev++;
     ps.dirty = true;
+    status.edit();
     renderTitle();
     clearTimeout(sessionTimer);
     sessionTimer = setTimeout(saveSession, 1200);
   }
 
   function saveSession() {
-    S.kv.set(KEYS.session, { doc: ps.doc, name: ps.name, assetId: ps.assetId, dirty: ps.dirty, primary: ps.primary, secondary: ps.secondary }).catch(S.autosaveFailed('Pixel Studio session'));
+    const tk = status.snapshot();
+    S.kv.set(KEYS.session, { doc: ps.doc, name: ps.name, assetId: ps.assetId, dirty: ps.dirty, primary: ps.primary, secondary: ps.secondary })
+      .then(() => status.session(tk, true), (e) => { status.session(tk, false); S.autosaveFailed('Pixel Studio session')(e); });
   }
 
   async function restoreSession() {
@@ -2458,6 +2466,7 @@
     ps.name = name;
     ps.assetId = assetId;
     ps.dirty = dirty;
+    status.open({ name, target: assetId ? 'library' : null, dirty }); // a restored unsaved session stays unsaved
     ps.frame = 0;
     ps.layer = d.layers.length - 1;
     ps.sel = null;
@@ -2547,14 +2556,20 @@
       a.id = old.id;
       a.created = old.created;
     }
+    const st = status.begin('library', { intent: { asNew }, name: a.name }); // same synchronous step as the snapshot
     ps.saving = a.name;
     let stored;
+    let failure = null;
     try {
-      stored = await S.assets.put(a).catch((e) => S.reportStorageError('Save to Library', e));
+      stored = await S.assets.put(a).catch((e) => { failure = e; return S.reportStorageError('Save to Library', e); });
     } finally {
       ps.saving = null;
     }
-    if (!stored) return false;
+    if (!stored) {
+      // a persistent, retryable error on the badge (ignored if another image was opened meanwhile)
+      status.reject(st, { message: failure?.message || String(failure || 'The Library did not store the image') });
+      return false;
+    }
     if (ps.docSeq !== ticket.docSeq) {
       // another image was opened meanwhile: it keeps its own id, contents and unsaved state
       toast(`Saved "${a.name}" to the library. The image open now ("${ps.name}") was not saved.`);
@@ -2562,6 +2577,7 @@
     }
     ps.assetId = stored.id;
     if (ps.rev === ticket.rev) ps.dirty = false;
+    status.resolve(st, { name: a.name }); // marks only the revision that was written
     renderTitle();
     saveSession();
     toast(ps.dirty
@@ -3359,6 +3375,7 @@
   });
 
   bind();
+  P8DocStatus.mount(dom.docStatus, status, { onRetry: (intent) => saveToLibrary(intent || {}), title: 'Image save status' });
   setTool('pencil');
   setTimeline(ps.timeline);
   renderOptions();

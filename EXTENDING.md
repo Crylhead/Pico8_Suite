@@ -120,7 +120,7 @@ Use `.help-optional` / `.help-detailed` only for purely explanatory text. Never 
 
 ### Document save status
 
-`js/doc-status-core.js` (`P8DocStatus`) is the shared save/operation state contract (#58). It tracks one open document and shows a badge with an icon and text for each state: not saved, unsaved, saving, saved (Library/file/project), downloaded copy, memory-only, failed, conflict. Use it instead of a plain `dirty` flag. The Map Editor (`js/map.js`) is the reference adapter.
+`js/doc-status-core.js` (`P8DocStatus`) is the shared save/operation state contract (#58). It tracks one open document and shows a badge with an icon and text for each state: not saved, unsaved, saving, saved (Library/file/project), downloaded copy, memory-only, failed, conflict. Use it instead of a plain `dirty` flag. The Map Editor (`js/map.js`) is the reference adapter; Pixel Studio (`js/studio.js`) uses it too, mirroring its #80 document/revision guard (`loadDoc` opens, `changed` edits, `saveToLibrary` begins and resolves or rejects).
 
 ```js
 const status = P8DocStatus.create({ storage: () => S.assets.mode() });
