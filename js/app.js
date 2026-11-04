@@ -126,6 +126,7 @@
     rampStatus: $('#rampStatus'),
     paletteHint: $('#paletteHint'),
     gradientCanvas: $('#gradientCanvas'),
+    gradientEmpty: $('#gradientEmpty'),
     imageCanvas: $('#imageCanvas'),
     imageFrame: $('#imageFrame'),
     imageEmpty: $('#imageEmpty'),
@@ -358,6 +359,7 @@
   }
 
   function drawGradient() {
+    dom.gradientEmpty.hidden = !!state.fade; // #187: empty only until a fade exists
     if (!state.fade) return;
     const img = renderFade(fullPaletteRgb(activePalette()), state.fade, state.orientation);
     const c = dom.gradientCanvas;

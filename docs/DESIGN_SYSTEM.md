@@ -32,6 +32,7 @@ Adopt tokens and primitives incrementally when you touch a surface. Do not re-sk
 | Status line | `p.status-line` with optional `data-tone="ok" \| "warn" \| "error"` | — | — | — | — | — | tone adds the status colour **and** a ✓/⚠ symbol (hidden from screen readers), so it is never colour-only |
 | Notice | `p.notice` with optional `data-tone="warn" \| "error"` | — | — | — | — | — | coloured left edge + tint; put the meaning in the text |
 | Progress | `progress.progress` (with an accessible name) | — | — | — | determinate or indeterminate | — | — |
+| Empty preview | `p.preview-empty` inside the preview frame (frame `position: relative`, or wrap the canvas in `.preview-host`) | — | — | — | — | — | — |
 
 Rules:
 
@@ -153,6 +154,10 @@ Normalize the outer frame, not the pixel data. Reuse the shared spacing/radius t
 Tile Maker uses shared caption and frame rows (CSS subgrid): long captions reserve the same space above compared views. Above 1100px the 256px sheet column shares the comparison frame's top/bottom edges; size containment keeps its bitmap from dictating that row's height. At 641–1100px the comparison pair stays together and the sheet moves to a separate 256px square frame. At 640px and below the views stack. Only the sheet's outer frame changes size; canvas bitmap dimensions and tile packing do not.
 
 Palette cards share caption, image, action and settings rows. Preview images remain square; the settings row takes the height needed by either card, so extra greyscale controls do not shift the image edges. Actions wrap at their normal control height. On phones the cards stack and may have different heights according to their own settings; matching heights across separate rows would add empty space. The two `.preview-settings` wrappers group existing controls without changing their IDs or event ownership.
+
+### Empty previews (#187)
+
+A preview that has nothing to show yet uses `p.preview-empty` inside its own frame, so the frame keeps its loaded size. It is a dark neutral checker (`#15151a` / `#1c1c22`, the same as the Tile Maker drop area) in every theme, with centered `--fs-md` text in `#c9c9d3`. That text measures **10.32:1** on the lighter checker square and **11.07:1** on the darker one. The text says what fills the preview, and it is a real text node, so screen readers read it. `pointer-events: none` passes drag and drop, panning and clicks through to the frame. Set `hidden` as soon as the preview has content. An empty state is about missing *input*, not dark content: an all-black image or data range is content and shows no overlay. Current uses: Tile Maker *Reconstructed* (no result yet), Palette *Gradient preview* (no fade generated) and the Data Carts memory map and viewer (no cart, or no bytes selected).
 
 ### Artwork surround (#198)
 
