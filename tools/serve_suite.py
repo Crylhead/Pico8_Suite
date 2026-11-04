@@ -26,27 +26,22 @@ class SuiteServer(http.server.ThreadingHTTPServer):
         super().server_bind()
 
 
-def asset_problems(root, lock):
-    records = {'vendor/shrinko8/runtime/engine.zip': {'sha256': lock['shrinko8']['bundleSha256']}}
-    for name, record in lock['pyodide']['files'].items():
-        if '/' in name or '\\' in name or name in ('.', '..'):
-            raise ValueError('Invalid runtime asset name')
-        records['vendor/pyodide/runtime/' + name] = record
-    problems = []
-    for name, record in records.items():
-        try:
-            data = (root / name).read_bytes()
-            if hashlib.sha256(data).hexdigest() != record['sha256'] or ('bytes' in record and len(data) != record['bytes']):
-                problems.append(name)
-        except OSError:
-            problems.append(name)
-    return problems
+asset_problems = package.asset_problems  # shared with tools/package_minifier.py
+
+
+def write_file_mode(root):
+    """Also prepare index.html for direct (file://) use (#162); the HTTP server never depends on it."""
+    try:
+        package.write_file_mode(root)
+    except (KeyError, OSError, ValueError) as error:
+        print(f'Note: direct index.html use was not prepared ({error}). The local server still works.', flush=True)
 
 
 def ensure_assets(root, shrinko_archive=None, pyodide_archive=None):
     lock = json.loads((root / 'vendor/minifier-lock.json').read_text(encoding='utf-8'))
     if not asset_problems(root, lock):
         print('Pinned Minifier assets verified; no download needed.', flush=True)
+        write_file_mode(root)
         return
     print('Preparing pinned Minifier assets. First setup needs Internet, or the two local archive options. No user source is uploaded.', flush=True)
     assets = package.prepare(lock, package.archive_bytes(lock['shrinko8'], shrinko_archive),
@@ -54,6 +49,7 @@ def ensure_assets(root, shrinko_archive=None, pyodide_archive=None):
     package.install(assets, root)
     if asset_problems(root, lock):
         raise ValueError('Installed Minifier assets failed verification')
+    write_file_mode(root)
     print('Minifier assets installed and verified.', flush=True)
 
 

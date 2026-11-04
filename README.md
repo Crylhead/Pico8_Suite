@@ -29,17 +29,17 @@ Browser-based PICO-8 graphics suite, developed in this standalone repository. It
 
 ## Run locally
 
-The basic tools have no build step or package installation and can open directly from `index.html`. **Minifier requires HTTP(S) and packaged Shrinko8/Pyodide assets.**
-
-**On Windows, double-click [Start_Pico8_Suite.bat](Start_Pico8_Suite.bat)** (Python 3.9+). On any supported platform you can run:
+There is no build step or package installation: **open `index.html` directly** (Chrome or Edge). Every tool works that way. The Minifier needs its pinned Shrinko8/Pyodide engine prepared once in the Suite folder (Python 3.9+):
 
 ```sh
-python tools/serve_suite.py
+python tools/package_minifier.py
 ```
 
-This optional local launcher verifies the runtime files, prepares missing/outdated pinned assets, starts a static server on `127.0.0.1:8000` and opens Minifier. Keep its window open; Ctrl+C stops it. First setup needs Internet or the two pinned local archives; valid installed assets are reused offline. It does not start PICO-8 or its Run bridge. Browser-hosted copies need no Python service.
+The first run downloads and verifies the pinned engine (or uses the two pinned local archives, see below); later runs reuse the verified files offline. It also writes `vendor/pyodide/runtime/file-assets.js` (about 18 MB, Git-ignored), which lets a directly opened `index.html` run the engine without any server. After that, just open `index.html`. Firefox and Safari are not tested for direct opening; use the launcher below there.
 
-**Browser Library/session data is separate for file:// and localhost.** Export a Library backup from the old address and import it at the new one; it does not move automatically. Keep using the same host and port. A busy port stops startup without opening another service or choosing a new origin. You can explicitly choose a stable alternative with `python tools/serve_suite.py --port 8001`; `--no-browser` prints the URL only. Offline setup accepts `--shrinko-archive /path/shrinko8-pinned.tar.gz --pyodide-archive /path/pyodide-314.0.7.tgz` ([pins/setup](docs/MINIFIER_ENGINE.md)).
+**Optional launcher:** on Windows double-click [Start_Pico8_Suite.bat](Start_Pico8_Suite.bat), or run `python tools/serve_suite.py` on any platform. This optional local launcher verifies the runtime files, prepares missing/outdated pinned assets, starts a static server on `127.0.0.1:8000` and opens Minifier. Keep its window open; Ctrl+C stops it. First setup needs Internet or the two pinned local archives; valid installed assets are reused offline. It does not start PICO-8 or its Run bridge. Browser-hosted copies need no Python service.
+
+**Browser Library/session data is separate for a directly opened index.html (file://) and localhost.** Export a Library backup from the old address and import it at the new one; it does not move automatically. Keep using the same host and port. A busy port stops startup without opening another service or choosing a new origin. You can explicitly choose a stable alternative with `python tools/serve_suite.py --port 8001`; `--no-browser` prints the URL only. Offline setup accepts `--shrinko-archive /path/shrinko8-pinned.tar.gz --pyodide-archive /path/pyodide-314.0.7.tgz` ([pins/setup](docs/MINIFIER_ENGINE.md)).
 
 For basic tools, or when runtime assets are already packaged, you can still serve the repository root manually:
 
