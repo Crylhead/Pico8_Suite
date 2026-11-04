@@ -384,7 +384,8 @@
       ctx.setLineDash([]);
     }
 
-    ctx.strokeStyle = 'rgba(160,160,175,0.6)';
+    // Half-pixel rasterization still leaves a 3:1 outline on the dark surround.
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
     ctx.lineWidth = line;
     ctx.strokeRect(ox - line, oy - line, W + 2 * line, H + 2 * line);
 
