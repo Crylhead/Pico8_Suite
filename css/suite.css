@@ -967,9 +967,10 @@ body[data-workspace="extras"] { height: 100vh; height: 100dvh; display: flex; fl
 }
 
 /* ------------------------------------------------------------------ */
-/* Data Carts                                                         */
+/* Data Carts / Cart Builder: shared viewport and responsive scrolling */
 /* ------------------------------------------------------------------ */
 
+body[data-workspace="cartbuilder"],
 body[data-workspace="datacarts"] { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 .layout-dc { flex: 1 1 auto; min-height: 0; display: grid; gap: 10px; padding: 10px; grid-template-columns: 280px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "top top" "side main"; }
 .layout-dc .card { padding: 10px; }
@@ -1012,9 +1013,10 @@ body[data-workspace="datacarts"] { height: 100vh; height: 100dvh; display: flex;
 .dc-pack-btns { display: flex; gap: 4px; }
 
 @media (max-width: 1000px) {
+  body[data-workspace="cartbuilder"],
   body[data-workspace="datacarts"] { height: auto; display: block; overflow: visible; }
   .layout-dc { grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "side" "main"; padding: 8px 16px; }
-  .dc-list { max-height: 240px; }
+  .dc-list, .cb-parts { max-height: 240px; }
   .dc-grid { grid-template-columns: minmax(0, 1fr); }
   .dc-pack-row { grid-template-columns: minmax(0, 1fr) auto; }
 }

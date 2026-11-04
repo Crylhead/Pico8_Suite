@@ -40,6 +40,17 @@ Rules:
 - Announcements: dialogs and toasts are covered by the shell (`App.modal`, `App.toast`); a `.status-line` that is the only report of a one-off result may use `role="status"`, but do not put live regions on text that updates during drags or sliders.
 - Document-save state uses `P8DocStatus` and `.doc-status` (see [EXTENDING.md](../EXTENDING.md#document-save-status)), not ad-hoc status lines.
 
+## Data-cart workspace sizing (#167)
+
+Cart Builder and Data Carts share `.layout-dc` and the same body sizing rules in `css/suite.css`:
+
+| Width | Body / grid | Scroll ownership |
+| --- | --- | --- |
+| Above 1000 CSS px | Viewport-height column; the grid fills the remainder below the app chrome, with `min-height: 0` | Parts/cart list and main visualization/report scroll within their own panes; the page stays fixed |
+| At or below 1000 CSS px | Document-height body; top controls, side list and main area stack | The document scrolls; both lists cap at 240px with their own scrolling, keeping the main area reachable |
+
+Capacity charts keep their fixed 430px height and horizontal scrolling for multiple carts. Do not stretch chart data or change packing to fit the viewport. Command rows can wrap as their controls require; this contract does not force identical command content or row counts. Keep the shared Cart Builder/Data Carts body selectors together when changing their breakpoint behavior. See the [browser regression checklist](UX_RELEASE_CHECKLIST.md#cart-builder-viewport-167).
+
 ## Adoption
 
 | Surface | Status |

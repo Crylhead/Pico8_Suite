@@ -101,6 +101,37 @@ On disposable images sized 64×64, 128×128 (including the default sheet), 256×
 4. Paint, toggle a layer, change frames and play animation. Verify the preview follows the current composite, retains transparency background behavior and stays sharp at 1×/2×. Changing preview scale must not change main-canvas zoom or document pixels.
 5. Focus the scale group with optional help enabled, search F1 for Preview scale and replay the Pixel Studio tour; all must describe the same Fit/1×/2× behavior.
 
+## Cart Builder viewport (#167)
+
+At 360/768/1280/1920 CSS px, compare Cart Builder → Data Carts → Code Editor → Cart Builder in one window. Above 1000px, Cart Builder fills the viewport below the same header; at/below 1000px it deliberately uses document scrolling. With many parts and report rows, scroll Parts and the main report independently on desktop, reach the final action by keyboard, and check that the horizontal cart row keeps 430px charts. In narrow mode, Parts caps at 240px and document scrolling reaches the main report. Repeat in light/dark, a short viewport and a 640 CSS px reflow viewport (equivalent layout width to 200% zoom of 1280px).
+
+Quick browser-console regression assertions after each switch/resize:
+
+```js
+P8App.setWorkspace('cartbuilder');
+await new Promise(requestAnimationFrame);
+const body = getComputedStyle(document.body);
+const main = document.querySelector('main[data-ws="cartbuilder"]');
+console.assert(document.documentElement.scrollWidth <= innerWidth + 1, 'Unexpected page overflow');
+if (innerWidth > 1000) {
+  console.assert(body.display === 'flex' && body.overflowY === 'hidden', 'Desktop scroll owner');
+  console.assert(Math.abs(main.getBoundingClientRect().bottom - innerHeight) <= 1, 'Grid must fill viewport');
+} else {
+  console.assert(body.display === 'block' && body.overflowY === 'visible', 'Document scroll owner');
+}
+```
+
+Recorded 2026-11-04, Chromium 153.0.8010.0 on Linux/headless, base `62cdbdd` plus the fix. Empty workspace measurements at 800px viewport height:
+
+| Width | Cart Builder height before → after | Result |
+| --- | --- | --- |
+| 360 | 711.11 → 711.11px | Document scrolling retained |
+| 768 | 446.36 → 446.36px | Document scrolling retained |
+| 1280 | 228.92 → 721.16px | Now matches Data Carts / Code viewport fill |
+| 1920 | 228.92 → 721.16px | Now matches Data Carts / Code viewport fill |
+
+Four empty cases and ten populated light/dark cases passed DOMRect/scroll assertions, plus a 1280×420 short-viewport check. At fixed widths, repeated switches kept header height/width and content top within 1px. Parts and main scroll positions were independent; last report actions remained focus-reachable; charts stayed 430px high; no page horizontal overflow or browser errors occurred. Populated cases used passive layout fixtures with the real classes (60 parts, 16 charts, 45 report rows), not project writes or packing verification. Screenshots were compared before/after. Physical browser zoom, native Windows scrollbars and other engines remain untested; the 640px case verifies equivalent CSS reflow width.
+
 ## Handoff
 
 State exactly which automated checks ran and which human rows were covered; list gaps once (for example "no PICO-8 available", "touch not tested").
