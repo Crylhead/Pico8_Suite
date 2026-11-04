@@ -227,3 +227,25 @@ The complete #171 matrix checks all built-ins and all four Extra Tools tabs in l
 Focused checks cover 40 cases at 360/768/1280 and short 640px widths, auditing visible bar buttons/inputs/selects against clipping ancestors (424 control instances, no clipped controls). Internal scrollable rows/regions are permitted. Studio/Map/Terrain status readouts keep the same height under short/long coordinate fixtures (12 cases). Tab reaches the last drawing option and scrolls it into view; Tiled/Fit and Data Carts Pack remain operable. Long feedback keeps all four expanded command regions at the same height and Page Down scrolls their contents; Terrain coordinates and render details are named readout regions. The repeat-visit sweep exposed a 98px → 70px Terrain command-row collapse at 360px while Queued/Preview became Final; the render-feedback/Retry slot now reserves its width rather than changing row allocation. Before/after screenshots and measured rows are used for comparison.
 
 To repeat manually, include long project/filename/status text and selected tools with extra options. At 360/768px and physical 200% zoom, Tab through both Studio option rows and all footer groups; reach Minifier Help/source actions and the final project action by scrolling the named command region. Move over Studio/Map/Terrain canvases: readouts must update without reallocating their rows. Check coordinate text, view controls, code token/character meters and all source actions remain reachable. Reset window size and verify the normal one-line minima and documented expanded regions.
+
+## Panel breakpoint stability (#170)
+
+Recorded 2026-11-04 with Chromium 153.0.8010.0 on Linux/headless, base `42f6b34` plus the fix. At the first desktop width, End/maximize previously counted outer gutters as stage room. The shared bounds model now receives content width (computed padding/borders removed), with only the toolbar/gaps in its reserve:
+
+| Tool / CSS viewport | Layout border-box | Max side width before → after | Center track before → after | Drawable canvas before → after |
+| --- | --- | --- | --- | --- |
+| Studio / 861px | 846px | 444 → 422px | 298 → 320px | 296 → 318px |
+| Map / 901px | 886px | 484 → 462px | 298 → 320px | 296 → 318px |
+
+The 15px difference between viewport and layout is the reserved root scrollbar rail. At 320px, Extra Tools also overflowed horizontally: document scroll width 336px with 305px available document width. Wrapping the tab group brings scroll width back to 305px; selection order/keyboard handlers are unchanged. Home/ArrowRight traversed LUT, Wave, Line and Terrain at 320px without page overflow.
+
+| Captured surface | Before | After |
+| --- | --- | --- |
+| Studio max side panel at 861px | ![Studio before](images/panels170-studio-before.png) | ![Studio after](images/panels170-studio-after.png) |
+| Extra Tools at 320px | ![Tabs before](images/panels170-tabs-before.png) | ![Tabs after](images/panels170-tabs-after.png) |
+
+The [opt-in panel audit](GEOMETRY_SMOKE.md#panel-breakpoint-audit-170) passed **832 cases**, six collapse/reload/resize transitions and eight default-preset checks. Both themes cover 320/360/768/1280 and minus/at/plus 1 around 640/699/860/900/1000/1100/1200px, plus 640×450 CSS px/device scale 2. Repeated tool visits preserve side widths and saved preferences; six-frame samples show no resize oscillation. Desktop page/pane ownership and horizontal overflow assertions pass; stacked controls remain visible and not inert even with a remembered collapse. Reload/resize-back restores collapse and chosen width; keyboard reset and the Settings reset API restore CSS defaults.
+
+All 208 primary Studio/Map canvas samples match bitmap/display scale ratios within rounding (maximum x/y scale difference 0.0004); loaded image/Lua/Minifier input stays unchanged during viewport/tool switching. A separate real-pointer check resized Studio, Map and Terrain (560→494, 560→494, 640→574px), preserved the minimum center and did not draw into the canvas. The core gutter/border calculation has a regression test. All 347 regression tests and syntax/static checks passed (477 IDs/52 references).
+
+The automated 640px case is a reflow/pixel-density equivalent of a 1280×900 window at 200%, not physical browser zoom. Native Windows/macOS, touch and physical zoom were not exercised. Internal scrollable lists/command regions and native cart-chart scrolling remain deliberate; this fix does not force all tools into one breakpoint or replace the #64 persistence model.

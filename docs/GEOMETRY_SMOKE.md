@@ -49,7 +49,7 @@ Every case measures actual DOMRects for header, brand, tab strip, Find, Library,
 | Header/nav movement | Fail >0.5 CSS px changes in x/y/width/height at the same scenario/theme across tools, project states or page scroll. Content must start at the header bottom. Compact hidden tabs are allowed at ≤640px; other primary controls need positive area. |
 | Page overflow | Fail horizontal document overflow >1px. Internal scrollable pixel stages, tab strips and cart rows are permitted. |
 | Command/status/header roles | Require visible role rectangles; fail height changes >0.5px on the return visit in the same context. Different tools may have different row counts/heights (Studio has two options rows). Sizes follow the [shared bar contract](DESIGN_SYSTEM.md#workspace-bar-roles-169), including explicit expanded regions. |
-| Stages / canvases | Record geometry and visible area; specialized pan/zoom, aspect and internal scroll remain tool-owned. A baseline comparison flags rectangle changes for review; it does not compare animated pixel content. The broader breakpoint/panel-state audit remains #170. |
+| Stages / canvases | Record geometry and visible area; specialized pan/zoom, aspect and internal scroll remain tool-owned. A baseline comparison flags rectangle changes for review; it does not compare animated pixel content. The [panel breakpoint audit](#panel-breakpoint-audit-170) exercises saved/collapsed states separately. |
 | Saved baseline | `--baseline` compares every matching scenario/theme/project/tool/subtool/visit. Changed chrome, row, stage or canvas rectangles, or missing/extra cases, fail. |
 
 The default checks catch current-contract violations and within-run jitter. The saved baseline additionally catches a consistent change across revisions (for example every toolbar growing by 4px). Baselines are environment-specific, not universal golden screenshots. Review intentional changes against their issue and design contract, then capture a new accepted baseline; do not silently widen tolerance or bless a failed run. The normal regression harness also checks the validator with deliberately moved navigation, changed bars/canvases, overflow and missing coverage.
@@ -66,3 +66,18 @@ Repeat at **physical 200% browser zoom**, including a short window. Record the a
 ## Recorded validation
 
 2026-11-04, Chromium 153.0.8010.0 on Linux/headless, application base `eee00e4`: the 600-case capture and a second 600-case run against that saved baseline both passed with zero differences, page errors or fixture mutations. All 30 light/dark screenshots were captured; representative Home/Studio/Terrain views were inspected. A real-page CSS injection moving Find by 12px and another increasing Studio command-row height were both detected. The normal harness passed 346 tests, including three validator/baseline regressions; missing-module and baseline-overwrite error paths also passed. Physical browser zoom and native Windows/macOS were not exercised.
+
+
+## Panel breakpoint audit (#170)
+
+With the same existing `P8_GEOMETRY_*` browser configuration, run:
+
+```sh
+node tests/panel-breakpoints.mjs --out ../panel-geometry
+```
+
+This reuses the geometry server, loaded Code/Studio/Minifier fixtures and measurement routine; no new dependency is required. It writes `panels.json` plus screenshots at representative desktop boundaries. Default coverage: **832 cases** (eight tools, 25 widths, two themes and two return visits, plus the 640×450/device-scale-2 case), six collapsed/reload/resize-back transitions and eight default-preset assertions. The tools are Studio, Map, Terrain, Code, Minifier, Audit, Cart Builder and Data Carts. Widths include 320/360/768/1280 and minus/at/plus 1 around 640/699/860/900/1000/1100/1200px.
+
+Actual side/center rectangles are sampled over six frames to detect resize feedback. Checks cover the 320px desktop center track, unchanged stored preference under viewport clamps, return-visit widths, expected page/pane scrolling and horizontal overflow. Loaded documents must remain unchanged before deliberate reloads. Primary Studio/Map bitmap/display scale ratios must match within 0.01 (fractional pixel rounding). The real separators exercise collapse, stacked visibility/inert state, reload persistence, resize-back, keyboard reset and `resetAll`; CSS defaults are checked at Studio 1100/1101 and Minifier 1199/1200. The normal regression harness separately tests content-width/bounds arithmetic and storage failure cases.
+
+Manual fallback: repeat those adjacent widths in one disposable window, drag/keyboard-resize each available splitter, hide the panel, narrow until it stacks, reload and widen again. The controls must stay available while stacked and the chosen width/collapse must return on desktop. Reset on both sides of the breakpoint; narrow and widen after reset to check the CSS defaults. Scroll the page and individual panes to the final action, checking that a desktop editor does not gain a second page scroller. At 320px visit each Extra Tool and select the wrapped tabs by keyboard. Inspect a loaded square image/map through the resize and record rectangles/screenshots. Repeat at physical 200% browser zoom when available; the automated case only emulates reflow/pixel density. Use the [recorded comparison](UX_RELEASE_CHECKLIST.md#panel-breakpoint-stability-170) as a reference, not a platform-independent golden image.

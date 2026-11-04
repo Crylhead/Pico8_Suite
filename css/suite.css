@@ -884,6 +884,7 @@ body[data-workspace="extras"] { height: 100vh; height: 100dvh; display: flex; fl
 .layout-extras { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 10px; }
 .layout-extras .card { padding: 10px; }
 .ex-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.ex-head > .seg { max-width: 100%; flex-wrap: wrap; }
 .ex-head p { margin: 0; font-size: 13px; }
 .ex-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .ex-body > [hidden] { display: none !important; }
