@@ -116,7 +116,7 @@ const P8HelpData = (() => {
         { id: 'map.p8', name: '.p8 import / write', text: 'New .p8 Cart writes map, sprites and a viewer; Write into Existing .p8 replaces only the map (and optionally sprites).' },
         { id: 'map.save-status', name: 'Save status', text: 'The badge beside the map name shows Not saved, Unsaved changes, Saving…, Saved to Library, Downloaded copy, memory-only, failed or conflict.' },
       ],
-      controls: [{ id: 'map.status', label: 'Save status badge', text: 'Click it for details. "Saved" appears only after the browser confirmed the write.' }],
+      controls: [{ id: 'map.status', label: 'Save status badge', text: 'Click it for details. "Saved" appears only after the browser confirmed the write.' }, { id: 'map.save', label: 'Save', text: 'Saves the map to the Library: the same save as File › Save to Library, the Map panel button and Ctrl+S. One save runs at a time; the badge beside it shows the result.' }],
       shortcuts: [['Ctrl+Shift+S', 'Save as new Library map'], ['B / U / G / I / M / H', 'Draw / rectangle / fill / pick / select / pan'], ['[ ]', 'Previous / next tile'], ['0', 'Fit'], ['Ctrl+C / Ctrl+X', 'Copy / cut cells as brush']],
       restrictions: ['Other sizes are exported as bytes only.'],
       related: ['tiles', 'studio', 'cartbuilder', 'library'], keywords: ['level', 'tilemap', 'cells', 'mget', 'mset'], legacy: 'doc-map',

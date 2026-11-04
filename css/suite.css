@@ -417,6 +417,8 @@ canvas.thumb {
 }
 .ps-name:hover { border-color: var(--border); }
 .ps-name:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+/* #201: the Map Editor top bar also holds Save; a narrower name keeps it on one row down to 1366px (the field scrolls) */
+#meName { width: 110px; }
 .ps-code { color: var(--muted); font-size: 12px; }
 
 .ps-stage {
