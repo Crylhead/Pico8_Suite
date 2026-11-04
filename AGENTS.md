@@ -81,6 +81,7 @@ Do not execute every `tests/*.test.js` directly and assume tests ran: these file
 - Saving, recovery, destructive rewriting, storage and concurrency changes require relevant failure/cancellation/interruption tests. These are necessary correctness checks, not optional overhead. Use deterministic, bounded schedules; test recovery retries when changing recovery.
 - Use fake filesystem/storage/process runners or disposable folders. Never inject failures into a real demo or launch a real PICO-8 process for bridge unit tests.
 - Do not add automated tests for a prose-only change or a trivial visual adjustment already verified by inspection. Do not add benchmarks or unrelated runtime/platform tests to a small fix.
+- For shared chrome/workspace geometry changes, use [the opt-in geometry smoke or its manual matrix](docs/GEOMETRY_SMOKE.md) when available. Reuse the configured browser; do not install one for unrelated work. Report saved-baseline differences and distinguish emulated reflow from physical 200% zoom.
 - Use browser/PICO-8 verification when the behavior needs it and the runtime is available. If unavailable, state the gap once; do not silently replace runtime evidence with a round trip through the same implementation.
 - If a check fails, investigate once and classify it as introduced, pre-existing or environment-blocked with evidence. Do not keep rerunning an unchanged command hoping for a different result, or disable a test to obtain green status.
 
