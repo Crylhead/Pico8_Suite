@@ -358,7 +358,7 @@
     <div class="menubar-end">
       <span id="projectIndicator" class="project-indicator" role="status" aria-live="polite" hidden></span>
       <span id="loadedPreset" class="loaded-preset" hidden></span>
-      <button id="toggleIndices" class="btn btn-ghost btn-sm" aria-pressed="true" data-show="studio palette tiles">Hide indices</button>
+      <button id="toggleIndices" class="btn btn-ghost btn-sm btn-check" aria-pressed="true" data-show="studio palette tiles" title="Show palette slot numbers (shared by Pixel Studio, Palette &amp; Fades and Tile Maker)">Indices</button>
     </div>
     </div>
   </header>
@@ -391,7 +391,7 @@
             <button role="radio" data-value="normal" aria-checked="true">Normal</button>
             <button role="radio" data-value="ramp" aria-checked="false">Ramp</button>
           </div>
-          <span id="rampStatus" class="badge" hidden>Ramp: New</span>
+          <span id="rampStatus" class="badge badge-info" hidden>Ramp: New</span>
           <button class="btn btn-sm" data-action="palette-from-library" title="Load a palette from the library">From Library…</button>
           <button class="btn btn-sm" data-action="palette-to-library" title="Save the custom palette to the library (Pixel Studio, Tile Maker and the Map Editor can use it)">Save to Library…</button>
         </div>
@@ -553,7 +553,7 @@
           <button class="btn" id="tmZoom1">1:1</button>
           <button class="btn" id="tmZoomIn" aria-label="Zoom in">+</button>
         </div>
-        <span class="badge" id="tmZoomLabel">100%</span>
+        <span class="badge badge-info" id="tmZoomLabel">100%</span>
       </header>
 
       <div class="tm-grid">
@@ -703,7 +703,7 @@
       <header class="ps-options command-row">
         <input class="ps-name" id="meName" value="map" spellcheck="false" aria-label="Map name">
         <span id="meDocStatus"></span>
-        <span class="badge" id="meFit" title="Where this map fits in a PICO-8 cart"></span>
+        <span class="badge badge-info" id="meFit" title="Where this map fits in a PICO-8 cart"></span>
         <button class="btn btn-sm" data-action="map-resize" data-help-id="map.sizes">Size…</button>
         <span class="ps-sep"></span>
         <label class="check" title="Cell grid (8×8 pixels)"><input type="checkbox" id="meGrid" checked><span>Grid</span></label>
@@ -716,7 +716,7 @@
           <button class="btn btn-sm" id="meZoom1" title="1:1 (1)">1:1</button>
           <button class="btn btn-sm" id="meZoomIn" aria-label="Zoom in">+</button>
         </div>
-        <span class="badge" id="meZoomLabel">100%</span>
+        <span class="badge badge-info" id="meZoomLabel">100%</span>
       </header>
       <div class="ps-stage" id="meStage">
         <canvas id="meCanvas" tabindex="0" aria-label="Map"></canvas>
@@ -861,7 +861,7 @@
         <input type="text" id="psName" class="ps-name" spellcheck="false" aria-label="Image name">
         <span id="psDocStatus"></span>
         <button class="btn btn-sm" id="psSave" data-action="ps-save" data-help-id="studio.save" title="Save the image to the Library (Ctrl+S)">Save</button>
-        <span class="badge" id="psSize" title="Image size in pixels">128×128</span>
+        <span class="badge badge-info" id="psSize" title="Image size in pixels">128×128</span>
         <span class="ps-sep"></span>
         <div id="psBrushWrap" class="ps-opt">
           <span class="label">Brush</span>
@@ -935,7 +935,7 @@
           <button class="btn btn-sm" id="psZoom1" title="100% (1)">1:1</button>
           <button class="btn btn-sm" id="psZoomIn" aria-label="Zoom in">+</button>
         </div>
-        <span class="badge" id="psZoomLabel">400%</span>
+        <span class="badge badge-info" id="psZoomLabel">400%</span>
       </footer>
     </section>
 
@@ -981,7 +981,7 @@
         <button class="btn btn-sm" id="psPlay" aria-pressed="false" title="Play / pause (Enter)">▶ Play</button>
         <label class="field"><span>FPS</span><input type="number" id="psFps" min="1" max="60" value="8" inputmode="numeric"></label>
         <button class="btn btn-sm" id="psOnion" aria-pressed="false" title="Onion skin: show previous and next frame">Onion</button>
-        <span class="badge" id="psFrameInfo">1 / 1</span>
+        <span class="badge badge-info" id="psFrameInfo">1 / 1</span>
         <span class="ps-sep"></span>
         <button class="btn btn-sm" id="psFrameAdd" title="New empty frame">＋ Frame</button>
         <button class="btn btn-sm" id="psFrameDup" title="Duplicate frame">⧉</button>

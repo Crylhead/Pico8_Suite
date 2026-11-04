@@ -280,7 +280,7 @@
     dom.loadedPreset.textContent = state.presetName ? `Loaded: ${state.presetName}` : '';
     dom.loadedPreset.title = dom.loadedPreset.textContent;
 
-    dom.toggleIndices.textContent = state.showIndices ? 'Hide indices' : 'Show indices';
+    // #197: a state toggle with a fixed label; aria-pressed (and the check box) say whether indices are shown
     dom.toggleIndices.setAttribute('aria-pressed', String(state.showIndices));
 
     dom.reassignItem.disabled = !state.grey;

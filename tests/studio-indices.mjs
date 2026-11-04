@@ -13,7 +13,7 @@ try {
  const original=await documentData();
  const button=page.locator('#toggleIndices');
  const check=async shown=>{
-   assert.equal(await button.textContent(),shown?'Hide indices':'Show indices');
+   assert.equal(await button.textContent(),'Indices'); // #197: fixed label; the state is aria-pressed
    assert.equal(await button.getAttribute('aria-pressed'),String(shown));
    const rows=await page.locator('#psPalette .ps-sw').evaluateAll(nodes=>nodes.map(n=>({slot:n.dataset.slot,name:n.getAttribute('aria-label'),hidden:n.querySelector('.ps-sw-n').hidden,color:n.style.background})));
    assert.equal(rows.length,16);

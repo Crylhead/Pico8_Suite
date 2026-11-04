@@ -311,6 +311,9 @@ kbd {
   padding: 3px 10px;
   white-space: nowrap;
 }
+/* #197: read-only information is neutral. Accent means primary action, focus or selected; never read-only.
+   --muted on --surface-3: 5.11:1 (dark), 5.08:1 (light). */
+.badge-info { color: var(--muted); background: var(--surface-3); border: 0; }
 .hint { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
 
 /* Shared primitives and states (docs/DESIGN_SYSTEM.md). Existing .btn/.seg/.field/.select keep
@@ -748,6 +751,9 @@ dialog.modal::backdrop { background: rgba(5, 5, 10, 0.6); }
 }
 .btn.pending { border-color: var(--warn); box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn) 35%, transparent); }
 .btn:disabled { opacity: var(--disabled-opacity); cursor: default; transform: none; border-color: var(--border-strong); }
+/* #197: a disabled primary is unfilled with a dashed edge and muted text (not faded blue), so it never reads as
+   an enabled (filled, solid-edged) secondary. --muted on the card: 6.31:1 dark, 6.06:1 light. */
+.btn-primary:disabled { background: transparent; border-style: dashed; border-color: var(--border-strong); color: var(--muted); opacity: 1; filter: none; }
 .tm-notice {
   margin: 12px 0 0;
   padding: 8px 12px;
@@ -876,6 +882,9 @@ dialog.modal::backdrop { background: rgba(5, 5, 10, 0.6); }
 .te-brushes .sw { width: 28px; border-radius: 4px; cursor: pointer; }
 .te-brushes .sw.selected { box-shadow: inset 0 0 0 2px var(--ring), inset 0 0 0 4px rgba(0, 0, 0, 0.5); }
 .btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+/* #197: checkbox-style state toggle: a fixed label, the box shows the state (aria-pressed) */
+.btn-check::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; border: 1.5px solid currentColor; border-radius: 2px; box-sizing: border-box; }
+.btn-check[aria-pressed="true"]::before { background: currentColor; box-shadow: inset 0 0 0 2px var(--surface); }
 
 @media (max-width: 1100px) {
   .tm-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
