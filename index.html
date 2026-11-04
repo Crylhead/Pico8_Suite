@@ -731,6 +731,7 @@
         <header class="ps-panel-head"><h2>Tileset <span class="muted" id="meSheetName"></span></h2></header>
         <canvas id="meSheet" class="me-sheet" width="256" height="256" tabindex="0" aria-label="Sprite sheet: click a tile, drag a block"></canvas>
         <p class="hint me-sheet-info" id="meSheetInfo">Click a tile, drag to take a block of tiles.</p>
+        <p class="notice me-sheet-empty" id="meSheetEmpty" hidden>This tileset is empty. Load one to paint with real tiles.</p>
         <div class="ps-panel-actions">
           <button class="btn btn-sm" data-action="map-sheet-library" title="A 128-pixel-wide image from the library (sprite sheet)">From Library…</button>
           <button class="btn btn-sm" data-action="map-sheet-p8" title="The __gfx__ of a .p8 cart">From .p8…</button>
@@ -1518,6 +1519,7 @@
         <h3 id="doc-map">Map Editor</h3>
         <ul>
           <li><b>Tileset</b>: a sprite sheet (an image up to 128×128 from the library, the <code>__gfx__</code> of a .p8, or Tile Maker's tiles via <i>Export → Tiles + Map → Map Editor</i>). Click a tile to paint with it; drag over the sheet to paint with a block of tiles. <i>Reload</i> reads the library image again after you edit it in Pixel Studio.</li>
+          <li><b>Empty tileset</b>: a new map starts with an all-black tileset. A tileset whose pixels all have one color counts as empty: tiles are then shown as hatched placeholders with their tile numbers (on the map, the tileset and the brush) so painting stays visible, and the panel says so. Placeholders are view only: the map, the tileset, saves and all exports are unchanged. Load a tileset (<i>From Library…</i>, <i>From .p8…</i>) to paint with real tiles.</li>
           <li><b>Tools</b>: draw (B), rectangle fill (U), flood fill (G), pick (I, or right-click; drag picks a block of cells as the brush), select (M: Ctrl+C copies the cells as the brush, Ctrl+X cuts, Del clears), pan (H, Space or middle mouse). <kbd>[</kbd> / <kbd>]</kbd> step through the tiles, the wheel zooms, <kbd>0</kbd> fits. Blocks repeat in their pattern when you drag or fill.</li>
           <li><b>Sizes</b>: 128×32 is the cart map (<code>__map__</code>). 128×64 also uses the lower half of the sprite sheet (sprites 128–255) for rows 32–63, as PICO-8 does; an orange line marks where that starts. Other sizes up to 256×256 can be edited and exported as bytes (one per cell, row-major). <i>Cart Builder → Add Map from Library</i> creates a <code>tiles</code> asset with <code>.gfx</code> and <code>.map</code> parts, but rejects maps larger than 17,152 cells; automatic splitting is not implemented. Tile 0 is empty, as with <code>map()</code>.</li>
           <li><b>.p8</b>: <i>Import Map + Sprites</i> reads <code>__map__</code> and the sprite sheet (and asks whether the lower sheet half is map rows 32–63). <i>New .p8 Cart</i> writes map, sprites and a scroll viewer; <i>Write into Existing .p8</i> replaces only the map (and the sprites, if you want), keeping code, sound and music.</li>

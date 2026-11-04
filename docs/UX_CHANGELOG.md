@@ -314,6 +314,19 @@ Not covered: the native folder picker and permission prompt UI (stubbed), a real
 
 Not covered: screen readers, non-Chromium browsers.
 
+## Follow-up: #184 Map Editor placeholders for an empty tileset (2026-11-04)
+
+**Behaviour change:** a tileset whose pixels all have the same palette slot counts as empty (`P8Map.isSheetBlank`), as does the all-black default of a new map. While it is empty, the display copy of the sheet draws every tile except tile 0 as a hatched placeholder (`--surface-3` with a `--border-strong` diagonal hatch, crisp). The placeholders appear on the map, in the tileset panel and in the brush and rectangle previews, with the tile number in mono wherever a cell is at least 16 CSS px. The tileset hint becomes a `.notice`, "This tileset is empty. Load one to paint with real tiles.", directly above **From Library…** and **From .p8…**. Placeholder colors follow theme changes. `me.sheet`, saves and all exports are untouched: they read `me.sheet`, never the display canvases. The help registry (`map.tileset`) and the F1 Map Editor text state the single-color rule.
+
+**Checked** in headless Chrome 156 (fresh profiles, real pointer input) at 1440×900, painting tile 1 across 16 cells with the default pencil:
+- **Before** (`main`, same steps): painted cells are 0,0,0, identical to empty cells.
+- **After:** painted cells are 74,74,85 in the dark theme and 185,189,200 in the light theme, against 0,0,0 for empty cells. Tile numbers show at the default 200% zoom.
+- Importing a cart with a real tile 1 hides the notice and shows the real color (255,0,77) at once.
+- `map.p8`, `map.png` and `map_128x32.bin` exported from the same map are byte-identical to `main`.
+- No exceptions.
+
+Not covered: hex copy (clipboard) was not compared, but it is built by the unchanged `hexString(me.map)`. Screen readers and non-Chromium browsers were not tested.
+
 ## Follow-up: #185 Pixel Studio save status and visible Save (2026-11-04)
 
 **Behaviour change:** Pixel Studio mounts the shared `P8DocStatus` badge between the image name and the size pill, as Map Editor does. It shows Not saved, Unsaved changes, Saving…, Saved to Library, and Save failed with Retry; click it for details. A **Save** button (`.btn-sm`) beside it runs the existing `ps-save` action, the same `saveToLibrary()` as **File › Save to Library** and `Ctrl+S`, so there is still one save path. The #80 document/revision guard is unchanged, and the tracker mirrors it: `loadDoc` opens (a restored unsaved session opens unsaved), `changed` edits (strokes, undo, redo, rename), and `saveToLibrary` begins, then resolves the written revision or rejects with a persistent error. The palette panel button is now **Save palette** and still stores a palette only. The size pill shows only the dimensions. The help registry (`studio.save`), F1 Pixel Studio text, README and EXTENDING were updated.

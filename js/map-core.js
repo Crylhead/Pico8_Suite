@@ -130,6 +130,15 @@ const P8Map = (() => {
   /** Row-major map bytes: the `.map` part of a `tiles` asset (identical to __map__ at width 128). */
   const mapBytes = (m) => m.cells.slice();
 
+  /**
+   * #184: a sheet is blank when every pixel has the same palette slot (any single color, not only 0):
+   * its tiles all look alike, so painting shows no visible change. An empty sheet is blank too.
+   */
+  function isSheetBlank(pixels) {
+    for (let i = 1; i < pixels.length; i++) if (pixels[i] !== pixels[0]) return false;
+    return true;
+  }
+
   /** Sheet pixels (128 wide, 4-bit slots) -> PICO-8 memory bytes (low nibble = left pixel). */
   function sheetBytes(pixels, h = pixels.length / SHEET) {
     const out = new Uint8Array((SHEET >> 1) * h);
@@ -308,7 +317,7 @@ const P8Map = (() => {
   return {
     SHEET, TILE, MAX_SIDE, CART_W, CART_H, SHARED_H,
     newMap, cloneMap, resizeMap, inside, paintStamp, fillRect, floodFill, copyRect, sheetStamp, usage, usesUpperSprites, cartFit,
-    mapBytes, sheetBytes, hexString,
+    mapBytes, sheetBytes, hexString, isSheetBlank,
     parseCart, writeCart, isCart, readCart, joinLower, writeIntoCart, palCode, buildCart,
   };
 })();
