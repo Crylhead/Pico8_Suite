@@ -53,7 +53,7 @@ const P8HelpData = (() => {
         { id: 'studio.transparent', label: 'Transparent slot', text: 'Empty pixels export as the transparent slot (default 0, like palt()).', detail: 'Pick the slot your cart passes to palt(), so exported empty areas stay see-through.' },
         { id: 'studio.tiled', label: 'Tiled view', text: 'Shows a 3×3 repeat; strokes wrap around the edges.', detail: 'Example: paint across the right edge and it continues on the left, so seams in a texture can be drawn directly.' },
       ],
-      shortcuts: [['Ctrl+S', 'Save to Library'], ['Ctrl+Shift+S', 'Save as new Library image'], ['← / → on the panel splitter', 'Resize the side panel (Shift = larger steps; Home / End = narrowest / widest; Enter = hide / show; 0 = default)'], ['M / Q / W', 'Selection tools'], ['Ctrl+B', 'Make the selection a custom brush'], ['P', 'Pixel perfect'], ['V', 'Sieve'], ['Tab', 'Hide / show timeline'], ['F', 'Image-only view']],
+      shortcuts: [['Ctrl+S', 'Save to Library'], ['Ctrl+Shift+S', 'Save as new Library image'], ['← / → on the panel splitter', 'Resize the side panel (Shift = larger steps; Home / End = narrowest / widest; Enter = hide / show; 0 = default)'], ['M / Q / W', 'Selection tools'], ['Ctrl+B', 'Make the selection a custom brush'], ['P', 'Pixel perfect'], ['V', 'Sieve'], ['T', 'Hide / show timeline'], ['F', 'Image-only view']],
       restrictions: ['Undo keeps up to 200 steps and about 160 MiB.', 'Palette slots are preserved; the screen palette decides the shown colors.'],
       related: ['palette', 'tiles', 'map', 'library'], keywords: ['sprite', 'draw', 'paint', 'pixel', 'gfx', 'layer', 'frame', 'animation'], legacy: 'doc-studio',
     },

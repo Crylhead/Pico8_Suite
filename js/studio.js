@@ -1435,7 +1435,8 @@
   }
 
   function onPointerDown(e) {
-    dom.canvas.focus({ preventScroll: true });
+    // focusVisible: false keeps the keyboard focus ring (#194) off while drawing with a pointer
+    dom.canvas.focus({ preventScroll: true, focusVisible: false });
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { dom.canvas.setPointerCapture(e.pointerId); } catch { /* synthetic event */ }
 
@@ -2884,7 +2885,6 @@
     if (typing) return;
     // Leave scrolling keys to the focused preview, even when a drawing selection exists.
     if (e.target === dom.previewBox && /^(Arrow|Page|Home$|End$| $)/.test(e.key)) return;
-    if (e.key === 'Tab' && !mod && !e.altKey && !e.shiftKey && (e.target === dom.canvas || e.target === document.body)) { e.preventDefault(); setTimeline(!ps.timeline); return; }
     if ((e.key === 'f' || e.key === 'F' || e.key === 'F8') && !mod && !e.altKey) { e.preventDefault(); openFullView(); return; }
     // hold Alt with a drawing tool: color picker until Alt is released
     if (e.key === 'Alt' && !mod && !e.shiftKey) {
@@ -2951,6 +2951,8 @@
       case '.': selectFrame(ps.frame + 1); break;
       case "'": ps.grid8 = !ps.grid8; persistSettings(); renderOptions(); requestDraw(); break;
       case 'v': case 'V': ps.sieve = !ps.sieve; renderOptions(); requestDraw(); break;
+      // #194: T, not Tab, so Tab always moves focus (docs/ACCESSIBILITY.md)
+      case 't': case 'T': setTimeline(!ps.timeline); break;
       default:
     }
   }
