@@ -2213,6 +2213,7 @@
       store.set(KEYS.indices, state.showIndices);
       renderControls();
       renderSwatches();
+      emit('p8:indices', { showIndices: state.showIndices });
     });
 
     dom.themeToggle.addEventListener('click', () => {
