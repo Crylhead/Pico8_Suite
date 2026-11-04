@@ -176,3 +176,25 @@ Baseline: 75 measured cases (15 contexts × 360/640/768/1280/1920px, light). Fin
 A further 15-context pass at 640×450 CSS px and device scale 2 checks the reflow/pixel-density equivalent of a 1280×900 window at 200% zoom. It passes the same geometry and horizontal-overflow assertions. This emulates doubled-scale reflow; physical browser zoom and native Windows/macOS were not exercised.
 
 Pixel Studio, Map and Terrain keyboard separators were resized, collapsed, switched away/back, restored and reset: chosen widths and collapse survive the switch. Code source, Pixel Studio document and a loaded/optimized Minifier input remained unchanged after switching. Rendering/packing algorithms and canvas scaling were not modified. To repeat manually, load representative assets, visit all contexts at the widths above, resize/collapse panels and scroll the existing panes; at 200% zoom confirm the last action is reachable and pixel content keeps its aspect.
+
+
+## Shared header geometry (#166)
+
+Recorded 2026-11-04 with Chromium 153.0.8010.0 on Linux/headless, base `6366d75` plus this fix. Baseline: 216 cases (12 workspaces × six widths × absent/short/long project context). Final: 432 cases including light/dark, a loaded Lua file with a long filename, and a long preset context fixture alongside the project/indices controls. Project changes use the real project-context publisher. Every final case compares actual x/y/width/height of the header, brand, navigation, Find tool, Library, theme and menu row to the same-width/theme reference, with 0.5px tolerance; all pass. No horizontal page overflow or page errors; source remains unchanged after switching. Every main wrapper starts at the measured header bottom. A separate 36-case 768px run with browser scrollbar hiding disabled also passes at 82px.
+
+| CSS viewport width | Baseline total header height range (px) | Final height (px) |
+| --- | --- | --- |
+| 360 | 77.14–150.28 | 134 |
+| 640 | 77.14–79.14 | 134 |
+| 768 | 160.33–162.33 | 82 |
+| 1280 | 78.84–80.84 | 82 |
+| 1440 | 78.84–80.84 | 82 |
+| 1920 | 78.84–127.14 | 82 |
+
+The compact mode intentionally reserves two menu lines plus a context line even for Home; at 640px this uses more height than before, keeping switches stable without clipping menus/context. Desktop navigation no longer competes with project text, and the 768px strip scrolls within its slot instead of pushing navigation into extra rows. Before/after screenshots compared Home, Studio and Palette at 360/768/1280px. The root scrollbar gutter reserves 15px in this browser; layout is relative to document content width. Overlay scrollbar systems can reserve zero.
+
+A further 72 cases (all tools × three project states × both themes) at 640×450 CSS px/device scale 2 pass the same assertions: the layout/pixel-density equivalent of a 1280×900 window at 200% zoom. Physical browser zoom and native Windows/macOS were not exercised.
+
+All visible menus in all 12 workspaces were opened by keyboard at 360×900, 768×900, 1280×900 and 640×450: popovers fit within the page with an 8px inset, their lists scroll in short viewports, and Escape restores button focus. Home/End, neighbouring-menu arrows, refit of an open menu after resize, Ctrl+K → Terrain, theme toggle, Library open/close and workspace-tab arrow selection passed. Library's own Close button is used while its drawer overlays the header.
+
+To repeat manually, switch Home → Studio → Code → Palette → Minifier → the remaining tools at each width. Use a long project/preset/file name; toggle project presence and compare header controls/content top. Scroll a dashboard then switch back to an editor: the reserved scrollbar rail must keep the header x positions stable. At 200% zoom, open menus near the right edge, scroll to their final item, Escape back to the trigger, and reach Find tool/Library/theme by keyboard. Preserve the workspace and command-row contracts documented separately in this file.

@@ -35,12 +35,12 @@
 .doc-status-act { min-height: 24px; }
 /* workspace tabs: icons only; the active tool's name sits in its own frame to the left, sized
    for the longest name (all names stacked in one grid cell), so the icons never move */
-.ws-title { display: grid; align-items: center; margin-right: 4px; padding: 0 12px; background: var(--surface-3); border-radius: 6px; font-weight: 600; white-space: nowrap; }
+.ws-title { flex: none; display: grid; align-items: center; margin-right: 4px; padding: 0 12px; background: var(--surface-3); border-radius: 6px; font-weight: 600; white-space: nowrap; }
 .ws-title span { grid-area: 1 / 1; visibility: hidden; }
 .ws-title span.on { visibility: visible; }
 :root[data-compact-nav] .ws-title { display: none; } /* Settings > Workspace bar: compact (#54) */
 .ws-tabs { max-width: 100%; overflow-x: auto; }
-.ws-tabs button { display: inline-flex; align-items: center; padding: 5px 8px; }
+.ws-tabs button { flex: none; display: inline-flex; align-items: center; padding: 5px 8px; }
 .ws-tabs svg { width: 20px; height: 20px; flex: none; }
 .ws-tabs button[aria-checked="true"] { color: var(--accent); background: none; box-shadow: inset 0 -2px 0 var(--accent); }
 .ws-tabs button:hover { color: var(--text); }
@@ -1111,6 +1111,9 @@ body[data-workspace="datacarts"] { height: 100vh; height: 100dvh; display: flex;
 /* "Use the active project" strip (#56) */
 .project-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 12px; color: var(--muted); }
 
+/* Long project names must not widen their consumer cards (#166). */
+.project-strip-text { min-width: 0; overflow-wrap: anywhere; }
+
 /* Send to… destination list (#57): unavailable destinations stay focusable and show their reason as text */
 .send-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .send-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
@@ -1148,7 +1151,7 @@ body[data-workspace="datacarts"] { height: 100vh; height: 100dvh; display: flex;
 
 /* Home launcher (#68) */
 .home-continue { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.home-note { margin: 0; font-size: 13px; color: var(--muted); flex: 1 1 280px; }
+.home-note { min-width: 0; overflow-wrap: anywhere; margin: 0; font-size: 13px; color: var(--muted); flex: 1 1 280px; }
 .home-note-warn { color: var(--warn); font-weight: 600; }
 #homeStorage.home-note-warn { color: var(--warn); }
 .home-tasks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }

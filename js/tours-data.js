@@ -20,7 +20,7 @@ const P8TourData = (() => {
         { id: 'welcome', title: 'Welcome', text: 'The Suite is a set of PICO-8 tools in one page. Everything stays in this browser; nothing is uploaded. This tour takes about a minute and changes nothing.' },
         { id: 'workspaces', target: '#wsTabs', title: 'Workspaces', text: 'Each icon opens one tool: Pixel Studio, Palette & Fades, Tile Maker, Map Editor, Code Editor and the project tools. Arrow keys move between them. Each tool keeps its work while you switch.' },
         { id: 'library', target: '#libraryBtn', title: 'Library', text: 'The shared place for images, palettes and maps. Save from one tool, then use Open in… to continue in another.' },
-        { id: 'project', optional: true, target: '#projectIndicator', title: 'Active project', text: 'When a project folder is open, its name and whether the browser still allows access appear here. It never means a file was saved.' },
+        { id: 'project', optional: true, target: '#projectIndicator', title: 'Active project', text: 'When a project folder is open, its name and whether the browser still allows access appear beside the menus (below them on small windows). It never means a file was saved.' },
         { id: 'help', target: '#menubar', title: 'Help and settings', text: 'F1 opens searchable help for the tool you are in. Help › Settings turns optional hints off; Help › Report a problem prepares a bug report you review first.' },
       ],
     },
