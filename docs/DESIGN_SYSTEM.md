@@ -83,7 +83,29 @@ Both modes use `--workspace-gutter` (16px) on all four edges. A dashboard can ad
 
 The shared rule governs only the outer wrapper. Keep specialized grids, panel widths/collapse, internal spacing, canvas aspect/zoom and scroll owners in tool styles. Legacy `.layout-*` geometry remains a fallback for extensions without the mode annotation; new tools must declare a mode. See [EXTENDING.md](../EXTENDING.md#workspace-geometry) and the [before/after checks](UX_RELEASE_CHECKLIST.md#workspace-geometry-168).
 
-Command/status rows (#169), the broader panel-breakpoint audit (#170) and a reusable visual-regression runner (#171) remain separate work.
+The broader panel-breakpoint audit (#170) remains separate. Use the [opt-in geometry matrix](GEOMETRY_SMOKE.md) for shared layout changes.
+
+## Workspace bar roles (#169)
+
+Use minima and explicit overflow policies, not fixed heights that crop controls. These tokens in `css/style.css` apply to existing wrappers; editor font/bitmap/zoom and internal pane ownership remain tool-specific.
+
+| Role / token | Contract |
+| --- | --- |
+| Command / `--bar-command-min` | 40px minimum, 6px vertical and 10px horizontal padding (`--bar-pad-y/x`); 6px row / 10px column gap (`--bar-row-gap`, `--bar-gap`). `.command-row` wraps by default; `.command-row-inset` removes duplicate horizontal padding inside a padded card. |
+| Heading / `--bar-heading-min` | 28px minimum for `.card-head`, `.ps-panel-head` and `.mn-heading-row`; 18px text line (`--bar-line`). Palette's 30px color swatch can grow its heading to 30px. Long headings/controls can wrap. |
+| Status / `--bar-status-min` | 32px minimum; 18px line, 2px vertical / 10px horizontal inset, shared gaps and top divider. Pixel/Map/Code use `.ps-status`; Terrain uses the same tokens. Groups wrap rather than hiding action buttons. |
+| Small controls / `--bar-control-min` | 26px minimum for buttons, selects, numbers and names inside these roles; 13px UI text / 18px line. Segmented children are 20px plus their existing 6px frame. Pixel chips, checkbox/range controls, and bitmap content retain their specialized sizes. |
+
+| Surface | Explicit expansion / overflow policy |
+| --- | --- |
+| Pixel Studio | Two 40px-minimum options rows plus their dividers; `.command-row-scroll` retains horizontal scrolling and focus reveal. Status metadata reserves a stable flex basis; control groups wrap as whole groups. Pointer changes do not change row allocation. |
+| Map / Code | Command rows wrap when necessary; file/name readouts shrink or ellipsize. Status readouts/meters remain available and can occupy another row. Pixel and Map share command insets, dividers and status sizing, without forcing their total row counts to match. |
+| Terrain | View and brush rows use command sizing. Coordinates and render details have reserved two-line heights and can scroll by keyboard; render feedback/Retry share a reserved command slot. Its status row grows to fit this expanded readout, independently of pointer text. |
+| Minifier | Above 699px, source/commands reserves `--bar-expanded-command` = 240px, capped at 35dvh, with overflow scrolling. Heading and action rows use the shared minima. At/below 699px it grows in the document. |
+| Audit | Above 1000px the expanded command region reserves 180px (same variable locally overridden), capped at 35dvh, including primary/column rows and context. Long content scrolls. Narrow mode grows in the document. |
+| Cart Builder / Data Carts | Same policy as Audit, with a 112px desktop region for their command workflow. More rows or long context scroll inside that region; narrow mode grows in the document. |
+
+Expanded command regions are named, keyboard-focusable areas: Page Down/Up and normal focus scrolling reach their contents. Their reserved heights keep text updates from consuming additional stage area. All minima can grow for controls/text where no explicit scrolling region is declared; no pixel canvas is stretched to equalize bars. `.card-head` retains the card's own boundary; edge-to-edge command/status rows keep their existing 1px divider. See the [recorded comparison](UX_RELEASE_CHECKLIST.md#workspace-bars-169).
 
 ## Data-cart workspace sizing (#167)
 

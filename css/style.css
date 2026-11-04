@@ -72,6 +72,9 @@
 /* Theme-independent scales and state tokens; documented in docs/DESIGN_SYSTEM.md. Colours are
    the theme tokens above plus --status-ok/--status-warn/--status-error (css/suite.css). */
 :root {
+  --bar-command-min: 40px; --bar-heading-min: 28px; --bar-status-min: 32px; --bar-control-min: 26px;
+  --bar-gap: var(--space-5); --bar-row-gap: var(--space-3); --bar-pad-x: var(--space-5); --bar-pad-y: var(--space-3); --bar-line: 18px;
+  --bar-expanded-command: 240px;
   --chrome-nav-height: 48px; --chrome-menu-height: 33px; --chrome-menu-line: 26px; --chrome-context-height: 28px;
   --workspace-gutter: var(--space-7); --workspace-gap-editor: var(--space-5); --workspace-gap-dashboard: var(--space-7);
   --workspace-width-default: 1240px; --workspace-width-wide: 1640px;
@@ -380,9 +383,31 @@ main[data-layout="dashboard"][data-width-tier="wide"] { --workspace-max-width: v
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px 16px;
-  margin-bottom: 14px;
+  gap: var(--bar-row-gap) var(--bar-gap);
+  min-height: var(--bar-heading-min);
+  line-height: var(--bar-line);
+  margin-bottom: var(--bar-gap);
 }
+/* Workspace bar roles (#169): minima, never clipped fixed control heights. */
+.command-row {
+  display: flex; align-items: center; flex-wrap: wrap; flex: none; min-width: 0;
+  min-height: var(--bar-command-min); gap: var(--bar-row-gap) var(--bar-gap);
+  padding: var(--bar-pad-y) var(--bar-pad-x); line-height: var(--bar-line);
+}
+.command-row-inset { padding-inline: 0; } /* parent card already owns the horizontal inset */
+.command-row-scroll { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+:is(.command-row, .card-head, .ps-panel-head, .ps-status, .tl-statusbar, .mn-heading-row) :is(.btn, .select, .num, .ps-name) {
+  min-height: var(--bar-control-min); font-size: var(--fs-md); line-height: var(--bar-line); padding-block: 3px;
+}
+:is(.command-row, .card-head, .ps-panel-head, .ps-status) .seg button {
+  min-height: 20px; font-size: var(--fs-md); line-height: var(--bar-line); padding-block: 1px;
+}
+.command-row :is(input[type="search"], input[type="text"]) { min-height: var(--bar-control-min); font-size: var(--fs-md); line-height: var(--bar-line); padding-block: 3px; }
+.command-row.dt-row { gap: var(--bar-row-gap) var(--bar-gap); }
+.command-row > .btn { flex: none; }
+.command-row > .au-root { white-space: normal; }
+.command-row > :is(strong, .muted) { min-width: 0; overflow-wrap: anywhere; }
+
 .head-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-left: auto; }
 .spacer { flex: 1 1 auto; }
 

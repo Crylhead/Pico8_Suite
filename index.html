@@ -696,7 +696,7 @@
     </div>
 
     <section class="card ps-main">
-      <header class="ps-options">
+      <header class="ps-options command-row">
         <input class="ps-name" id="meName" value="map" spellcheck="false" aria-label="Map name">
         <span id="meDocStatus"></span>
         <span class="badge" id="meFit" title="Where this map fits in a PICO-8 cart"></span>
@@ -718,7 +718,7 @@
         <canvas id="meCanvas" tabindex="0" aria-label="Map"></canvas>
       </div>
       <footer class="ps-status">
-        <span id="mePos">–</span><span id="meTileAt"></span><span class="spacer"></span><span id="meSelInfo"></span>
+        <div class="ps-status-info"><span id="mePos">–</span><span id="meTileAt"></span><span id="meSelInfo"></span></div>
       </footer>
     </section>
 
@@ -752,7 +752,7 @@
 
   <main class="layout-code" data-ws="code" hidden data-layout="fluid">
     <section class="card ce-main">
-      <header class="ce-bar">
+      <header class="ce-bar command-row">
         <button class="btn btn-ghost btn-sm" id="ceBack" hidden title="Back to the cart that includes this file"></button>
         <strong class="ce-file" id="ceFile">untitled.p8</strong>
         <nav class="ce-tabs" id="ceTabs" aria-label="Code tabs"></nav>
@@ -852,7 +852,7 @@
 
     <section class="card ps-main">
       <header class="ps-options ps-options-rows" id="psOptions">
-        <div class="ps-options-row" aria-label="Tool options">
+        <div class="ps-options-row command-row command-row-scroll" aria-label="Tool options">
         <input type="text" id="psName" class="ps-name" spellcheck="false" aria-label="Image name">
         <span class="badge" id="psSize">128×128</span>
         <span class="ps-sep"></span>
@@ -886,7 +886,7 @@
         <label class="check ps-opt" id="psFilledWrap" hidden><input type="checkbox" id="psFilled"><span>Filled</span></label>
         <label class="check ps-opt" id="psContigWrap" hidden title="Off: replace every pixel of that color on the layer"><input type="checkbox" id="psContig"><span>Contiguous</span></label>
         </div>
-        <div class="ps-options-row" aria-label="Drawing options">
+        <div class="ps-options-row command-row command-row-scroll" aria-label="Drawing options">
         <div class="ps-opt" title="PICO-8 fill pattern (fillp) for all drawing tools">
           <span class="label">Pattern</span>
           <select id="psPattern" class="select select-sm" aria-label="Fill pattern"></select>
@@ -912,7 +912,7 @@
         <canvas id="psCanvas" tabindex="0" aria-label="Drawing canvas"></canvas>
       </div>
       <footer class="ps-status">
-        <span id="psPos">–</span><span id="psCell"></span><span id="psColor"></span><span class="spacer"></span><span id="psSelInfo"></span>
+        <div class="ps-status-info"><span id="psPos">–</span><span id="psCell"></span><span id="psColor"></span><span id="psSelInfo"></span></div>
         <div class="btn-group ps-status-view" role="group" aria-label="Layout">
           <button class="btn btn-sm" id="psTimelineBtn" aria-pressed="true" title="Show / hide the animation timeline (Tab)">Timeline</button>
           <button class="btn btn-sm" id="psFullBtn" title="Full screen view: pan and zoom only (F) · Esc exits">⛶ View</button>
@@ -1066,8 +1066,8 @@
   <!-- Project Audit                                                    -->
   <!-- ================================================================ -->
   <main class="layout-audit" data-ws="audit" id="auStage" hidden data-layout="fluid">
-    <section class="card au-top">
-      <div class="dt-row">
+    <section class="card au-top" role="region" tabindex="0" aria-label="Project Audit commands">
+      <div class="dt-row command-row command-row-inset">
         <button class="btn btn-primary" id="auOpen" data-help-id="audit.scan" title="Ctrl+O">Choose Project Folder…</button>
         <button class="btn" id="auRescan" disabled title="Read the folder again (F5). A folder chosen with the button has to be chosen again; a dropped folder is reread directly.">Rescan</button>
         <strong id="auRoot" class="au-root"></strong>
@@ -1077,7 +1077,7 @@
         <button class="btn" id="auCsv" disabled>Export CSV</button>
         <button class="btn" id="auJson" disabled>Export JSON</button>
       </div>
-      <div class="dt-row au-cols" id="auCols" data-help-id="audit.columns"></div>
+      <div class="dt-row au-cols command-row command-row-inset" id="auCols" data-help-id="audit.columns"></div>
       <progress id="auProgress" hidden></progress>
       <input type="file" id="auDirInput" webkitdirectory multiple hidden>
     </section>
@@ -1106,14 +1106,14 @@
   <!-- ================================================================ -->
   <!-- Minifier: local Shrinko8 comparison, reports and validated build exports. -->
   <main class="layout-minifier" data-ws="minifier" hidden aria-labelledby="mnHeading" data-layout="fluid">
-    <header class="card mn-command">
+    <header class="card mn-command" role="region" tabindex="0" aria-label="Minifier source and commands">
       <div class="mn-heading-row">
         <h2 id="mnHeading">Minifier</h2>
         <span id="mnSourceName" class="mn-source-name">No source selected</span>
         <span id="mnProvenance" class="muted"></span>
         <button class="btn btn-sm" data-action="docs">Help</button>
       </div>
-      <div id="mnSourceActions" class="mn-source-actions" aria-label="Source actions">
+      <div id="mnSourceActions" class="mn-source-actions command-row command-row-inset" aria-label="Source actions">
         <button id="mnOpen" class="btn" data-action="mn-open" data-help-id="minifier.open">Open file…</button>
         <button id="mnPaste" class="btn" data-action="mn-paste" data-help-id="minifier.paste">Paste Lua…</button>
         <button id="mnUseEditor" class="btn" data-action="mn-use-editor" data-help-id="minifier.editor" disabled aria-describedby="mnEditorAvailability">Use current editor</button>
@@ -1237,8 +1237,8 @@
   <!-- Cart Builder                                                     -->
   <!-- ================================================================ -->
   <main class="layout-dc" data-ws="cartbuilder" hidden data-layout="fluid">
-    <section class="card dc-top">
-      <div class="dt-row">
+    <section class="card dc-top" role="region" tabindex="0" aria-label="Cart Builder commands">
+      <div class="dt-row command-row command-row-inset">
         <button class="btn btn-primary" id="cbOpen" data-help-id="cartbuilder.open" title="The demo project folder (contains demo/, tools/, music/); outside AppData so the browser may write to it">Open Demo Project…</button>
         <button class="btn" id="cbReconnect" hidden></button>
         <strong id="cbRoot"></strong>
@@ -1264,8 +1264,8 @@
   </main>
 
   <main class="layout-dc" data-ws="datacarts" hidden data-layout="fluid">
-    <section class="card dc-top">
-      <div class="dt-row">
+    <section class="card dc-top" role="region" tabindex="0" aria-label="Data Carts commands">
+      <div class="dt-row command-row command-row-inset">
         <button class="btn btn-primary" id="dcOpen" title="Same folder as Project Audit">Open Project Folder…</button>
         <button class="btn" id="dcFiles">Open .p8 Files…</button>
         <strong id="dcRoot"></strong>
@@ -1437,6 +1437,7 @@
         <ul>
           <li><b>Finding tools</b>: the workspace bar groups the tools as <i>Create</i> (Pixel Studio, Palette &amp; Fades, Tile Maker, Map Editor, Terrain Lab), <i>Develop</i> (Code Editor, Minifier, Cart Builder), <i>Inspect</i> (Project Audit, Data Carts) and <i>Utilities</i> (Data Tools, Extra Tools); Home lists them the same way. On wide screens the tabs show their names. The magnifier button (or <kbd>Ctrl</kbd>+<kbd>K</kbd>, <kbd>⌘</kbd>+<kbd>K</kbd> on a Mac) opens <b>Find tool</b>: type part of a name or task (e.g. <i>tokens</i>, <i>terrain</i>, <i>fade</i>) to search names and descriptions, including the tools inside Extra Tools; <kbd>↑</kbd> <kbd>↓</kbd> choose, <kbd>Enter</kbd> opens, <kbd>Esc</kbd> closes without switching. On narrow screens the tabs are replaced by this button, which shows the current tool's name.</li>
           <li><b>Header layout</b>: navigation, Find tool, Library and theme stay in the top row. The tab strip scrolls when needed; small windows use Find tool to name and switch the tool. Project context appears beside the menus, or below them on small windows; long context text is shortened visually. Menu lists scroll in short windows and <kbd>Esc</kbd> returns to their button.</li>
+          <li><b>Tool bars</b>: options can wrap or scroll horizontally; Tab brings an option into view. Status buttons wrap in small windows. Desktop Minifier and project command areas reserve space and scroll long messages: focus the area and use <kbd>Page Down</kbd>, or scroll it. Smaller windows use the scrolling page. Terrain coordinates has a two-line readout that scrolls for longer values.</li>
           <li><b>Workspace layout</b>: editors use the full window width. Home and Data Tools stay centered; Palette &amp; Fades and Tile Maker use a wider centered layout for comparing images. On smaller windows, panels stack and the page scrolls where the tool needs more room.</li>
           <li><b>Links</b>: the address follows the open tool (e.g. <code>index.html#map</code> or <code>index.html#extras/terrain</code>); open or bookmark such a link to start in that tool. Without one, the Suite reopens the tool you used last.</li>
           <li><b>Library</b> (button at the top right): images, palettes and maps shared by all tools. Click an asset for <i>Open in…</i>, rename, duplicate, PNG download and delete; the trash button next to each entry deletes it directly (after asking). Palette &amp; Fades saves and loads palettes with the <i>Save to Library…</i> / <i>From Library…</i> buttons of the custom palette. Drag an asset thumbnail onto a tool's canvas to load it there. Drop image files onto the library to import them (colors snap to the nearest PICO-8 color).</li>

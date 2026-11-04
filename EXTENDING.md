@@ -27,6 +27,10 @@ Keep internal grids, panel resizing/collapse, pixel aspect/zoom and independent 
 
 Keep optional project/preset context in `.menubar-end`, not the primary `.appbar-end` action row. The latter is reserved for global actions. Use existing menus and their keyboard handlers; popovers are fitted when opened/resized. Do not add workspace-specific primary-row heights or wrapping. Long names must truncate in the context rail or wrap inside consumer cards. See [the responsive chrome contract](docs/DESIGN_SYSTEM.md#shared-app-chrome-166).
 
+### Workspace command, heading and status roles
+
+Use `.command-row` for command strips, `.command-row-inset` when their card already owns the horizontal inset, and `.command-row-scroll` only for a deliberately horizontal options row whose controls remain reachable by Tab. Reuse `.card-head` / `.ps-panel-head` headings and the shared `--bar-*` minima/spacing for status strips. Keep specialist pixel controls and editor fonts intact. Wrapped groups and named, focusable expanded command regions are explicit exceptions; document their overflow/breakpoint and test long text. See [bar roles and tool-specific regions](docs/DESIGN_SYSTEM.md#workspace-bar-roles-169).
+
 ### Keyboard and accessibility contract
 
 The shell provides keyboard behavior for standard markup; use it instead of custom key handling (details and the manual regression script: [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md)):

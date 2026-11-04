@@ -88,7 +88,7 @@ export function measurePage() {
     chrome, main: rect(main), padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft].map(parseFloat), gap: parseFloat(style.gap),
     firstRail: Math.min(...[...main.children].filter(n => visible(n) && getComputedStyle(n).position !== 'absolute').map(n => rect(n).x)),
     pageWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth), scrollHeight: document.documentElement.scrollHeight,
-    rows: [...collect('.ps-options, .ps-options-row, .ce-bar, .mn-command, .au-top, .dc-top, .ex-head, .tm-bar', 'command'), ...collect('.card-head', 'heading'), ...collect('.ps-status, .tl-statusbar, .status-line, #mnStatus', 'status')],
+    rows: [...collect('.command-row, .ps-options, .ps-options-row, .ce-bar, .mn-command, .au-top, .dc-top, .ex-head, .tm-bar', 'command'), ...collect('.card-head, .ps-panel-head, .mn-heading-row', 'heading'), ...collect('.ps-status, .tl-statusbar, .status-line, #mnStatus', 'status')],
     stages: collect('.ps-stage, .ce-editor, .ex-stage, .tl-stage, .au-main, .dc-main', 'stage'),
     canvases: [...main.querySelectorAll('canvas')].filter(visible).map(n => { const r = n.getBoundingClientRect(); return { id: n.id, bitmap: [n.width, n.height], rect: rect(n), visibleArea: Math.max(0, Math.min(r.right, innerWidth) - Math.max(0, r.left)) * Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(0, r.top)) }; }),
   };
@@ -155,7 +155,7 @@ export async function run() {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const { server, url } = await serve(root);
   let browser;
-  const report = { version: 1, created: new Date().toISOString(), scenarios: SCENARIOS, rows: [], errors: [], failures: [], notes: ['200% case emulates reflow and pixel density, not physical browser zoom.', 'Command/status role heights are recorded per tool; cross-tool normalization belongs to #169.'] };
+  const report = { version: 1, created: new Date().toISOString(), scenarios: SCENARIOS, rows: [], errors: [], failures: [], notes: ['200% case emulates reflow and pixel density, not physical browser zoom.', 'Command/status role heights follow the shared bar contract; expanded tool rows remain intentional.'] };
   try { report.commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
   catch { report.commit = null; }
   try {

@@ -859,9 +859,9 @@
 
   // ------------------------------------------------------------------ status
   const status = el('span', { className: 'badge tl-status', attrs: { role: 'status' } });
-  const stats = el('span', { className: 'tl-sb-stats' });
+  const stats = el('span', { className: 'tl-sb-stats', tabIndex: 0, attrs: { role: 'region', 'aria-label': 'Terrain render details' } });
   const sbAction = el('span', { className: 'tl-sb-action' });
-  const sbPos = el('span', { className: 'tl-sb-pos', textContent: '—' });
+  const sbPos = el('span', { className: 'tl-sb-pos', textContent: '—', tabIndex: 0, attrs: { role: 'region', 'aria-label': 'Terrain coordinates' } });
   const toolName = () => TOOLS.find((x) => x[0] === st.tool)?.[1] || st.tool;
   function idleText() {
     const tool = TOOLS.find((x) => x[0] === st.tool);
@@ -951,10 +951,10 @@
     ui.retry.hidden = true;
     ui.historyBtn = btn('History', openHistory, { title: 'List of all edits: hide, show or delete single strokes' });
     const stage = el('section', { className: 'card ex-stage tl-stage' },
-      el('div', { className: 'ex-row tl-bar' }, ui.view, ui.tile, ui.preview, el('span', { className: 'tl-spacer' }), status, ui.retry),
+      el('div', { className: 'ex-row tl-bar command-row command-row-inset' }, ui.view, ui.tile, ui.preview, el('span', { className: 'tl-spacer' }), el('span', { className: 'tl-render-feedback' }, status, ui.retry)),
       canvas,
       ui.tools,
-      el('div', { className: 'ex-row tl-brush' }, ui.brushSize, ui.brushPower, ui.rim, ui.preserve, el('span', { className: 'tl-spacer' }), ui.undoBtn, ui.redoBtn, ui.historyBtn, ui.clearBtn),
+      el('div', { className: 'ex-row tl-brush command-row command-row-inset' }, ui.brushSize, ui.brushPower, ui.rim, ui.preserve, el('span', { className: 'tl-spacer' }), ui.undoBtn, ui.redoBtn, ui.historyBtn, ui.clearBtn),
       el('div', { className: 'tl-statusbar', attrs: { role: 'status' } }, sbAction, sbPos, stats));
 
     // ---- side panel

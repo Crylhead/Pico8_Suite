@@ -10,6 +10,13 @@ body[data-workspace="minifier"] { height: 100vh; height: 100dvh; display: flex; 
 #mnLocalSetup { display: grid; gap: var(--space-4); overflow-wrap: anywhere; }
 #mnLocalSetup h3 { font-size: var(--fs-md); }
 .mn-heading-row, .mn-source-actions, .mn-run-actions, .mn-output-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-4); }
+.mn-source-actions { gap: var(--bar-row-gap) var(--bar-gap); }
+.mn-heading-row { min-height: var(--bar-heading-min); line-height: var(--bar-line); }
+.mn-command { align-content: start; }
+@media (min-width: 700px) {
+  .mn-command { height: min(var(--bar-expanded-command), 35dvh); overflow: auto; }
+}
+.mn-command:focus-visible { outline: var(--focus-width) solid var(--focus-color); outline-offset: -3px; }
 .mn-heading-row h2 { margin-right: var(--space-4); }
 .mn-heading-row > .btn { margin-left: auto; }
 .mn-source-name { font-family: var(--mono); overflow-wrap: anywhere; min-width: 0; }

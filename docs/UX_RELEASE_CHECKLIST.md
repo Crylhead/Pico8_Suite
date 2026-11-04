@@ -202,3 +202,28 @@ A further 72 cases (all tools × three project states × both themes) at 640×45
 All visible menus in all 12 workspaces were opened by keyboard at 360×900, 768×900, 1280×900 and 640×450: popovers fit within the page with an 8px inset, their lists scroll in short viewports, and Escape restores button focus. Home/End, neighbouring-menu arrows, refit of an open menu after resize, Ctrl+K → Terrain, theme toggle, Library open/close and workspace-tab arrow selection passed. Library's own Close button is used while its drawer overlays the header.
 
 To repeat manually, switch Home → Studio → Code → Palette → Minifier → the remaining tools at each width. Use a long project/preset/file name; toggle project presence and compare header controls/content top. Scroll a dashboard then switch back to an editor: the reserved scrollbar rail must keep the header x positions stable. At 200% zoom, open menus near the right edge, scroll to their final item, Escape back to the trigger, and reach Find tool/Library/theme by keyboard. Preserve the workspace and command-row contracts documented separately in this file.
+
+
+## Workspace bars (#169)
+
+Recorded 2026-11-04, Chromium 153.0.8010.0 on Linux/headless. Application base `5baf342`; the earlier #171 baseline (`eee00e4`, identical application CSS/HTML/JS) supplies before measurements with the same loaded image/Lua fixtures. At 1280×900/light with long project context:
+
+| Surface | Before → after (CSS px) | Meaning |
+| --- | --- | --- |
+| Studio options | 40 + 40 + divider → unchanged | Two deliberate options rows, now minimum rather than clipped fixed heights |
+| Map options | 76.69 → 71 | Two wrapped lines at this width; each line uses the shared control sizing/inset |
+| Code commands | 42 → 40 | Shared one-line minimum; narrow filenames/buttons wrap |
+| Studio / Map / Code status | 34 / 28 / 28 → 32 each | Shared default status role; smaller windows can use more rows |
+| Palette headings | 20.30 / 34.30 / 34.30 → 28 / 28 / 30 | Heading minimum plus a deliberate 30px color-chip exception |
+| Minifier source/commands | 224.52 → 240 | Explicit reserved scroll region above 699px |
+| Audit commands/context | 161.98 → 180 | Explicit reserved region above 1000px |
+| Cart Builder / Data Carts commands/context | 56.30 / 81.69 → 112 each | Reserved space supports project/status rows without consuming more stage area when messages change |
+| Terrain status | 26 → 41 | Shared 32px minimum plus the bounded two-line coordinate readout |
+
+Reserved desktop regions add some empty space for shorter/empty workflows; the intentional tradeoff is stable stage allocation when context/messages grow. These values are declared tool roles, not a claim that all tools have the same total number of rows. The old saved baseline must flag these intentional bar/stage changes; capture a new accepted baseline after review.
+
+The complete #171 matrix checks all built-ins and all four Extra Tools tabs in light/dark, normal widths 360/768/1280/1920 plus the 640×450/device-scale-2 reflow equivalent. Main rails, shared header and return-visit bar heights must remain stable, with no horizontal page overflow or fixture mutation. Geometry collection also includes the adopted `.command-row` primitives and heading roles. Final result: all 600 cases passed, with no page errors, horizontal page overflow, fixture mutation or return-visit height changes. All 346 regression tests passed; syntax/static checks and Help/tour integrity passed (477 IDs, 52 references). Physical browser zoom and native Windows/macOS were not exercised.
+
+Focused checks cover 40 cases at 360/768/1280 and short 640px widths, auditing visible bar buttons/inputs/selects against clipping ancestors (424 control instances, no clipped controls). Internal scrollable rows/regions are permitted. Studio/Map/Terrain status readouts keep the same height under short/long coordinate fixtures (12 cases). Tab reaches the last drawing option and scrolls it into view; Tiled/Fit and Data Carts Pack remain operable. Long feedback keeps all four expanded command regions at the same height and Page Down scrolls their contents; Terrain coordinates and render details are named readout regions. The repeat-visit sweep exposed a 98px → 70px Terrain command-row collapse at 360px while Queued/Preview became Final; the render-feedback/Retry slot now reserves its width rather than changing row allocation. Before/after screenshots and measured rows are used for comparison.
+
+To repeat manually, include long project/filename/status text and selected tools with extra options. At 360/768px and physical 200% zoom, Tab through both Studio option rows and all footer groups; reach Minifier Help/source actions and the final project action by scrolling the named command region. Move over Studio/Map/Terrain canvases: readouts must update without reallocating their rows. Check coordinate text, view controls, code token/character meters and all source actions remain reachable. Reset window size and verify the normal one-line minima and documented expanded regions.
