@@ -286,3 +286,9 @@ Headless Chrome with a fresh browser profile, driven over the DevTools protocol 
 - No exceptions were thrown and no diagnostics were recorded.
 
 Not covered: the native folder picker and permission prompt UI (stubbed), a real folder deleted on disk (an OPFS folder removed through the API stood in for it), and non-Chromium browsers.
+
+## Follow-up: #194 Pixel Studio timeline shortcut moves from Tab to T (2026-11-04)
+
+**Behaviour change:** the timeline toggle is now `T` (it was `Tab`). `Tab` and `Shift+Tab` always move focus, also from the drawing canvas and from the page body, following the rule in `docs/ACCESSIBILITY.md`. `T` is ignored while typing in a field. The canvas shows a `:focus-visible` ring when reached by keyboard. A pointer press focuses it with `focusVisible: false`, so drawing does not show the ring. The menu `<kbd>`, the **Timeline** button title (`aria-keyshortcuts="T"`), the F1 text and table and the help registry were updated.
+
+**Checked** in headless Chrome 156 (fresh profile, real key and pointer input, 1440×900): Tab onto the canvas shows the ring, the next Tab moves to **Timeline** and Shift+Tab returns, and the timeline is unchanged throughout. `T` on the canvas or body toggles it (canvas height 528↔671), with `aria-pressed` following. Typing `t` in the image name field does not toggle it. A mouse-only draw and a tool key afterwards show no ring. `F` opens Full View and `Esc` closes it. Ctrl+A and → nudge the selection, and holding Space enters pan mode. No exceptions were thrown. The ring was inspected in the light and dark themes. Manual keyboard script step 16 was added. Not covered: screen readers, non-Chromium browsers.

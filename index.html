@@ -111,7 +111,7 @@
         <button class="menu-btn" aria-haspopup="menu" aria-expanded="false">View</button>
         <div class="menu-pop" role="menu">
           <button role="menuitem" data-action="ps-full-view">Full Screen View<kbd>F</kbd></button>
-          <button role="menuitem" data-action="ps-toggle-timeline">Show / Hide Timeline<kbd>Tab</kbd></button>
+          <button role="menuitem" data-action="ps-toggle-timeline">Show / Hide Timeline<kbd>T</kbd></button>
         </div>
       </div>
       <div class="menu" data-show="studio">
@@ -915,7 +915,7 @@
       <footer class="ps-status">
         <div class="ps-status-info"><span id="psPos">–</span><span id="psCell"></span><span id="psColor"></span><span id="psSelInfo"></span></div>
         <div class="btn-group ps-status-view" role="group" aria-label="Layout">
-          <button class="btn btn-sm" id="psTimelineBtn" aria-pressed="true" title="Show / hide the animation timeline (Tab)">Timeline</button>
+          <button class="btn btn-sm" id="psTimelineBtn" aria-pressed="true" title="Show / hide the animation timeline (T)" aria-keyshortcuts="T">Timeline</button>
           <button class="btn btn-sm" id="psFullBtn" title="Full screen view: pan and zoom only (F) · Esc exits">⛶ View</button>
         </div>
         <div class="btn-group ps-status-view" role="group" aria-label="View">
@@ -1456,7 +1456,7 @@
           <li><b>Transparent</b>: empty pixels (checkerboard) export as the transparent slot (default 0, like <code>palt()</code>).</li>
           <li><b>Tools</b>: pencil, eraser, line, rectangle, ellipse (filled or outline), fill (contiguous or global), color picker, rectangle and ellipse selection (<kbd>M</kbd>), lasso and polygon lasso (<kbd>Q</kbd>), magic wand (<kbd>W</kbd>), pan. Brush sizes 1–4, or a custom brush. Mirror X / Y.</li>
           <li><b>Ink</b> (pencil, line, rectangle, ellipse and fill): normal, lock alpha, behind, shade (one step brighter with the left button, darker with the right, by brightness) and <i>shade along the fades</i>: the same steps, but along the fade tables. They come from the image when it brought its own fades (data carts), otherwise from Palette &amp; Fades (both directions; a missing one is the other walked backwards).</li>
-          <li><b>View</b>: <i>Timeline</i> in the status bar (or <kbd>Tab</kbd>) hides the animation strip for a bigger canvas; <i>View</i> (or <kbd>F</kbd>) shows only the image, full screen, to pan and zoom. <kbd>Esc</kbd> returns.</li>
+          <li><b>View</b>: <i>Timeline</i> in the status bar (or <kbd>T</kbd>) hides the animation strip for a bigger canvas; <i>View</i> (or <kbd>F</kbd>) shows only the image, full screen, to pan and zoom. <kbd>Esc</kbd> returns.</li>
           <li><b>Preview</b>: <i>Fit</i> fits the current image to the panel, using whole-number enlargement when possible. <i>1×</i> and <i>2×</i> show exactly one or two CSS pixels per image pixel; scroll the preview to see larger images. The readout shows the actual zoom and displayed dimensions. This does not change the main canvas zoom.</li>
           <li><b>Grouped tools</b>: a button with a small ▸ triangle holds more tools (rectangle / ellipse, and all selection tools: rectangle, ellipse, lasso, polygon lasso, magic wand). Hover it for a moment (or right-click it, or long-press on touch) and pick one from the row that opens; the button then shows that tool. Pressing the group's key again steps to the next tool of the group.</li>
           <li><b>Ink</b> (pencil): <i>Normal</i>; <i>Lock alpha</i> paints only on filled pixels (recolor a shape without leaving it); <i>Behind</i> paints only on empty pixels (draw behind a shape); <i>Shade</i> makes each pixel one step brighter (left button) or darker (right button) along the palette sorted by brightness, once per stroke. <b>Pixel perfect</b> (<kbd>P</kbd>) removes the L-shaped corner pixels of 1-pixel strokes.</li>
@@ -1491,7 +1491,7 @@
           <tr><td><kbd>Ctrl</kbd>+drag a side square</td><td>Shear the selection</td></tr>
           <tr><td>hold <kbd>Alt</kbd></td><td>Color picker while held (with a drawing tool); release to return</td></tr>
           <tr><td><kbd>Space</kbd>+drag, middle mouse</td><td>Pan</td></tr>
-          <tr><td><kbd>Tab</kbd></td><td>Show / hide the animation timeline</td></tr>
+          <tr><td><kbd>T</kbd></td><td>Show / hide the animation timeline (was <kbd>Tab</kbd>, which now always moves focus)</td></tr>
           <tr><td><kbd>F</kbd> / <kbd>F8</kbd></td><td>Full screen view (drag pans, wheel zooms, <kbd>Esc</kbd> exits)</td></tr>
           <tr><td>Wheel, <kbd>+</kbd> <kbd>-</kbd>, <kbd>0</kbd>, <kbd>1</kbd></td><td>Zoom, fit, 100%</td></tr>
           <tr><td><kbd>X</kbd></td><td>Swap primary and secondary color</td></tr>

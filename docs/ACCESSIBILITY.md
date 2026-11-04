@@ -12,6 +12,7 @@ Status of the shared shell (issue #65). These are measured improvements, not a c
 | Menus (`.menu` / `.menu-btn` / `.menu-pop`) | APG menu button: `Enter`/`Space`/`↓` open on the first item, `↑` on the last. Inside: `↑` `↓` `Home` `End`, `←` `→` to the neighbouring visible menu, `Esc` closes and returns to the menu button, `Tab` closes and continues from the button. Activating an item first returns focus to its menu button, so a dialog opened by the item restores focus there. |
 | Dialogs (`P8App.modal`) | Named by the title (`aria-labelledby`); a string body is the description (`aria-describedby`). `role="alertdialog"` for `alert: true`, `showMessage(title, msg, 'error' \| 'warn')` and any dialog with a `danger` button. Native `showModal()` keeps focus inside; on close focus returns to the opener if it is still visible. |
 | Toasts | The region is `aria-live="polite"`; `error`/`warn` toasts are `role="alert"`. Persistent status (for example save status, #58) must not rely on toasts alone. |
+| Tab / Shift+Tab | Never a workspace shortcut: they always move focus, including from a drawing canvas (#194). Pixel Studio's timeline toggle is `T`. Drawing canvases show a `:focus-visible` ring for keyboard focus only. |
 | Enter / Space | Workspace shortcut handlers do not receive `Enter`/`Space` aimed at a button, link, select, checkbox or menu/radio item that was focused by keyboard or script, so the control activates. A control focused by a pointer press still passes them to the workspace (Space-drag panning after clicking a tool button keeps working). |
 
 ## Measured evidence (2026-11-02, Chromium via Playwright)
@@ -67,6 +68,7 @@ Run this in a desktop browser (light and dark theme) after changes to `js/app.js
 13. In Pixel Studio `Tab` to the side-panel splitter ("Resize Pixel Studio side panel"). `←`/`→` change the width, `Home`/`End` jump, `Enter` hides the panel (its controls leave the tab order) and again shows it, `0` (or a double-click) resets, and the splitter then announces the default width, not the previous one. Reload: the width is kept.
 14. Open **File › Send to › All destinations…**. Expected: unavailable destinations are reachable with `Tab`, announce their reason, and activating them does nothing; an available one asks "Replace unsaved work?" only if the destination holds unsaved changes.
 15. Open **Help › Quick tours…**, start a tour with the keyboard, move with `Next`, leave with `Esc`. Expected: the page stays usable throughout, focus returns to the opener.
+16. In Pixel Studio `Tab` to the drawing canvas. Expected: a focus ring shows on it. `Tab` moves on to the next control and `Shift+Tab` back; the timeline does not change. With focus on the canvas press `T`: the timeline hides and shows, and **Timeline** in the status bar follows. Typing `t` in a text field does not toggle it. Clicking or drawing on the canvas with the mouse shows no ring.
 
 Record the browser, theme, any screen reader used and the results in the PR. If no screen reader is available, say so.
 
