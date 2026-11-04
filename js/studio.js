@@ -553,7 +553,36 @@
   // View: zoom + pan                                                   //
   // ------------------------------------------------------------------ //
 
+  // #200: the view is "automatic" (refit when the stage changes size) until the user zooms or pans by
+  // hand; Fit (0), a new or opened document make it automatic again. A manual view keeps its zoom and pan
+  // on resize and is only clamped so part of the document stays on screen.
+  let viewAuto = true;
+
+  function clampView() {
+    const sw = dom.stage.clientWidth;
+    const sh = dom.stage.clientHeight;
+    const W = ps.doc.w * ps.zoom;
+    const H = ps.doc.h * ps.zoom;
+    // keep at least half of what could be visible: half the stage, or half the document when it is smaller
+    const kx = Math.min(W, sw) / 2;
+    const ky = Math.min(H, sh) / 2;
+    ps.panX = Math.round(Math.max(kx - W, Math.min(sw - kx, ps.panX)));
+    ps.panY = Math.round(Math.max(ky - H, Math.min(sh - ky, ps.panY)));
+  }
+
+  let stageSize = '';
+  function onStageResize() {
+    const sw = dom.stage.clientWidth;
+    const sh = dom.stage.clientHeight;
+    if (!sw || !sh) return; // hidden workspace: wait until it is shown
+    const size = `${sw}x${sh}`;
+    if (size === stageSize) { requestDraw(); return; }
+    stageSize = size;
+    if (viewAuto) zoomFit(); else { clampView(); requestDraw(); }
+  }
+
   function setZoom(z, ax = null, ay = null) {
+    viewAuto = false;
     z = Math.max(ZOOMS[0], Math.min(ZOOMS[ZOOMS.length - 1], z));
     if (ax == null) { ax = dom.stage.clientWidth / 2; ay = dom.stage.clientHeight / 2; }
     const ix = (ax - ps.panX) / ps.zoom;
@@ -577,6 +606,7 @@
     const sh = dom.stage.clientHeight - 32;
     if (sw <= 0 || sh <= 0) return;
     const z = [...ZOOMS].reverse().find((v) => d.w * v <= sw && d.h * v <= sh) || ZOOMS[0];
+    viewAuto = true;
     ps.zoom = z;
     ps.panX = Math.round((dom.stage.clientWidth - d.w * z) / 2);
     ps.panY = Math.round((dom.stage.clientHeight - d.h * z) / 2);
@@ -1694,6 +1724,7 @@
       const my = (a.y + b.y) / 2;
       const r = dom.canvas.getBoundingClientRect();
       const z = Math.max(ZOOMS[0], Math.min(ZOOMS[ZOOMS.length - 1], pinch.zoom * (dist / pinch.dist)));
+      viewAuto = false;
       const ix = (pinch.mx - r.left - pinch.panX) / pinch.zoom;
       const iy = (pinch.my - r.top - pinch.panY) / pinch.zoom;
       ps.zoom = z;
@@ -1712,6 +1743,7 @@
     if (!drag) return;
 
     if (drag.pan) {
+      viewAuto = false;
       ps.panX = drag.px + (e.clientX - drag.x0);
       ps.panY = drag.py + (e.clientY - drag.y0);
       requestDraw();
@@ -1790,12 +1822,14 @@
     const r = dom.canvas.getBoundingClientRect();
     if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
       if (!e.ctrlKey && !e.metaKey && e.shiftKey) {
+        viewAuto = false;
         ps.panX -= e.deltaY;
         requestDraw();
         return;
       }
       stepZoom(e.deltaY < 0 ? 1 : -1, e.clientX - r.left, e.clientY - r.top);
     } else {
+      viewAuto = false;
       ps.panX -= e.deltaX;
       requestDraw();
     }
@@ -2987,7 +3021,7 @@
     c.addEventListener('pointerleave', () => { ps.hover = null; renderStatus(); requestDraw(); });
     c.addEventListener('contextmenu', (e) => e.preventDefault());
     c.addEventListener('wheel', onWheel, { passive: false });
-    new ResizeObserver(() => requestDraw()).observe(dom.stage);
+    new ResizeObserver(onStageResize).observe(dom.stage); // #200: refit or clamp, then redraw
     new ResizeObserver(() => requestDraw()).observe(dom.previewBox);
 
     buildToolGroups();
@@ -3385,5 +3419,6 @@
   renderFrames();
   renderTitle();
   setZoom(ps.zoom);
+  viewAuto = true; // #200: the start-up label sync is not a manual zoom
   S.assets.ready.then(restoreSession);
 })();

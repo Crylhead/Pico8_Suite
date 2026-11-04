@@ -397,7 +397,35 @@
     return [x, y];
   }
 
+  // #200: as in Pixel Studio, the view refits on stage resize until the user zooms or pans by hand; a
+  // manual view is only clamped so part of the map stays on screen.
+  let viewAuto = true;
+
+  function clampView() {
+    const sw = dom.stage.clientWidth;
+    const sh = dom.stage.clientHeight;
+    const W = me.map.w * T * me.zoom;
+    const H = me.map.h * T * me.zoom;
+    // keep at least half of what could be visible: half the stage, or half the document when it is smaller
+    const kx = Math.min(W, sw) / 2;
+    const ky = Math.min(H, sh) / 2;
+    me.panX = Math.round(Math.max(kx - W, Math.min(sw - kx, me.panX)));
+    me.panY = Math.round(Math.max(ky - H, Math.min(sh - ky, me.panY)));
+  }
+
+  let stageSize = '';
+  function onStageResize() {
+    const sw = dom.stage.clientWidth;
+    const sh = dom.stage.clientHeight;
+    if (!sw || !sh) return; // hidden workspace
+    const size = `${sw}x${sh}`;
+    if (size === stageSize) { requestRender(); return; }
+    stageSize = size;
+    if (viewAuto) zoomFit(); else { clampView(); requestRender(); }
+  }
+
   function zoomTo(z, cx = dom.stage.clientWidth / 2, cy = dom.stage.clientHeight / 2) {
+    viewAuto = false;
     z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
     me.panX = cx - ((cx - me.panX) * z) / me.zoom;
     me.panY = cy - ((cy - me.panY) * z) / me.zoom;
@@ -414,6 +442,7 @@
     const ch = dom.stage.clientHeight;
     if (!cw || !ch) return;
     const z = Math.min((cw - 24) / (me.map.w * T), (ch - 24) / (me.map.h * T));
+    viewAuto = true;
     me.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z >= 1 ? Math.floor(z * 2) / 2 : z));
     me.panX = Math.round((cw - me.map.w * T * me.zoom) / 2);
     me.panY = Math.round((ch - me.map.h * T * me.zoom) / 2);
@@ -554,6 +583,7 @@
     const sx = e.clientX - r.left;
     const sy = e.clientY - r.top;
     if (drag?.pan) {
+      viewAuto = false;
       me.panX = drag.px + sx - drag.sx;
       me.panY = drag.py + sy - drag.sy;
       requestRender();
@@ -1143,7 +1173,7 @@
       e.preventDefault();
       const r = dom.canvas.getBoundingClientRect();
       if (e.ctrlKey || e.metaKey || !e.shiftKey) zoomTo(me.zoom * (e.deltaY < 0 ? 1.25 : 0.8), e.clientX - r.left, e.clientY - r.top);
-      else { me.panX -= e.deltaY; requestRender(); }
+      else { viewAuto = false; me.panX -= e.deltaY; requestRender(); }
     }, { passive: false });
     document.addEventListener('keyup', (e) => {
       if (e.key === ' ' && me.space) { me.space = false; dom.stage.classList.remove('space'); }
@@ -1164,7 +1194,7 @@
     $('#meZoomOut').addEventListener('click', () => zoomStep(-1));
     $('#meZoomFit').addEventListener('click', zoomFit);
     $('#meZoom1').addEventListener('click', () => zoomTo(1));
-    new ResizeObserver(requestRender).observe(dom.stage);
+    new ResizeObserver(onStageResize).observe(dom.stage); // #200: refit or clamp, then render
     bindSheet();
     S.bindAssetDrop(dom.stage, (a) => {
       if (a.kind === 'map') openAsset(a);

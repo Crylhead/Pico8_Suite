@@ -60,6 +60,8 @@ Use a disposable/incognito session on a separate local origin. Load an image and
 
 At 360/768/1280/1536/1920 CSS px, in both themes, record the controls/rows above with DevTools `getBoundingClientRect()` or before/after screenshots. Compare at identical viewport and scroll positions. Scroll a dashboard to the bottom, return to an editor and check the shared chrome/scrollbar rail stays put. Check each stage remains useful and all primary actions can be reached by scrolling/keyboard. Open the rightmost menu and a long menu in a short window; its final item and Escape return must remain reachable.
 
+Editor view on resize (#200): in Pixel Studio and Map Editor, load at 1440×900, resize the window to 390×844 and back. Without a manual zoom or pan the document refits both ways, centered with a margin. After a manual zoom or pan, zoom is kept, and pan is kept unless the document would cover less than half of the stage (then it is pulled back). **Fit** (`0`) makes the view automatic again.
+
 Repeat at **physical 200% browser zoom**, including a short window. Record the actual CSS viewport (`innerWidth`/`innerHeight`) and zoom separately. If only the automated reflow equivalent was run, say so; it does not cover native browser zoom, OS font differences, touch, or physical scrollbar behavior. For an unexpected difference, record the viewport/theme/project state/tool, DOMRects, screenshot and console errors before expanding the fix.
 
 
