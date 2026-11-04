@@ -737,16 +737,47 @@ if (typeof module !== 'undefined') module.exports = P8Storage;
     drawer.root.hidden = false;
     $('#libraryBtn').setAttribute('aria-pressed', 'true');
     renderLibrary();
+    drawer.search.focus({ preventScroll: true }); // #192
   }
 
   function closeLibrary() {
+    const hadFocus = drawer.root.contains(document.activeElement);
     drawer.root.hidden = true;
     $('#libraryBtn').setAttribute('aria-pressed', 'false');
+    // #192: focus inside the drawer returns to its toggle instead of being lost with the drawer
+    if (hadFocus && $('#libraryBtn').getClientRects().length) $('#libraryBtn').focus({ preventScroll: true });
+  }
+
+  /**
+   * Esc for the open drawer (#192), called by the global key dispatcher (js/app.js) after dialogs,
+   * tours and tooltips (they consume Esc first) and after open menus. Inside the drawer: the first Esc
+   * clears a non-empty filter, the next closes. Outside it, Esc closes the drawer unless focus is in a
+   * text field or a canvas, or Pixel Studio's Full View is open: those keep their own Esc meaning.
+   * Returns true when it handled the key.
+   */
+  function libraryEscape(e) {
+    if (drawer.root.hidden || e.defaultPrevented) return false;
+    const t = e.target;
+    if (drawer.root.contains(t)) {
+      if (t === drawer.search && drawer.search.value) { drawer.search.value = ''; renderLibrary(); }
+      else closeLibrary();
+    } else {
+      if (document.querySelector('.ps-fullview')) return false;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.tagName === 'CANVAS' || t.isContentEditable)) return false;
+      closeLibrary();
+    }
+    e.preventDefault();
+    return true;
   }
 
   function bindLibrary() {
     $('#libraryBtn').addEventListener('click', () => (drawer.root.hidden ? openLibrary() : closeLibrary()));
     $('#libraryClose').addEventListener('click', closeLibrary);
+    // #192: the drawer starts at the app bar's actual bottom edge (its height changes with the width)
+    const bar = document.querySelector('.appbar');
+    if (bar && typeof ResizeObserver === 'function') {
+      new ResizeObserver(() => drawer.root.style.setProperty('--library-top', `${Math.round(bar.getBoundingClientRect().bottom)}px`)).observe(bar);
+    }
     drawer.search.addEventListener('input', renderLibrary);
     $('#libraryKind').addEventListener('click', (e) => {
       const b = e.target.closest('button[data-value]');
@@ -1216,6 +1247,7 @@ This cannot be undone.`, 'Delete')) {
 
   App.registerActions({
     'library-open': openLibrary,
+    'library-escape': libraryEscape,
     'library-import': () => importImageFiles(),
     'library-export': exportBackup,
     'library-restore': importBackup,

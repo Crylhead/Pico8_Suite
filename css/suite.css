@@ -196,12 +196,15 @@ canvas.thumb {
 /* Library drawer                                                     */
 /* ------------------------------------------------------------------ */
 
+/* #192: above 640px the drawer starts below the app bar (--library-top is its measured bottom, set in
+   js/suite.js), so the Library toggle stays clickable; it stacks under the app bar's menu popovers.
+   At 640px and below it is full-screen over the bar, closed with ✕ or Esc. */
 .library {
   position: fixed;
-  top: 0;
+  top: var(--library-top, calc(var(--chrome-nav-height) + var(--chrome-menu-height) + 1px));
   right: 0;
   bottom: 0;
-  z-index: 40;
+  z-index: 19;
   width: min(360px, 100vw);
   display: flex;
   flex-direction: column;
@@ -210,6 +213,9 @@ canvas.thumb {
   background: var(--surface);
   border-left: 1px solid var(--border);
   box-shadow: var(--shadow);
+}
+@media (max-width: 640px) {
+  .library { top: 0; z-index: 40; }
 }
 .library.dragover { outline: 2px dashed var(--accent); outline-offset: -6px; }
 .library-head { display: flex; align-items: center; justify-content: space-between; }

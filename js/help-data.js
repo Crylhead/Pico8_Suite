@@ -323,7 +323,7 @@ const P8HelpData = (() => {
       inputs: ['assets saved from any tool'], outputs: ['Open in… another tool', 'PNG downloads', 'backup files'],
       tasks: ['open an image in another tool', 'rename or delete an asset', 'back up the Library'],
       actions: [{ id: 'library.open', name: 'Send to / Open in', text: 'Click an asset for Send to / Open in, rename, duplicate, PNG download and delete. Every destination is listed; an unavailable one stays focusable and shows exactly why (wrong asset type, size limit). A destination with unsaved work asks Replace or Cancel; cancelling keeps both. Deleting asks first.' }],
-      controls: [{ id: 'library.button', label: 'Library button', text: 'Opens the shared asset drawer.' }], shortcuts: [],
+      controls: [{ id: 'library.button', label: 'Library button', text: 'Opens or closes the shared asset drawer; opening moves focus to its filter.' }], shortcuts: [['Esc', 'In the filter: clear the text, then close the drawer. Elsewhere (not in a text field or on a canvas): close the drawer']],
       restrictions: ['A Library asset is not a file in a project folder.'],
       related: ['suite', 'studio', 'map'], keywords: ['assets', 'send to', 'open in', 'transfer', 'import'], legacy: 'doc-suite',
     },
