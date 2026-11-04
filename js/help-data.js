@@ -211,7 +211,7 @@ const P8HelpData = (() => {
       related: ['audit', 'cartbuilder', 'code', 'project-context'], keywords: ['reload', 'memory', 'lz', 'pack', 'hex'], legacy: 'doc-datacarts',
     },
     {
-      id: 'cartbuilder', kind: 'tool', ws: 'cartbuilder', title: 'Cart Builder', rev: 2,
+      id: 'cartbuilder', kind: 'tool', ws: 'cartbuilder', title: 'Cart Builder', rev: 3,
       summary: 'Manages a demo project’s data as assets packed into data carts, with --@data anchors telling the fx code where each piece is.',
       inputs: ['a demo project folder (contains demo/ or main.p8)', 'Library images and maps', 'files'],
       outputs: ['data carts', 'rewritten reload() lines', 'demo/suite.json'],
@@ -219,7 +219,7 @@ const P8HelpData = (() => {
       actions: [
         { id: 'cartbuilder.open', name: 'Open Demo Project…', text: 'Needs Chrome or Edge. Use a writable working copy outside protected folders such as AppData. After a restart, Reconnect asks permission again.', detail: 'Choose the folder that contains demo/ (a demoframe project) or a flat folder with main.p8. Nothing is written until you press Write Carts.' },
         { id: 'cartbuilder.adopt', name: 'Adopt', text: 'Turns literal reload() calls of data carts into parts with --@data comments.' },
-        { id: 'cartbuilder.stages', name: 'Workflow strip', text: 'Analyze (read-only) → Plan (place every part) → Validate (checks, errors block writing) → Commit (preview, confirm, verified write). Opening a folder only reads; adopting a project writes anchors and assets, and lists those files first.' },
+        { id: 'cartbuilder.stages', name: 'Workflow strip', text: 'Analyze (read-only) → Plan (place every part) → Validate (checks, errors block writing) → Commit (preview, confirm, verified write). Opening a folder only reads; adopting a project writes anchors and assets, and lists those files first.', detail: 'On wide screens the Parts list and cart/report area scroll independently. On narrow screens the areas stack, the Parts list has its own scrolling, and the page scrolls to the report and actions.' },
         { id: 'cartbuilder.move', name: 'Move…', text: 'Every part has a Move… button: choose its cart, a new cart or "not placed" without dragging. Nothing is written until Write Carts.' },
         { id: 'cartbuilder.pack', name: 'Auto-pack', text: 'Drag parts between carts (0x4300 bytes each) or auto-pack with a best-fit heuristic; parts in the same group stay together.', detail: 'Auto-pack only rearranges the plan in memory; files change when you write.' },
         { id: 'cartbuilder.write', name: 'Write Carts', text: 'Parses the built carts in memory, then lists every file it will add, change, remove or move to demo/unused/ (with counts and unresolved references) and writes only after you confirm: the data carts (checked byte for byte) and the rewritten --@data anchor lines. Cancel writes nothing and keeps your arrangement. Success is shown only after the write was verified; failures are explained and recoverable.' },
