@@ -9,13 +9,19 @@ A tool is a workspace (`<main data-ws="...">`) plus a script that registers itse
 <button role="radio" data-value="mytool" aria-checked="false" title="My Tool" aria-label="My Tool"><svg viewBox="0 0 20 20" aria-hidden="true">…</svg></button>
 
 <!-- workspace -->
-<main class="layout-mytool" data-ws="mytool" hidden> … </main>
+<main class="layout-mytool" data-ws="mytool" data-layout="fluid" hidden> … </main>
 
 <!-- optional menu, only visible in this workspace -->
 <div class="menu" data-show="mytool"> … <button role="menuitem" data-action="mytool-export">Export…</button> </div>
 ```
 
 Every element with `data-show="ws1 ws2"` is hidden outside the listed workspaces. Load the script after `js/suite.js`.
+
+### Workspace geometry
+
+Choose `data-layout="fluid"` for a canvas/editor or `data-layout="dashboard"` for a centered overview/form. The shared wrapper supplies a 16px gutter and mode-specific gap (10px editor, 16px dashboard). Dashboard width caps at 1240px; add `data-width-tier="wide"` only when side-by-side content justifies 1640px, and document that reason. Use the `--workspace-*` tokens rather than per-tool outer padding or width overrides. See [the built-in mapping](docs/DESIGN_SYSTEM.md#workspace-geometry-168).
+
+Keep internal grids, panel resizing/collapse, pixel aspect/zoom and independent scrolling owned by the tool. Declare and test its viewport/document scroll breakpoint; the mode annotation does not choose one. Older unannotated extension wrappers retain their legacy geometry.
 
 ### Keyboard and accessibility contract
 

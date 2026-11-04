@@ -40,6 +40,36 @@ Rules:
 - Announcements: dialogs and toasts are covered by the shell (`App.modal`, `App.toast`); a `.status-line` that is the only report of a one-off result may use `role="status"`, but do not put live regions on text that updates during drags or sliders.
 - Document-save state uses `P8DocStatus` and `.doc-status` (see [EXTENDING.md](../EXTENDING.md#document-save-status)), not ad-hoc status lines.
 
+## Workspace geometry (#168)
+
+Every built-in workspace declares one of two outer layout modes on its existing `main` wrapper. Widths include the gutters (`border-box`); centering uses the available document width.
+
+| Mode | Markup | Width | Outer gap |
+| --- | --- | --- | --- |
+| Fluid editor | `data-layout="fluid"` | Full available width, no maximum | `--workspace-gap-editor`: 10px |
+| Centered dashboard/form | `data-layout="dashboard"` | `--workspace-width-default`: 1240px maximum | `--workspace-gap-dashboard`: 16px |
+
+Both modes use `--workspace-gutter` (16px) on all four edges. A dashboard can add `data-width-tier="wide"` for `--workspace-width-wide` (1640px): Palette compares images and settings side by side; Tile Maker compares source/output alongside a native sheet. This is a justified width tier within the dashboard mode, not a third mode. Editors retain maximum useful working area.
+
+| Workspace | Mode / ceiling | Existing scroll ownership |
+| --- | --- | --- |
+| Home | Dashboard / 1240px | Document |
+| Palette & Fades | Dashboard, wide / 1640px | Document |
+| Tile Maker | Dashboard, wide / 1640px | Document |
+| Data Tools | Dashboard / 1240px | Document |
+| Pixel Studio | Fluid | Independent panes above 860px; document at/below |
+| Map Editor | Fluid | Independent panes above 900px; document at/below |
+| Code Editor | Fluid | Independent panes above 900px; document at/below |
+| Minifier | Fluid | Independent panes above 699px; document at/below |
+| Project Audit | Fluid | Independent panes above 1000px; document at/below |
+| Cart Builder | Fluid | Independent panes above 1000px; document at/below |
+| Data Carts | Fluid | Independent panes above 1000px; document at/below |
+| Extra Tools (all four tabs) | Fluid | Independent panes above 1000px; document at/below |
+
+The shared rule governs only the outer wrapper. Keep specialized grids, panel widths/collapse, internal spacing, canvas aspect/zoom and scroll owners in tool styles. Legacy `.layout-*` geometry remains a fallback for extensions without the mode annotation; new tools must declare a mode. See [EXTENDING.md](../EXTENDING.md#workspace-geometry) and the [before/after checks](UX_RELEASE_CHECKLIST.md#workspace-geometry-168).
+
+Header alignment (#166), command/status rows (#169), the broader panel-breakpoint audit (#170) and a reusable visual-regression runner (#171) remain separate work.
+
 ## Data-cart workspace sizing (#167)
 
 Cart Builder and Data Carts share `.layout-dc` and the same body sizing rules in `css/suite.css`:
