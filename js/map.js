@@ -67,6 +67,7 @@
     sheet: $('#meSheet'),
     sheetName: $('#meSheetName'),
     sheetInfo: $('#meSheetInfo'),
+    sheetEmpty: $('#meSheetEmpty'),
     sheetReload: $('#meSheetReload'),
     brush: $('#meBrush'),
     brushInfo: $('#meBrushInfo'),
@@ -84,7 +85,35 @@
 
   let sheetCanvas = null;
   let mapCanvas = null;
+  let sheetBlank = false;     // #184: me.sheet is one color, so tiles are drawn as placeholders
 
+  /** Placeholder colors from the theme tokens (#184), read whenever the display sheet is built. */
+  function placeholderColors() {
+    const cs = getComputedStyle(document.documentElement);
+    const v = (name, fallback) => cs.getPropertyValue(name).trim() || fallback;
+    return { base: v('--surface-3', '#2b2b33'), hatch: v('--border-strong', '#4a4a55'), text: v('--text', '#fff') };
+  }
+
+  /**
+   * Draws the tile number centered in a placeholder cell of at least 16 CSS px (#184). View only.
+   */
+  function placeholderNumber(ctx, v, x, y, size) {
+    if (!sheetBlank || !v || size < 16) return;
+    ctx.save();
+    ctx.font = `${Math.max(7, Math.min(12, Math.floor(size / 2.2)))}px ui-monospace, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = placeholder.text;
+    ctx.fillText(String(v), x + size / 2, y + size / 2 + 0.5);
+    ctx.restore();
+  }
+  let placeholder = placeholderColors();
+
+  /**
+   * The sheet in its palette, used only for display. While the sheet is blank (#184) every tile except
+   * tile 0 (empty, never drawn by map()) is a hatched placeholder, so painting gives a visible result.
+   * me.sheet is never changed, and exports read me.sheet, so no output is affected.
+   */
   function buildSheetCanvas() {
     const h = sheetRows();
     sheetCanvas = document.createElement('canvas');
@@ -96,7 +125,23 @@
       const c = rgb[me.sheet[i] & 15];
       img.data.set([c[0], c[1], c[2], 255], i * 4);
     }
-    sheetCanvas.getContext('2d').putImageData(img, 0, 0);
+    const ctx = sheetCanvas.getContext('2d');
+    ctx.putImageData(img, 0, 0);
+    sheetBlank = M.isSheetBlank(me.sheet);
+    if (sheetBlank) {
+      placeholder = placeholderColors();
+      for (let ty = 0; ty < h / T; ty++) {
+        for (let tx = 0; tx < 16; tx++) {
+          if (!tx && !ty) continue;
+          ctx.fillStyle = placeholder.base;
+          ctx.fillRect(tx * T, ty * T, T, T);
+          ctx.fillStyle = placeholder.hatch;
+          for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) if ((x + y) % 4 === 0) ctx.fillRect(tx * T + x, ty * T + y, 1, 1);
+        }
+      }
+    }
+    dom.sheetInfo.hidden = sheetBlank;
+    dom.sheetEmpty.hidden = !sheetBlank;
   }
 
   /** Redraws map cells x0..x1, y0..y1 (inclusive) into the 1:1 map image. */
@@ -181,6 +226,17 @@
     ctx.strokeStyle = 'rgba(255,255,255,0.35)';
     ctx.strokeRect(Math.round(me.panX) - 0.5, Math.round(me.panY) - 0.5, Math.round(W) + 1, Math.round(H) + 1);
 
+    // #184: placeholder cells carry their tile number (unless the Numbers overlay already shows it)
+    if (sheetBlank && !(me.numbers && z * T >= 22) && z * T >= 16) {
+      const [x0, y0] = cellAt(0, 0, false);
+      const [x1, y1] = cellAt(dom.stage.clientWidth, dom.stage.clientHeight, false);
+      for (let y = Math.max(0, y0); y <= Math.min(me.map.h - 1, y1); y++) {
+        for (let x = Math.max(0, x0); x <= Math.min(me.map.w - 1, x1); x++) {
+          const v = me.map.cells[y * me.map.w + x];
+          if ((v >> 4) * T < sheetRows()) placeholderNumber(ctx, v, me.panX + x * T * z, me.panY + y * T * z, T * z);
+        }
+      }
+    }
     if (me.numbers && z * T >= 22) {
       ctx.font = `${Math.min(12, Math.floor(z * T / 2.4))}px ui-monospace, monospace`;
       ctx.textBaseline = 'top';
@@ -255,6 +311,7 @@
     for (let y = 1; y < h / T; y++) { ctx.moveTo(0, y * 16 + 0.5); ctx.lineTo(c.width, y * 16 + 0.5); }
     ctx.strokeStyle = 'rgba(255,255,255,0.10)';
     ctx.stroke();
+    if (sheetBlank) for (let v = 1; v < (h / T) * 16 && v < 256; v++) placeholderNumber(ctx, v, (v & 15) * 16, (v >> 4) * 16, 16);
     // the four PICO-8 sprite tabs (64 sprites each)
     ctx.beginPath();
     for (let y = 32; y < h; y += 32) { ctx.moveTo(0, y * SHEET_SCALE + 0.5); ctx.lineTo(c.width, y * SHEET_SCALE + 0.5); }
@@ -278,7 +335,10 @@
     c.style.width = `${c.width}px`;
     const ctx = c.getContext('2d');
     ctx.imageSmoothingEnabled = false;
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) drawTile(ctx, cells[y * w + x], x * T * scale, y * T * scale, T * scale, T * scale);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      drawTile(ctx, cells[y * w + x], x * T * scale, y * T * scale, T * scale, T * scale);
+      placeholderNumber(ctx, cells[y * w + x], x * T * scale, y * T * scale, T * scale);
+    }
     dom.brushInfo.textContent = w === 1 && h === 1 ? `tile ${cells[0]}` : `${w}×${h} tiles${me.sheetSel ? ` from ${cells[0]}` : ' (from the map)'}`;
   }
 
@@ -1183,4 +1243,8 @@
   bind();
   renderAll();
   restoreSession();
+  // #184: placeholder colors follow the theme (toggle or system setting)
+  const rethemePlaceholders = () => { if (sheetBlank) rebuildAll(); };
+  new MutationObserver(rethemePlaceholders).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', rethemePlaceholders);
 })();
