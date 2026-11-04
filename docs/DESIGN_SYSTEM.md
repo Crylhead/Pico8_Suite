@@ -51,13 +51,13 @@ The header has separate navigation and menu/context slots. Tool-specific context
 | Menu/context at or below 640px | Existing logo/Find tool navigation; reserve two 26px menu lines and a separate 28px context row (`--chrome-context-height`), including when empty. This deliberately trades a little height for stable tool switches and reachable controls. |
 | Project / preset context | Shares the bounded menu rail with indices; names ellipsize without widening navigation. Full project/access text stays in the live status and title. Consumer project strips and Home notes wrap long names. |
 | Popovers | Preserve anchored menus and keyboard behavior; fit horizontally inside the page with an 8px inset and vertically inside the remaining viewport. Long lists scroll; opening or resizing refits the popover. |
-| Scrollbar rail | Root `scrollbar-gutter: stable` reserves classic scrollbar space across document/pane tools. Overlay-scrollbar browsers use their normal behavior. All workspace centering uses available document width, not an assumed viewport width. |
+| Scrollbar rail | `#workspaceHost` below both app bars owns outer scrolling and `scrollbar-gutter: stable`; the header always spans the full viewport. Overlay-scrollbar browsers use their normal behavior. All workspace centering uses available workspace-host width, not an assumed viewport width. |
 
 At standard font settings the total header is 82px above 640px and 134px at/below 640px, including borders. These are measured outcomes of minimum row sizes, not clipped fixed-height containers; enlarged/custom fonts may require more space. Menu labels keep wrapping available, and no workspace hides global menus or navigation to fit. Same-width workspace and project-state switches must preserve primary-control DOMRects and the content top. See [the recorded browser checks](UX_RELEASE_CHECKLIST.md#shared-header-geometry-166).
 
 ## Workspace geometry (#168)
 
-Every built-in workspace declares one of two outer layout modes on its existing `main` wrapper. Widths include the gutters (`border-box`); centering uses the available document width.
+Every built-in workspace declares one of two outer layout modes on its existing `main` wrapper. Widths include the gutters (`border-box`); centering uses the available workspace-host width.
 
 | Mode | Markup | Width | Outer gap |
 | --- | --- | --- | --- |
@@ -68,18 +68,18 @@ Both modes use `--workspace-gutter` (16px) on all four edges. A dashboard can ad
 
 | Workspace | Mode / ceiling | Existing scroll ownership |
 | --- | --- | --- |
-| Home | Dashboard / 1240px | Document |
-| Palette & Fades | Dashboard, wide / 1640px | Document |
-| Tile Maker | Dashboard, wide / 1640px | Document |
-| Data Tools | Dashboard / 1240px | Document |
-| Pixel Studio | Fluid | Independent panes above 860px; document at/below |
-| Map Editor | Fluid | Independent panes above 900px; document at/below |
-| Code Editor | Fluid | Independent panes above 900px; document at/below |
-| Minifier | Fluid | Independent panes above 699px; document at/below |
-| Project Audit | Fluid | Independent panes above 1000px; document at/below |
-| Cart Builder | Fluid | Independent panes above 1000px; document at/below |
-| Data Carts | Fluid | Independent panes above 1000px; document at/below |
-| Extra Tools (all four tabs) | Fluid | Independent panes above 1000px; document at/below |
+| Home | Dashboard / 1240px | Workspace host |
+| Palette & Fades | Dashboard, wide / 1640px | Workspace host |
+| Tile Maker | Dashboard, wide / 1640px | Workspace host |
+| Data Tools | Dashboard / 1240px | Workspace host |
+| Pixel Studio | Fluid | Independent panes above 860px; workspace host at/below |
+| Map Editor | Fluid | Independent panes above 900px; workspace host at/below |
+| Code Editor | Fluid | Independent panes above 900px; workspace host at/below |
+| Minifier | Fluid | Independent panes above 699px; workspace host at/below |
+| Project Audit | Fluid | Independent panes above 1000px; workspace host at/below |
+| Cart Builder | Fluid | Independent panes above 1000px; workspace host at/below |
+| Data Carts | Fluid | Independent panes above 1000px; workspace host at/below |
+| Extra Tools (all four tabs) | Fluid | Independent panes above 1000px; workspace host at/below |
 
 The shared rule governs only the outer wrapper. Keep specialized grids, panel widths/collapse, internal spacing, canvas aspect/zoom and scroll owners in tool styles. Legacy `.layout-*` geometry remains a fallback for extensions without the mode annotation; new tools must declare a mode. See [EXTENDING.md](../EXTENDING.md#workspace-geometry) and the [before/after checks](UX_RELEASE_CHECKLIST.md#workspace-geometry-168).
 
@@ -87,7 +87,7 @@ Responsive panel and scroll behavior is documented below (#170). Use the [opt-in
 
 ## Responsive panels and scroll ownership (#170)
 
-Tool breakpoints reflect different working-area needs; do not unify them. Above each stacking breakpoint the document stays fixed and tool panes scroll independently; at/below it the document scrolls. Explicit inner lists/cart rows can still scroll in narrow mode. The root scrollbar rail and workspace gutters remain shared.
+Tool breakpoints reflect different working-area needs; do not unify them. The document stays fixed at every breakpoint. Above each stacking breakpoint tool panes scroll independently; at/below it the workspace host scrolls. Explicit inner lists/cart rows can still scroll in narrow mode. The workspace scrollbar rail and workspace gutters remain shared.
 
 | Tool | Stacks at/below (CSS px) | Desktop side/control width |
 | --- | --- | --- |
@@ -101,7 +101,7 @@ Tool breakpoints reflect different working-area needs; do not unify them. Above 
 
 The resizable panels share a 320px minimum **center grid track**, leaving 318px inside Pixel/Map's existing 1px borders. Bounds use border-box width minus computed horizontal padding/borders. Only then subtract fixed toolbar columns/gaps (52px + two 10px gaps for Pixel/Map; one 10px gap for Terrain). Outer gutters must never be counted as stage room. This fixes the formerly 298px center/296px canvas at the first desktop width.
 
-A saved width is the user's preference, not the currently clamped width. Narrowing or switching tools may temporarily limit it; widening restores it. A stored collapse is ignored while stacked: the controls are visible, are not inert, and can be reached through document scrolling. The collapsed state resumes on resize-back; Enter/toggle restores the chosen width. Reset removes that preference and returns to the current CSS default, including Studio's 1100px preset transition. Storage format and the #64 resize model are unchanged.
+A saved width is the user's preference, not the currently clamped width. Narrowing or switching tools may temporarily limit it; widening restores it. A stored collapse is ignored while stacked: the controls are visible, are not inert, and can be reached through workspace scrolling. The collapsed state resumes on resize-back; Enter/toggle restores the chosen width. Reset removes that preference and returns to the current CSS default, including Studio's 1100px preset transition. Storage format and the #64 resize model are unchanged.
 
 Extra Tools' tab group wraps within its available width at small sizes instead of extending the document. Keyboard tab selection/order is unchanged. Use the [repeatable audit and manual fallback](GEOMETRY_SMOKE.md#panel-breakpoint-audit-170) and [recorded measurements/screenshots](UX_RELEASE_CHECKLIST.md#panel-breakpoint-stability-170).
 
@@ -162,3 +162,9 @@ Palette cards share caption, image, action and settings rows. Preview images rem
 | Other workspaces | Unchanged; adopt when touched |
 
 Verification for the pilot: computed styles of every fieldset, legend, info line, button, segment, field and select in the four Extra Tools were identical to `main` in both themes; only the error line changed (contrast-safe colour plus ⚠).
+
+## Shared workspace scrolling (#180)
+
+All built-in `main` elements are direct children of the focusable `#workspaceHost`, a flex child below `.appbar`. The document never scrolls, including small/short windows. Classic scrollbar space is reserved inside this host, so navigation widths and the top of the vertical rail stay identical across tools. Dialogs, menus and Library remain outside the scroll host.
+
+Dashboards grow naturally inside the host. Desktop editors fill it and retain their internal pane scrollers; stacked editors grow inside it. Outer offsets are remembered per tool and Extra Tools tab during the session, and a first visit starts at the top. Page Up/Down from the shared header moves focus into a scrollable workspace; native scrolling from focused inputs/panes remains intact.

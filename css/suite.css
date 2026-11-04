@@ -278,7 +278,6 @@ canvas.thumb {
 /* Pixel Studio                                                       */
 /* ------------------------------------------------------------------ */
 
-body[data-workspace="studio"] { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 
 .layout-studio {
   flex: 1 1 auto;
@@ -572,7 +571,6 @@ body[data-workspace="studio"] { height: 100vh; height: 100dvh; display: flex; fl
 }
 
 @media (max-width: 860px) {
-  body[data-workspace="studio"] { height: auto; display: block; overflow: visible; }
   .layout-studio {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto 70vh auto auto;
@@ -629,7 +627,6 @@ body[data-workspace="studio"] { height: 100vh; height: 100dvh; display: flex; fl
 /* Map Editor (reuses the Pixel Studio panels)                        */
 /* ------------------------------------------------------------------ */
 
-body[data-workspace="map"] { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 .layout-map {
   flex: 1 1 auto;
   min-height: 0;
@@ -653,7 +650,6 @@ body[data-workspace="map"] { height: 100vh; height: 100dvh; display: flex; flex-
 .me-presets { display: flex; flex-wrap: wrap; gap: 6px; }
 
 @media (max-width: 900px) {
-  body[data-workspace="map"] { height: auto; display: block; overflow: visible; }
   .layout-map { grid-template-columns: minmax(0, 1fr); grid-template-areas: "tools" "main" "side"; }
   .layout-map .ps-toolbar { flex-direction: row; }
   .layout-map .ps-main { height: 70vh; }
@@ -685,7 +681,6 @@ body[data-workspace="map"] { height: 100vh; height: 100dvh; display: flex; flex-
   --ce-same: rgba(29, 43, 83, 0.1); --ce-bracket: rgba(255, 163, 0, 0.35); --ce-hit: rgba(255, 163, 0, 0.3); --ce-hit-cur: rgba(255, 163, 0, 0.65);
 }
 
-body[data-workspace="code"] { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 .layout-code {
   flex: 1 1 auto;
   min-height: 0;
@@ -783,7 +778,6 @@ body[data-workspace="code"] { height: 100vh; height: 100dvh; display: flex; flex
 .ce-fn-args { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
 
 @media (max-width: 900px) {
-  body[data-workspace="code"] { height: auto; display: block; overflow: visible; }
   .layout-code { grid-template-columns: minmax(0, 1fr); }
   .ce-main { height: 75vh; }
 }
@@ -813,7 +807,6 @@ body[data-workspace="code"] { height: 100vh; height: 100dvh; display: flex; flex
 /* Project Audit                                                      */
 /* ------------------------------------------------------------------ */
 
-body[data-workspace="audit"] { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 .layout-audit {
   flex: 1 1 auto;
   min-height: 0;
@@ -880,7 +873,6 @@ body[data-workspace="audit"] { height: 100vh; height: 100dvh; display: flex; fle
 /* Extra Tools                                                        */
 /* ------------------------------------------------------------------ */
 
-body[data-workspace="extras"] { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 .layout-extras { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 10px; }
 .layout-extras .card { padding: 10px; }
 .ex-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
@@ -963,7 +955,6 @@ body[data-workspace="extras"] { height: 100vh; height: 100dvh; display: flex; fl
 .tl-simple { display: flex; flex-direction: column; gap: 8px; }
 
 @media (max-width: 1000px) {
-  body[data-workspace="audit"], body[data-workspace="extras"] { height: auto; display: block; overflow: visible; }
   .layout-audit { min-height: calc(100dvh - 60px); grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(320px, 60vh) auto; grid-template-areas: "top" "main" "side"; }
   .ex-split, .tl-split { grid-template-columns: minmax(0, 1fr); }
   .ex-stage canvas { min-height: 0; height: min(70vh, 560px); flex: none; }
@@ -980,8 +971,6 @@ body[data-workspace="extras"] { height: 100vh; height: 100dvh; display: flex; fl
 /* Data Carts / Cart Builder: shared viewport and responsive scrolling */
 /* ------------------------------------------------------------------ */
 
-body[data-workspace="cartbuilder"],
-body[data-workspace="datacarts"] { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 .layout-dc { flex: 1 1 auto; min-height: 0; display: grid; gap: 10px; padding: 10px; grid-template-columns: 280px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "top top" "side main"; }
 .layout-dc .card { padding: 10px; }
 .dc-top { --bar-expanded-command: 112px; grid-area: top; }
@@ -1027,8 +1016,6 @@ body[data-workspace="datacarts"] { height: 100vh; height: 100dvh; display: flex;
 .dc-pack-btns { display: flex; gap: 4px; }
 
 @media (max-width: 1000px) {
-  body[data-workspace="cartbuilder"],
-  body[data-workspace="datacarts"] { height: auto; display: block; overflow: visible; }
   .layout-dc { grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "side" "main"; padding: 8px 16px; }
   .dc-list, .cb-parts { max-height: 240px; }
   .dc-grid { grid-template-columns: minmax(0, 1fr); }
@@ -1174,3 +1161,15 @@ body[data-workspace="datacarts"] { height: 100vh; height: 100dvh; display: flex;
 .home-task { text-align: left; font: inherit; color: inherit; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 10px; min-height: 44px; cursor: pointer; display: grid; gap: 2px; }
 .home-task:hover { border-color: var(--accent); }
 .home-task:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* One scroll boundary for the whole Suite (#180), always below both header rows. */
+html { height: 100%; overflow: hidden; }
+body { position: fixed; inset: 0; height: 100vh; height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.workspace-host { flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; overscroll-behavior: contain; }
+.workspace-host > main { flex: none; }
+/* These tools fit the host on desktop; their specialized panes own local overflow. */
+body:is([data-workspace="studio"], [data-workspace="map"], [data-workspace="code"], [data-workspace="audit"], [data-workspace="extras"], [data-workspace="cartbuilder"], [data-workspace="datacarts"], [data-workspace="minifier"]) .workspace-host > main:not([hidden]) { flex: 1 0 auto; min-height: 100%; }
+@media (min-width: 861px) { body[data-workspace="studio"] .workspace-host > .layout-studio:not([hidden]) { flex: 1 1 0; min-height: 0; } }
+@media (min-width: 901px) { body:is([data-workspace="map"], [data-workspace="code"]) .workspace-host > :is(.layout-map, .layout-code):not([hidden]) { flex: 1 1 0; min-height: 0; } }
+@media (min-width: 1001px) { body:is([data-workspace="audit"], [data-workspace="extras"], [data-workspace="cartbuilder"], [data-workspace="datacarts"]) .workspace-host > :is(.layout-audit, .layout-extras, .layout-dc):not([hidden]) { flex: 1 1 0; min-height: 0; } }
+@media (min-width: 700px) { body[data-workspace="minifier"] .workspace-host > .layout-minifier:not([hidden]) { flex: 1 1 0; min-height: 0; } }

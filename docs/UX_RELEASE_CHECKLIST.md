@@ -249,3 +249,11 @@ The [opt-in panel audit](GEOMETRY_SMOKE.md#panel-breakpoint-audit-170) passed **
 All 208 primary Studio/Map canvas samples match bitmap/display scale ratios within rounding (maximum x/y scale difference 0.0004); loaded image/Lua/Minifier input stays unchanged during viewport/tool switching. A separate real-pointer check resized Studio, Map and Terrain (560→494, 560→494, 640→574px), preserved the minimum center and did not draw into the canvas. The core gutter/border calculation has a regression test. All 347 regression tests and syntax/static checks passed (477 IDs/52 references).
 
 The automated 640px case is a reflow/pixel-density equivalent of a 1280×900 window at 200%, not physical browser zoom. Native Windows/macOS, touch and physical zoom were not exercised. Internal scrollable lists/command regions and native cart-chart scrolling remain deliberate; this fix does not force all tools into one breakpoint or replace the #64 persistence model.
+
+## Shared workspace scroll boundary (#180)
+
+The screenshot follow-up supersedes the older document/pane ownership contract: every outer scrollbar now begins below both app bars. The root stays fixed at all breakpoints; desktop editor panes still scroll locally. Per-tool and Extra Tools tab offsets are retained in the session.
+
+Validation in Chromium 153 on Linux: 720 geometry cases, light/dark, both project states, forward/reverse visits at 360/768/1280/1920, 1536×712 with DPR 1.25, and 640×450 with DPR 2. All passed with classic scrollbar gutter reservation enabled (15 CSS px in this runtime). The latter two cases emulate density/reflow, not physical Windows/browser zoom. The focused interaction check passed first visits, tool/subtool offset restoration, Page Down from the header, fixed header bounds and unchanged loaded Code/Studio/Minifier documents. Static references and 348 JS regressions passed.
+
+Reproduce with `tests/geometry-smoke.mjs`, `tests/panel-breakpoints.mjs` and `tests/workspace-scroll.mjs` using the existing browser configuration in [GEOMETRY_SMOKE.md](GEOMETRY_SMOKE.md). Physical Windows native scrollbar rendering remains a user-side check.

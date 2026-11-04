@@ -1096,6 +1096,7 @@
   for (const [k, t] of Object.entries(tools)) { t.panel.dataset.ex = k; dom.body.append(t.panel); }
 
   function setTab(t) {
+    if (t !== tab) App.rememberWorkspaceScroll?.();
     tab = t;
     store.set(KEYS.tab, t);
     for (const b of dom.tabs.querySelectorAll('[data-value]')) b.setAttribute('aria-checked', String(b.dataset.value === t));

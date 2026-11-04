@@ -14,6 +14,7 @@ export const SCENARIOS = Object.freeze([
   { id: '360', width: 360, height: 900, scale: 1 },
   { id: '768', width: 768, height: 900, scale: 1 },
   { id: '1280', width: 1280, height: 900, scale: 1 },
+  { id: '1536-125', width: 1536, height: 712, scale: 1.25 },
   { id: '1920', width: 1920, height: 900, scale: 1 },
   { id: '200-equivalent', width: 640, height: 450, scale: 2 },
 ]);
@@ -32,6 +33,9 @@ export function checkGeometry(rows) {
     if (!close(r.main.y, r.chrome.header.y + r.chrome.header.height)) fail(r, 'Content top differs from header bottom');
     if (!r.padding.every(v => close(v, 16)) || !close(r.gap, ceiling ? 16 : 10)) fail(r, 'Shared gutter/gap differs from the geometry contract');
     if (!close(r.firstRail, r.main.x + 16)) fail(r, 'Major content does not start on the shared rail');
+    if (!r.host || !close(r.host.y, r.chrome.header.height) || !close(r.host.height, r.viewport.height-r.chrome.header.height)) fail(r, 'Workspace scroll host must fill the area below the header');
+    if (r.rootY || r.scrolledRootY || r.rootHeight > r.viewport.height+1) fail(r, 'Document scrolling must stay disabled');
+    if (r.hostScrollWidth > r.contentWidth+1) fail(r, 'Horizontal workspace overflow');
     if (r.pageWidth > r.viewport.width + 1) fail(r, 'Horizontal page overflow');
     const required = r.ws === 'home' ? [] : ['palette', 'data'].includes(r.ws) ? ['heading'] : ['command'];
     if (['studio', 'map', 'code'].includes(r.ws) || r.sub === 'terrain') required.push('status');
@@ -84,7 +88,8 @@ export function measurePage() {
   const chrome = Object.fromEntries(Object.entries({ header: '.appbar', brand: '.brand', nav: '#wsTabs', find: '#wsFind', library: '#libraryBtn', theme: '#themeToggle', menus: '.appbar-menus' }).map(([key, selector]) => [key, rect(document.querySelector(selector))]));
   const main = document.querySelector(`main[data-ws="${document.body.dataset.workspace}"]`), style = getComputedStyle(main);
   const collect = (selector, role) => [...main.querySelectorAll(selector)].filter(visible).map(n => ({ role, id: n.id || n.className, rect: rect(n), scrollWidth: n.scrollWidth, clientWidth: n.clientWidth }));
-  return { viewport: { width: innerWidth, height: innerHeight, scale: devicePixelRatio }, contentWidth: document.body.clientWidth,
+  return { viewport: { width: innerWidth, height: innerHeight, scale: devicePixelRatio }, contentWidth: document.getElementById('workspaceHost').clientWidth,
+    host: rect(document.getElementById('workspaceHost')), rootY: scrollY, rootHeight: document.documentElement.scrollHeight, hostScrollWidth: document.getElementById('workspaceHost').scrollWidth,
     chrome, main: rect(main), padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft].map(parseFloat), gap: parseFloat(style.gap),
     firstRail: Math.min(...[...main.children].filter(n => visible(n) && getComputedStyle(n).position !== 'absolute').map(n => rect(n).x)),
     pageWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth), scrollHeight: document.documentElement.scrollHeight,
@@ -149,19 +154,19 @@ export async function run() {
     const baselinePath = path.resolve(process.argv[baselineIndex + 1]);
     if (baselinePath === path.join(out, 'geometry.json')) throw Error('Use separate baseline and output directories');
     baseline = JSON.parse(await fs.readFile(baselinePath, 'utf8'));
-    if (baseline.version !== 1 || !Array.isArray(baseline.rows) || !baseline.rows.length || baseline.failures?.length) throw Error('Baseline must be a successful version 1 geometry report');
+    if (baseline.version !== 2 || !Array.isArray(baseline.rows) || !baseline.rows.length || baseline.failures?.length) throw Error('Baseline must be a successful version 2 geometry report');
   }
   await fs.mkdir(out, { recursive: true });
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const { server, url } = await serve(root);
   let browser;
-  const report = { version: 1, created: new Date().toISOString(), scenarios: SCENARIOS, rows: [], errors: [], failures: [], notes: ['200% case emulates reflow and pixel density, not physical browser zoom.', 'Command/status role heights follow the shared bar contract; expanded tool rows remain intentional.'] };
+  const report = { version: 2, created: new Date().toISOString(), scenarios: SCENARIOS, rows: [], errors: [], failures: [], notes: ['200% case emulates reflow and pixel density, not physical browser zoom.', 'Command/status role heights follow the shared bar contract; expanded tool rows remain intentional.'] };
   try { report.commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
   catch { report.commit = null; }
   try {
     browser = await playwright.chromium.launch({ headless: true, ...(process.env.P8_GEOMETRY_BROWSER_EXECUTABLE ? { executablePath: process.env.P8_GEOMETRY_BROWSER_EXECUTABLE } : {}), args: JSON.parse(process.env.P8_GEOMETRY_BROWSER_ARGS || '[]') });
     report.browser = browser.version();
-    for (const scale of [1, 2]) {
+    for (const scale of new Set(SCENARIOS.map(s => s.scale))) {
       const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: scale, reducedMotion: 'reduce' });
       const page = await context.newPage();
       page.on('pageerror', err => report.errors.push(err.message));
@@ -180,17 +185,17 @@ export async function run() {
             else await P8App.projectContextPublisher.select({ name: 'geometry_project_with_a_long_name_and_access_context', source: 'code' });
           }, { theme, project });
           for (const cycle of [0, 1]) for (const view of (cycle ? contexts.slice().reverse() : contexts)) {
-            await page.evaluate(view => { P8App.setWorkspace(view.ws, { persist: false }); if (view.sub) document.querySelector(`#exTabs [data-value="${view.sub}"]`).click(); scrollTo(0, 0); }, view);
+            await page.evaluate(view => { P8App.setWorkspace(view.ws, { persist: false }); if (view.sub) document.querySelector(`#exTabs [data-value="${view.sub}"]`).click(); document.getElementById('workspaceHost').scrollTo(0, 0); }, view);
             if (view.ws === 'minifier') await page.waitForFunction(() => Suite.minifier.getState().enginePhase !== 'loading', null, { timeout: 30000 });
             // Let resize observers and responsive tool rendering settle before measuring.
             await page.waitForTimeout(150);
             const measured = await page.evaluate(measurePage);
-            await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+            await page.evaluate(() => document.getElementById('workspaceHost').scrollTo(0, document.getElementById('workspaceHost').scrollHeight));
             await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
             const scrolled = await page.evaluate(measurePage);
             const scrolledY = await page.evaluate(() => scrollY);
-            await page.evaluate(() => scrollTo(0, 0));
-            report.rows.push({ scenario: scenario.id, theme, project, cycle, ...view, ...measured, scrolledChrome: scrolled.chrome, scrolledY });
+            await page.evaluate(() => document.getElementById('workspaceHost').scrollTo(0, 0));
+            report.rows.push({ scenario: scenario.id, theme, project, cycle, ...view, ...measured, scrolledChrome: scrolled.chrome, scrolledRootY: scrolledY });
             if (process.argv.includes('--screenshots') && scenario.id === '1280' && project === 'long' && cycle === 0) await page.screenshot({ path: path.join(out, `${theme}-${view.ws}-${view.sub || 'main'}.png`) });
           }
         }

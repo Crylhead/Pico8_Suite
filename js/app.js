@@ -2285,6 +2285,34 @@
   const shortcutHandlers = {};
   const APP_TITLE = document.title;
 
+  // Remember outer offsets before hiding a view: hiding it can clamp the host scroll.
+  const workspaceScroll = new Map(), lastWorkspaceView = new Map();
+  let changingWorkspace = false;
+  function rememberWorkspaceScroll(host) {
+    if (host?.dataset.view) workspaceScroll.set(host.dataset.view, { top: host.scrollTop, left: host.scrollLeft });
+  }
+  function restoreWorkspaceScroll(host) {
+    const saved = workspaceScroll.get(host.dataset.view);
+    host.scrollTo({ top: saved?.top || 0, left: saved?.left || 0, behavior: 'instant' });
+  }
+  function setWorkspaceView(ws, sub) {
+    const host = document.getElementById('workspaceHost'), key = sub ? `${ws}/${sub}` : ws;
+    if (host && host.dataset.view !== key) {
+      host.dataset.view = key;
+      if (!changingWorkspace) restoreWorkspaceScroll(host);
+    }
+    lastWorkspaceView.set(ws, key);
+  }
+  document.addEventListener('keydown', (event) => {
+    if (!['PageDown', 'PageUp'].includes(event.key) || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.defaultPrevented) return;
+    if (document.querySelector('dialog[open], .menu.open')) return;
+    if (event.target !== document.body && !event.target.closest?.('.appbar')) return;
+    const host = document.getElementById('workspaceHost');
+    if (!host || host.scrollHeight <= host.clientHeight + 1) return;
+    event.preventDefault();
+    host.focus({ preventScroll: true });
+    host.scrollBy({ top: host.clientHeight * 0.9 * (event.key === 'PageDown' ? 1 : -1), behavior: 'instant' });
+  });
   /**
    * Shows workspace `ws`. `sub` names a part of it (an Extra Tools tab): it is passed on in the
    * `p8:workspace` event detail {ws, sub} and the address becomes #ws/sub (see js/nav-core.js).
@@ -2292,6 +2320,10 @@
   function setWorkspace(ws, { persist = true, sub = null } = {}) {
     if (!workspaces().includes(ws)) { ws = 'home'; sub = null; }
     const focused = document.activeElement;
+    const host = document.getElementById('workspaceHost');
+    rememberWorkspaceScroll(host);
+    changingWorkspace = true;
+    if (host) host.dataset.view = sub ? `${ws}/${sub}` : lastWorkspaceView.get(ws) || ws;
     document.body.dataset.workspace = ws;
     for (const main of document.querySelectorAll('main[data-ws]')) main.hidden = main.dataset.ws !== ws;
     for (const node of document.querySelectorAll('[data-show]')) node.hidden = !node.dataset.show.split(/\s+/).includes(ws);
@@ -2311,11 +2343,14 @@
       setRoute(ws, sub);
     }
     emit('p8:workspace', { ws, sub });
+    changingWorkspace = false;
+    if (host) restoreWorkspaceScroll(host);
   }
 
   /** the address for a deep link to the current view; only while `ws` is the open workspace */
   function setRoute(ws, sub = null) {
     if (document.body.dataset.workspace !== ws) return;
+    setWorkspaceView(ws, sub);
     const hash = P8Nav.formatRoute(ws, sub);
     if (location.hash !== hash) history.replaceState(null, '', hash);
   }
@@ -2443,6 +2478,7 @@
     setSlider,
     setWorkspace,
     setRoute,
+    rememberWorkspaceScroll: () => { if (!changingWorkspace) rememberWorkspaceScroll(document.getElementById('workspaceHost')); },
     setCustomPalette,
     loadPreviewImageData,
     adoptImagePalette,

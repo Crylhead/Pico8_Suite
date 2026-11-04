@@ -8,7 +8,7 @@ function sample(ws = 'home', cycle = 0) {
   chrome.header = box(0, 0, 1265, 82);
   return { scenario: '1280', theme: 'light', project: 'none', cycle, ws, viewport: { width: 1280, height: 900 }, contentWidth: 1265,
     main: box(x, 82, width, 818), firstRail: x + 16, padding: [16, 16, 16, 16], gap: ceiling ? 16 : 10, pageWidth: 1280,
-    chrome, scrolledChrome: structuredClone(chrome), rows: ['command', 'heading', 'status'].map(role => ({ role, rect: box(16, 98, 100, 28) })), stages: [{ rect: box(16, 150, 400, 500) }], canvases: [{ rect: box(16, 150, 128, 128) }],
+    host: box(0,82,1280,818), rootY:0, scrolledRootY:0, rootHeight:900, hostScrollWidth:1265, chrome, scrolledChrome: structuredClone(chrome), rows: ['command', 'heading', 'status'].map(role => ({ role, rect: box(16, 98, 100, 28) })), stages: [{ rect: box(16, 150, 400, 500) }], canvases: [{ rect: box(16, 150, 128, 128) }],
   };
 }
 
@@ -45,4 +45,11 @@ t('#171 saved baseline detects consistent bar/canvas changes and incomplete matr
   assert.match(failures, /canvases differ/);
   assert.match(failures, /case was not captured/);
   assert.match(compareBaseline(baseline, current).join('\n'), /missing baseline case/);
+});
+
+t('#180 geometry rejects document scrolling and an outer scrollbar crossing the app header', async () => {
+ const {checkGeometry} = await import('./geometry-smoke.mjs');
+ const row=sample(); row.host.y=0; row.rootHeight=1800; row.scrolledRootY=500;
+ const failures=checkGeometry([row]).join('\n');
+ assert.match(failures,/below the header/); assert.match(failures,/Document scrolling/);
 });
