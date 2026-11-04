@@ -1,5 +1,4 @@
 /* MIN-03: native comparison shell; colors, controls and focus use Suite primitives. */
-body[data-workspace="minifier"] { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 .layout-minifier {
   flex: 1 1 auto; min-height: 0; display: grid; gap: var(--space-5); padding: var(--space-5);
   grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
@@ -62,7 +61,6 @@ body[data-workspace="minifier"] { height: 100vh; height: 100dvh; display: flex; 
 @media (max-width: 699px) {
   .mn-metrics th:first-child { width: 30%; }
   .mn-metrics th, .mn-metrics td { padding: var(--space-2); }
-  body[data-workspace="minifier"] { height: auto; display: block; overflow: visible; }
   .layout-minifier { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
   .mn-options, .mn-results { overflow: visible; }
   .mn-code-views { flex: none; grid-template-columns: minmax(0, 1fr); }

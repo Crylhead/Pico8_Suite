@@ -8,7 +8,7 @@ A tool is a workspace (`<main data-ws="...">`) plus a script that registers itse
 <!-- tab (in #wsTabs): a 20×20 icon; the shell adds the visible name on wide screens. Place it near the tools of its category; registerTool re-sorts the bar by category. -->
 <button role="radio" data-value="mytool" aria-checked="false" title="My Tool" aria-label="My Tool"><svg viewBox="0 0 20 20" aria-hidden="true">…</svg></button>
 
-<!-- workspace -->
+<!-- workspace: direct child of #workspaceHost -->
 <main class="layout-mytool" data-ws="mytool" data-layout="fluid" hidden> … </main>
 
 <!-- optional menu, only visible in this workspace -->
@@ -21,7 +21,7 @@ Every element with `data-show="ws1 ws2"` is hidden outside the listed workspaces
 
 Choose `data-layout="fluid"` for a canvas/editor or `data-layout="dashboard"` for a centered overview/form. The shared wrapper supplies a 16px gutter and mode-specific gap (10px editor, 16px dashboard). Dashboard width caps at 1240px; add `data-width-tier="wide"` only when side-by-side content justifies 1640px, and document that reason. Use the `--workspace-*` tokens rather than per-tool outer padding or width overrides. See [the built-in mapping](docs/DESIGN_SYSTEM.md#workspace-geometry-168).
 
-Keep internal grids, panel resizing/collapse, pixel aspect/zoom and independent scrolling owned by the tool. Declare and test its viewport/document scroll breakpoint; the mode annotation does not choose one. Older unannotated extension wrappers retain their legacy geometry.
+Keep internal grids, panel resizing/collapse, pixel aspect/zoom and independent scrolling owned by the tool. Keep the workspace inside `#workspaceHost`; never enable root/body scrolling. Declare and test its pane/stacked-host scroll breakpoint; the mode annotation does not choose one. Older unannotated extension wrappers retain their legacy geometry.
 
 ### Shared header slots
 

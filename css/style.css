@@ -100,8 +100,7 @@
 [hidden] { display: none !important; }
 
 html, body { margin: 0; }
-/* Reserve the classic scrollbar rail across document- and pane-scrolling tools. */
-html { scrollbar-gutter: stable; }
+/* The workspace host owns the scrollbar below the shared chrome. */
 
 body {
   background: var(--bg);
@@ -129,8 +128,8 @@ kbd {
 /* ------------------------------------------------------------------ */
 
 .appbar {
-  position: sticky;
-  top: 0;
+  position: relative;
+  flex: none;
   z-index: 20;
   display: flex;
   flex-direction: column;

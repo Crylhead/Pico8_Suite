@@ -64,8 +64,8 @@ async function run() {
             const [w, h] = canvas.bitmap;
             assert(canvas.rect.width > 0 && canvas.rect.height > 0 && Math.abs(w / canvas.rect.width - h / canvas.rect.height) < 0.01, key + ': primary canvas bitmap/display aspect changed');
           }
-          const scroll = await page.evaluate(() => ({ height: document.documentElement.scrollHeight, viewport: innerHeight, body: getComputedStyle(document.body).overflowY }));
-          assert(desktop ? scroll.body === 'hidden' && scroll.height <= scroll.viewport + 1 : scroll.body !== 'hidden', key + ': unexpected page/pane scroll ownership');
+          const scroll = await page.evaluate(() => ({ height: document.documentElement.scrollHeight, viewport: innerHeight, host: document.getElementById('workspaceHost').getBoundingClientRect().y, header: document.querySelector('.appbar').getBoundingClientRect().bottom, body: getComputedStyle(document.body).overflowY }));
+          assert(scroll.body === 'hidden' && scroll.height <= scroll.viewport + 1 && Math.abs(scroll.host-scroll.header)<0.5, key + ': unexpected page/pane scroll ownership');
           const panel = p ? await readPanel(p) : null;
           if (panel) {
             assert(desktop ? panel.center >= 319.5 : !panel.inert && panel.visible === 'visible' && panel.splitter === 'none', key + ': unusable center or stacked controls');
