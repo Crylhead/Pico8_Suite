@@ -2094,6 +2094,8 @@
         actions['find-tool']();
         return;
       }
+      // #192: Esc closes open menus first, then the Library drawer (js/suite.js decides when it applies)
+      if (e.key === 'Escape' && !document.querySelector('.menu.open') && actions['library-escape']?.(e)) return;
       const own = shortcutHandlers[document.body.dataset.workspace];
       if (own) {
         if (e.key === 'F1') { e.preventDefault(); showHelp(); return; }

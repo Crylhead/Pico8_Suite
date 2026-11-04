@@ -287,6 +287,12 @@ Headless Chrome with a fresh browser profile, driven over the DevTools protocol 
 
 Not covered: the native folder picker and permission prompt UI (stubbed), a real folder deleted on disk (an OPFS folder removed through the API stood in for it), and non-Chromium browsers.
 
+## Follow-up: #192 Library drawer below the app bar, Esc and focus (2026-11-04)
+
+**Behaviour change:** above 640px the Library drawer starts at the app bar's measured bottom edge (82px at 1440 wide, 97px at 900 wide), so **Library** stays clickable and toggles the drawer. The drawer stacks under menu popovers. At 640px and below it stays full-screen with ✕. Opening moves focus to the filter. Closing with focus inside returns it to **Library**. `Esc` closes the drawer after tooltips, tours, dialogs and open menus. In the filter the first `Esc` clears the text. On a canvas, in a text field or in Pixel Studio's Full View, `Esc` keeps its tool meaning. The help registry, F1 keyboard table and `docs/ACCESSIBILITY.md` (pattern row and manual step 17) were updated.
+
+**Checked** in headless Chrome 156 (fresh profile, real key and pointer input) at 1440, 900 and 390 wide. At 1440 and 900 the toggle's center hit-tests to **Library**, and a click or `Enter` opens and closes the drawer with `aria-pressed` in sync. In the filter, `Esc` first clears and then closes, with focus back on **Library**. At 390 the drawer covers the bar as intended, and `Esc` and ✕ close it. Precedence: with a menu or a dialog open, `Esc` closes only that. `Esc` on the canvas clears the selection and leaves the drawer open. `Esc` in the image name field leaves it open, and in Full View it closes only Full View. Every visible menu popover that overlaps the drawer is on top (Help at 900 wide). Dragging a Library card onto the Pixel Studio canvas still delivers the asset id to the drop handler. No exceptions. Not covered: screen readers, non-Chromium browsers, real touch.
+
 ## Follow-up: #194 Pixel Studio timeline shortcut moves from Tab to T (2026-11-04)
 
 **Behaviour change:** the timeline toggle is now `T` (it was `Tab`). `Tab` and `Shift+Tab` always move focus, also from the drawing canvas and from the page body, following the rule in `docs/ACCESSIBILITY.md`. `T` is ignored while typing in a field. The canvas shows a `:focus-visible` ring when reached by keyboard. A pointer press focuses it with `focusVisible: false`, so drawing does not show the ring. The menu `<kbd>`, the **Timeline** button title (`aria-keyshortcuts="T"`), the F1 text and table and the help registry were updated.
