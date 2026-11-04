@@ -153,6 +153,12 @@ Tile Maker uses shared caption and frame rows (CSS subgrid): long captions reser
 
 Palette cards share caption, image, action and settings rows. Preview images remain square; the settings row takes the height needed by either card, so extra greyscale controls do not shift the image edges. Actions wrap at their normal control height. On phones the cards stack and may have different heights according to their own settings; matching heights across separate rows would add empty space. The two `.preview-settings` wrappers group existing controls without changing their IDs or event ownership.
 
+### Artwork surround (#198)
+
+`--stage-bg` is the hue-free dark neutral `#101010` in System, Light and Dark themes. Pixel Studio and Map Editor share it through `.ps-stage`; Pixel Studio's full view and preview use the same token. Light-theme panels keep their normal theme colors. The canvas renderers clear to transparency outside the document, so no theme-dependent surround is painted into artwork or exports.
+
+Keep the existing transparency checker (`#2a2a30` / `#3a3a42`) and document outline visible. Against `#101010`, the Pixel Studio outline (`rgba(255,255,255,0.75)`) is approximately **3.50:1** even at half-pixel coverage, and Map Editor's (`rgba(255,255,255,0.35)`) is **3.20:1**. Both exceed the 3:1 boundary target. Stage overlays retain their own contrasting colors/backplates; do not apply light-theme panel text colors directly over the stage.
+
 ## Adoption
 
 | Surface | Status |

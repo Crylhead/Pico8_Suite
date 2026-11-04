@@ -1,10 +1,11 @@
 /* PICO-8 Dev Suite: shell, library, Home, Pixel Studio, Data Tools */
 
-:root { --stage-bg: #0c0c10; --status-ok: #00e436; --status-warn: #ffa300; --status-error: #ff6b81; }
+/* Artwork surrounds stay neutral and dark independently of the UI theme. */
+:root { --stage-bg: #101010; --status-ok: #00e436; --status-warn: #ffa300; --status-error: #ff6b81; }
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) { --stage-bg: #d4d7de; --status-ok: #007a2e; --status-warn: #8f5200; --status-error: #c0002f; }
+  :root:not([data-theme="dark"]) { --status-ok: #007a2e; --status-warn: #8f5200; --status-error: #c0002f; }
 }
-:root[data-theme="light"] { --stage-bg: #d4d7de; --status-ok: #007a2e; --status-warn: #8f5200; --status-error: #c0002f; }
+:root[data-theme="light"] { --status-ok: #007a2e; --status-warn: #8f5200; --status-error: #c0002f; }
 
 /* ------------------------------------------------------------------ */
 /* Shared small controls                                              */
