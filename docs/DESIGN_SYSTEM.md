@@ -143,6 +143,19 @@ Cart Builder and Data Carts share `.layout-dc` and the same body sizing rules in
 
 Capacity charts keep their fixed 430px height and horizontal scrolling for multiple carts. Do not stretch chart data or change packing to fit the viewport. Command rows can wrap as their controls require; this contract does not force identical command content or row counts. Keep the shared Cart Builder/Data Carts body selectors together when changing their breakpoint behavior. See the [browser regression checklist](UX_RELEASE_CHECKLIST.md#cart-builder-viewport-167).
 
+## Main document action placement (#201)
+
+A document tool's main document action (Save, or Export when the tool has no Library document) lives in the tool's **top bar**, never only in a side panel or a menu:
+
+- **Editors with a document name and a `P8DocStatus` badge** (Pixel Studio, Map Editor) put **Save** directly after the badge: name → status → Save → size/fit pill. State and action read together, and the same position holds in both editors. Save is `.btn .btn-sm`, not primary, so it does not compete with the drawing tools.
+- **Tools whose top bar is a row of commands** (Code Editor, Tile Maker) end the row with their main action, styled `.btn-primary`: Code Editor **Save**, Tile Maker **Export to PICO-8…**.
+- Use at most one `.btn-primary` per coherent action area. A separate area, such as an empty-state drop zone, a dialog or an independent panel in a multi-step tool, may have its own.
+- Keep the other entry points (File menu, shortcuts, panel buttons) and run the **same** guarded function from all of them. Never add a second save path.
+
+Audit (2026-11-05): Pixel Studio, Map Editor, Code Editor and Tile Maker follow this. Gaps, not changed here:
+- Code Editor has no `P8DocStatus` badge yet. If it gets one, Save should move beside it.
+- Cart Builder's command row has two primaries (**Open Project Folder…** and **Write Carts**); it is a multi-step tool, so a later pass should decide which one leads.
+
 ## Preview frame roles (#172)
 
 Normalize the outer frame, not the pixel data. Reuse the shared spacing/radius tokens and these roles instead of assigning all canvases one height:

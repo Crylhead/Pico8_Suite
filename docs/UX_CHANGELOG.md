@@ -389,3 +389,20 @@ Not covered: the viewer's "cart open, no bytes" text is hard to reach, because a
 Status copy now describes the real sharing. Home said "Open one in Cart Builder, Code Editor or Project Audit", but only Cart Builder makes a folder the active project, so it now says that and that the other tools can then use it. The tool strip says "No project folder open in this tool."; when another tool knows a project, it already names it and offers **Use "…"** (#56). Help, tours, F1, README, the release checklist and `tests/project-adapter.test.js` were updated.
 
 **Checked** in headless Chrome 156 (fresh profile) at 1440×900: Home's empty project text, plus every tool's button label, empty-state purpose line and project strip; no old label remains. A real test folder (`demo/main.p8` plus a data cart) scanned in Project Audit through its folder input (2 carts), and Data Carts then showed the same folder with its data cart. No exceptions. Not covered: the native directory picker and permission prompts (not drivable headlessly) and Cart Builder writes.
+
+## Follow-up: #201 Main document action placement (2026-11-05)
+
+**Behaviour change:** the Map Editor top bar now has **Save** directly after its `P8DocStatus` badge, in the same position as Pixel Studio (#185): name → status → Save → fit pill. It runs the existing guarded `map-save` action, the same `saveToLibrary()` as *File › Save to Library*, the Map panel button and `Ctrl+S`, so there is no second save path. It is `.btn-sm`, not primary, to match Pixel Studio and not compete with the drawing tools. The map name field is 110px instead of 150px, Map Editor only; the field scrolls. That keeps the top bar on one row at 1366px as before. `docs/DESIGN_SYSTEM.md` documents the convention (*Main document action placement*): Save beside the status badge in name-and-status editors, the main action at the right end of command-row tools, one primary per coherent action area, every entry point running the same guarded function. It also lists the audit gaps:
+- Code Editor has no status badge yet.
+- Cart Builder has two primaries in one row.
+
+The help registry (`map.save`) and F1 were updated.
+
+**Checked** in headless Chrome 156 (fresh profiles, real pointer and key input):
+- A paint gives *Unsaved changes*. A fast double click on **Save** gives *Saved to Library* with exactly one Library write.
+- Another paint, then `Ctrl+S`, gives *Saved* (1 write). Another paint, then the panel *Save to Library*, gives *Saved* (1 write). Still one map asset.
+- A Library write that rejects once gives *Save failed*, and Retry gives *Saved*.
+- Top-bar height matches `main` at 1440 and 1366 (40px, one row) and at 1280 and 1100 (71px, the wrap `main` already had).
+- No exceptions.
+
+Not covered: screen readers, non-Chromium browsers.
