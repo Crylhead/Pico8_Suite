@@ -493,7 +493,7 @@ body[data-workspace="studio"] { height: 100vh; height: 100dvh; display: flex; fl
 .ps-sw-pick { width: 40px; height: 40px; }
 
 .ps-preview-box {
-  height: 192px;
+  height: var(--preview-sidebar-size);
   min-width: 0;
   background: var(--stage-bg);
   border-radius: var(--radius-sm);

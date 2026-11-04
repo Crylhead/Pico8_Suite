@@ -132,6 +132,21 @@ Recorded 2026-11-04, Chromium 153.0.8010.0 on Linux/headless, base `62cdbdd` plu
 
 Four empty cases and ten populated light/dark cases passed DOMRect/scroll assertions, plus a 1280×420 short-viewport check. At fixed widths, repeated switches kept header height/width and content top within 1px. Parts and main scroll positions were independent; last report actions remained focus-reachable; charts stayed 430px high; no page horizontal overflow or browser errors occurred. Populated cases used passive layout fixtures with the real classes (60 parts, 16 charts, 45 report rows), not project writes or packing verification. Screenshots were compared before/after. Physical browser zoom, native Windows scrollbars and other engines remain untested; the 640px case verifies equivalent CSS reflow width.
 
+## Preview-frame alignment (#172)
+
+Compare Tile Maker and Palette & Fades at 360/768/1280/1920 CSS px, in light/dark, first empty and then with a portrait image. Include long captions and the extra greyscale-settings block. In Tile Maker, compared image frames must share caption/frame rows; above 1100px the native-width sheet's outer frame shares their top/bottom edges. Below that breakpoint it gets a separate bounded frame. Focus the tileset region and use PageDown/arrow keys when it overflows. Its canvas must retain its display pixel scale. In Palette, side-by-side card borders and square-window edges must align even when one has extra settings; on phones the cards stack and controls wrap. Drag a loaded portrait/landscape preview to verify existing panning, and check Pixel Studio's separate 192px sidebar remains unchanged.
+
+Recorded 2026-11-04, Chromium 153.0.8010.0 on Linux/headless, base `408f4de` plus the fix: 32 before and 32 after cases (two workspaces × four widths × two themes × empty/loaded), with screenshot captures and representative visual comparison. Loaded cases imported a deterministic 128×256 PNG through the actual tool controls. Long caption text and the visible extra-settings block were layout fixtures; no conversion or packing code was changed.
+
+| Loaded, long-caption case | Before | After |
+| --- | --- | --- |
+| Tile Maker at 1280px | Original/Reconstructed tops differed by 17.4px; native sheet frame was 512px high | All frame tops/bottoms align; 463px comparison/frame height, native canvas width still 256px |
+| Tile Maker at 1920px | Comparison height 527.5px vs 512px sheet frame | Shared frame height 643px, with the native-width sheet column retained |
+| Palette at 768/1280/1920px | Square-window tops differed by 20.3px | Window tops/bottoms and card heights match |
+| Phone layouts | Separate stacked views | Stacking retained; square windows and wrapped actions remain within the page |
+
+After-case DOMRect assertions passed for square comparisons, paired-frame edges, native tileset canvas dimensions, non-distorted Palette pixel scale, control bounds and page overflow. Keyboard scrolling of the sheet passed. A separate four-color Palette import verified that portrait panning changes the displayed pixels, its phone window stays square, and the Pixel Studio sidebar remains 192px. No browser JavaScript errors occurred. Other browser engines, physical touch and older browsers without CSS subgrid remain untested.
+
 ## Handoff
 
 State exactly which automated checks ran and which human rows were covered; list gaps once (for example "no PICO-8 available", "touch not tested").

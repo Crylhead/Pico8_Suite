@@ -72,6 +72,7 @@
 /* Theme-independent scales and state tokens; documented in docs/DESIGN_SYSTEM.md. Colours are
    the theme tokens above plus --status-ok/--status-warn/--status-error (css/suite.css). */
 :root {
+  --preview-square-size: 256px; --preview-sidebar-size: 192px; --preview-sheet-width: 256px;
   --space-1: 2px; --space-2: 4px; --space-3: 6px; --space-4: 8px; --space-5: 10px; --space-6: 12px; --space-7: 16px;
   --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-base: 14px; --fs-lg: 15px;
   --fw-control: 550; --fw-label: 600; --fw-heading: 650;
@@ -456,29 +457,31 @@ legend.panel-heading { padding: 0 var(--space-2); }
   text-align: center;
 }
 
-.previews { display: flex; flex-wrap: wrap; gap: 16px; }
+.previews { display: grid; grid-template-columns: repeat(2, minmax(0, 288px)); gap: var(--space-7); max-width: 100%; min-width: 0; }
 .preview {
   margin: 0;
-  width: 288px;
+  min-width: 0;
   max-width: 100%;
-  padding: 12px 14px 14px;
+  padding: var(--space-6);
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 4;
+  gap: var(--space-5);
 }
-.preview figcaption { font-weight: 600; }
+.preview figcaption { font-weight: var(--fw-label); overflow-wrap: anywhere; }
+.preview-settings { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
 
 .canvas-frame {
   position: relative;
-  width: 256px;
+  width: var(--preview-square-size);
   max-width: 100%;
   aspect-ratio: 1;
   margin: 0 auto;
   background: var(--canvas-bg);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
 }
 .canvas-frame canvas {
@@ -518,7 +521,7 @@ legend.panel-heading { padding: 0 var(--space-2); }
   pointer-events: none;
 }
 
-.preview-actions { display: flex; justify-content: center; }
+.preview-actions { display: flex; flex-wrap: wrap; align-items: flex-start; align-content: flex-start; gap: var(--space-3); justify-content: center; }
 .params { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .params .field { flex-direction: column; align-items: stretch; gap: 3px; font-size: 12px; }
 .params .field input { width: 100%; }
@@ -704,18 +707,18 @@ dialog.modal::backdrop { background: rgba(5, 5, 10, 0.6); }
 
 .tm-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--preview-sheet-width);
+  gap: var(--space-7);
   align-items: start;
 }
-.tm-view, .tm-tileset { margin: 0; min-width: 0; }
-.tm-view figcaption, .tm-tileset figcaption { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+.tm-view, .tm-tileset { margin: 0; min-width: 0; display: grid; grid-template-rows: subgrid; grid-row: span 2; row-gap: var(--space-3); }
+.tm-view figcaption, .tm-tileset figcaption { color: var(--muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .tm-frame {
   position: relative;
   aspect-ratio: 1;
   width: 100%;
   background: #000;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
   touch-action: none;
   cursor: grab;
@@ -739,14 +742,18 @@ dialog.modal::backdrop { background: rgba(5, 5, 10, 0.6); }
 }
 .tm-drop span { font-size: 12px; color: #7b7b86; }
 
-.tm-tileset-frame { position: relative; width: 256px; max-width: 100%; }
+/* Native bitmap dimensions must not set the shared comparison-row height. */
+.tm-tileset-frame { contain: size; position: relative; width: 100%; min-width: 0; min-height: 0; height: 100%; overflow: auto; overscroll-behavior: contain; background: var(--canvas-bg); border-radius: var(--radius-xs); }
+.tm-tileset-frame:focus-visible { outline: var(--focus-width) solid var(--focus-color); outline-offset: var(--focus-offset); }
 .tm-tileset-frame canvas {
   display: block;
-  width: 100%;
+  width: var(--preview-sheet-width);
+  max-width: none;
   height: auto;
+  margin: 0 auto;
   image-rendering: pixelated;
   background: #202020;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
 }
 .tm-tileset-msg {
@@ -812,7 +819,8 @@ dialog.modal::backdrop { background: rgba(5, 5, 10, 0.6); }
 
 @media (max-width: 1100px) {
   .tm-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .tm-tileset { grid-column: 1 / -1; justify-self: center; }
+  .tm-tileset { grid-column: 1 / -1; justify-self: center; width: min(100%, var(--preview-sheet-width)); }
+  .tm-tileset-frame { height: auto; aspect-ratio: 1; }
 }
 @media (max-width: 760px) {
   .te { grid-template-columns: 1fr; }
@@ -847,13 +855,13 @@ dialog.modal::backdrop { background: rgba(5, 5, 10, 0.6); }
   .slots { grid-template-columns: repeat(8, minmax(0, 44px)); }
   .slots .sw:first-child, .slots .sw:last-child { border-radius: 0; }
   .ramp-editor { justify-content: center; }
-  .previews { justify-content: center; width: 100%; }
-  .preview { width: 100%; }
+  .previews { grid-template-columns: minmax(0, 1fr); width: 100%; }
   .docs { grid-template-columns: 1fr; }
   .docs-toc { position: static; flex-direction: row; flex-wrap: wrap; }
   .map-row { grid-template-columns: repeat(8, minmax(0, 40px)); }
   .layout-tiles { padding: 12px 16px; gap: 12px; }
   .tm-grid { grid-template-columns: minmax(0, 1fr); }
+  .tm-tileset { grid-column: auto; justify-self: stretch; width: auto; }
   .tm-fade input[type="range"] { width: 110px; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .modal-foot .btn { flex: 1 1 auto; }
