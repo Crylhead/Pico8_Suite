@@ -1097,7 +1097,7 @@ This cannot be undone.`, 'Delete')) {
       el('span', { className: 'tool-dot', attrs: { 'aria-hidden': 'true' } }),
       el('strong', { textContent: t.name }),
       el('span', { className: 'tool-desc', textContent: t.desc }),
-      el('span', { className: 'tool-tags' }, ...(t.tags || []).map((x) => el('span', { className: 'badge', textContent: x }))));
+      el('span', { className: 'tool-tags' }, ...(t.tags || []).map((x) => el('span', { className: 'badge badge-info', textContent: x }))));
     grid.replaceChildren(...P8Nav.group(workspaceTools(), barOrder()).map((g) => el('section', { className: 'tool-group', attrs: { 'aria-labelledby': `home-cat-${g.category.id}` } },
       el('h4', { id: `home-cat-${g.category.id}` }, g.category.label, el('span', { className: 'muted', textContent: ` · ${g.category.desc}` })),
       el('div', { className: 'tool-grid' }, ...g.entries.map(card)))));

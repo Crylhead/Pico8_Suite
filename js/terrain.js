@@ -858,7 +858,7 @@
   }
 
   // ------------------------------------------------------------------ status
-  const status = el('span', { className: 'badge tl-status', attrs: { role: 'status' } });
+  const status = el('span', { className: 'badge badge-info tl-status', attrs: { role: 'status' } });
   const stats = el('span', { className: 'tl-sb-stats', tabIndex: 0, attrs: { role: 'region', 'aria-label': 'Terrain render details' } });
   const sbAction = el('span', { className: 'tl-sb-action' });
   const sbPos = el('span', { className: 'tl-sb-pos', textContent: '—', tabIndex: 0, attrs: { role: 'region', 'aria-label': 'Terrain coordinates' } });
@@ -889,7 +889,7 @@
     }
     sbPos.textContent = s;
   }
-  function setStatus(text, cls = '') { status.textContent = text; status.className = `badge tl-status ${cls}`; }
+  function setStatus(text, cls = '') { status.textContent = text; status.className = `badge badge-info tl-status ${cls}`; /* #197: read-only status stays neutral */ }
   function updateStatus() {
     const d = P8RenderStatus.describe({
       rev, shownRev: shown ? shown.rev : -1, finalRev: finalResult ? finalRev : -1,

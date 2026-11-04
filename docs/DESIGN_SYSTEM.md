@@ -30,6 +30,8 @@ Adopt tokens and primitives incrementally when you touch a surface. Do not re-sk
 | Field | `label.field` > text + `input`; `select.select`; `input.num` | — | focus ring | — | — | `disabled`: faded | `aria-invalid="true"` (+ `aria-describedby` → message): danger border; pair with an error `.status-line` |
 | Panel group | `fieldset.panel-group` > `legend.panel-heading` (or a `div` + `h3.panel-heading`) | — | — | — | set `aria-busy` on the panel while it recomputes | `fieldset disabled` disables its controls | — |
 | Status line | `p.status-line` with optional `data-tone="ok" \| "warn" \| "error"` | — | — | — | — | — | tone adds the status colour **and** a ✓/⚠ symbol (hidden from screen readers), so it is never colour-only |
+| Badge | `span.badge`; read-only information uses `span.badge.badge-info` | — | — | plain `.badge` (accent tint) only for a selected or current item (e.g. Find tool's *Open now*) | — | — | — |
+| State toggle | `button.btn.btn-check[aria-pressed]` with a fixed noun label (e.g. **Indices**) | accent border | focus ring | `aria-pressed="true"`: filled check box + accent tint | — | — | — |
 | Notice | `p.notice` with optional `data-tone="warn" \| "error"` | — | — | — | — | — | coloured left edge + tint; put the meaning in the text |
 | Progress | `progress.progress` (with an accessible name) | — | — | — | determinate or indeterminate | — | — |
 | Empty preview | `p.preview-empty` inside the preview frame (frame `position: relative`, or wrap the canvas in `.preview-host`) | — | — | — | — | — | — |
@@ -37,6 +39,7 @@ Adopt tokens and primitives incrementally when you touch a surface. Do not re-sk
 Rules:
 
 - Never convey state by colour or hover (`title`) alone; pair it with text, a symbol or an ARIA state.
+- Accent means primary action, focus or selected (#197). Read-only information (sizes, zoom levels, frame counters, fit labels, render status) uses `.badge-info`: `--muted` on `--surface-3`, no border, measured **5.11:1** (dark) and **5.08:1** (light). A disabled primary button is unfilled with a dashed `--border-strong` edge and `--muted` text (**6.31:1** dark, **6.06:1** light on the card), so it never looks like an enabled secondary (filled `--surface-3`, solid edge, `--text`). Toggles show state with a fixed label plus `aria-pressed` (`.btn-check`), never an action label that flips (*Hide…*/*Show…*).
 - Use fused `.btn-group` controls for related momentary actions (for example − / Fit / 1:1 / +), with square middle corners and raised focus outlines. Single-button groups retain all corners and borders. Compact status rows inset the focus ring so their card cannot clip it. Independent view toggles keep separate borders with `--space-2` between them; they must not resemble an exclusive choice.
 - Focus styles use `:focus-visible` and the focus tokens; do not remove outlines without an equivalent replacement.
 - Announcements: dialogs and toasts are covered by the shell (`App.modal`, `App.toast`); a `.status-line` that is the only report of a one-off result may use `role="status"`, but do not put live regions on text that updates during drags or sliders.

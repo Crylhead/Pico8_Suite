@@ -657,8 +657,8 @@ canvas.thumb {
 .me-brush { max-width: 100%; image-rendering: pixelated; background: #000; border-radius: 4px; }
 .me-stats { display: grid; gap: 2px; margin: 0; font-size: 12px; color: var(--muted); }
 .me-stats span:first-child { color: var(--text); font-family: var(--mono); }
-#meFit[data-fit="shared"] { color: #ffa300; }
-#meFit[data-fit="data"] { color: var(--accent); }
+/* #197: neutral info; "shared" keeps an orange edge matching the shared-rows line on the canvas (the text says it) */
+#meFit[data-fit="shared"] { box-shadow: inset 3px 0 0 #ffa300; }
 .me-presets { display: flex; flex-wrap: wrap; gap: 6px; }
 
 @media (max-width: 900px) {

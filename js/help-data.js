@@ -49,7 +49,7 @@ const P8HelpData = (() => {
       ],
       controls: [
         { id: 'studio.preview', label: 'Preview scale', text: 'Fit shows the whole image. 1× and 2× show one or two CSS pixels per image pixel; scroll to see larger images.', detail: 'Fit follows the panel size and uses whole-number enlargement when possible. The readout shows the actual zoom and displayed dimensions. Integer enlargement stays sharp. Preview scale does not change the drawing canvas zoom.' },
-        { id: 'studio.slot', label: 'Color slot', text: 'Double-click a slot (or Remap…) to choose which of the 32 PICO-8 colors it shows. Hide indices in the top menu row hides palette slot numbers; Show indices restores them. This view preference is shared with Palette & Fades and Tile Maker and is remembered on reload. Slot/color names remain available to assistive technology.' },
+        { id: 'studio.slot', label: 'Color slot', text: 'Double-click a slot (or Remap…) to choose which of the 32 PICO-8 colors it shows. Indices in the top menu row shows or hides the palette slot numbers (pressed: shown). This view preference is shared with Palette & Fades and Tile Maker and is remembered on reload. Slot/color names remain available to assistive technology.' },
         { id: 'studio.transparent', label: 'Transparent slot', text: 'Empty pixels export as the transparent slot (default 0, like palt()).', detail: 'Pick the slot your cart passes to palt(), so exported empty areas stay see-through.' },
         { id: 'studio.tiled', label: 'Tiled view', text: 'Shows a 3×3 repeat; strokes wrap around the edges.', detail: 'Example: paint across the right edge and it continues on the left, so seams in a texture can be drawn directly.' },
       ],

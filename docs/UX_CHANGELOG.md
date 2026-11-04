@@ -342,6 +342,24 @@ Not covered: hex copy (clipboard) was not compared, but it is built by the uncha
 
 Not covered: screen readers, non-Chromium browsers.
 
+## Follow-up: #197 Read-only pills no longer look like pressed buttons (2026-11-04)
+
+**Behaviour change:** accent now means a primary action, focus or a selected state, and nothing read-only uses it.
+- **Neutral info badges:** a new `.badge-info` (`--muted` on `--surface-3`, no border; **5.11:1** dark, **5.08:1** light) is used for the Pixel Studio size, zoom and frame counter, the Map Editor fit label and zoom, the Tile Maker zoom, *Ramp* status, Home tool tags and Terrain Lab's render status. Terrain kept dropping the class when its status text changed, so that is fixed too. The Terrain warn and error tones stay readable on the neutral background (5.18 to 8.41:1). The Map Editor fit label no longer uses accent text in data mode; *shared* keeps an orange edge that matches the shared-rows line on the canvas. Find tool's *Open now* keeps the accent badge because it marks the current item.
+- **Disabled primary:** it is now unfilled, with a dashed `--border-strong` edge and `--muted` text at full opacity (6.31:1 dark, 6.06:1 light), instead of faded blue. An enabled secondary is filled `--surface-3` with a solid edge and `--text`.
+- **Indices toggle:** `#toggleIndices` is now a checkbox-style state toggle (`.btn-check`) with the fixed label **Indices**. `aria-pressed` and the check box show whether slot numbers are shown. The #181 behavior (shared `p8pal.showIndices` preference, synchronized Pixel Studio, Palette & Fades and Tile Maker, remembered on reload) is unchanged.
+
+The help registry, tours, `docs/STUDIO_INDICES_QA.md`, the opt-in `tests/studio-indices.mjs` label assertion, and `docs/DESIGN_SYSTEM.md` (Badge and State toggle rows, accent rule with contrast) were updated, and `docs/design-system.html` has samples.
+
+**Checked** in headless Chrome 156 (fresh profiles, real input) at 1440×900 in the dark and light themes:
+- Every listed pill computes to the neutral colors, with no accent color or tint and a 0px border.
+- A disabled primary (*Optimize*) is transparent, dashed and muted. The enabled *Save* next to it is filled, solid and in the text color.
+- **Indices** toggles by click and by `Space`, the label stays *Indices*, and the slot numbers follow. Off persists across reload and is seen by Palette & Fades.
+- Terrain status and Home tags are neutral.
+- No exceptions.
+
+Not run: the opt-in Playwright check `tests/studio-indices.mjs` (Playwright is not configured here); its label assertion was updated. Screen readers and non-Chromium browsers were not tested.
+
 ## Follow-up: #187 Empty previews say they are empty (2026-11-04)
 
 **Behaviour change:** a shared `.preview-empty` primitive (`css/style.css`) sits inside the existing preview frame, so the frame keeps its loaded size. It is a dark neutral checker in every theme, the same as the Tile Maker drop area, with centered `--fs-md` text (10.32:1 and 11.07:1 on the two checker squares). It is a plain text node for screen readers and `pointer-events: none`, so panning, clicks and drops reach the frame. Uses:
