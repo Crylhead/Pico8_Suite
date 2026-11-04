@@ -1,6 +1,6 @@
 # Minifier user guide
 
-Develop → Minifier runs pinned Shrinko8 locally in a browser worker. The supported default is **Minimal + Tokens**. It compares a captured source with generated Lua and offers separate build-copy exports. It never applies output to Code Editor, overwrites an original file or marks it saved. It never optimizes automatically on import, typing, Save, Run or Cart Builder export.
+Develop → Minifier runs pinned Shrinko8 locally in a browser worker. Choose a level (**Minimal**, Safe, Aggressive) and a focus (Balanced, **Tokens**, characters, compressed size, or two combined), as in the Shrinko8 web version; **Minimal + Tokens** is the default. Safe also renames variables (locals and globals, never PICO-8 callbacks or built-ins) but keeps table field names. Aggressive also allows changes Shrinko8 cannot prove safe; with **Rename aggressively** it renames table fields too, which breaks code that reaches fields or globals through strings (`t["name"]`, `_ENV`). Test Aggressive builds in PICO-8. It compares a captured source with generated Lua and offers separate build-copy exports. It never applies output to Code Editor, overwrites an original file or marks it saved. It never optimizes automatically on import, typing, Save, Run or Cart Builder export.
 
 Minimal retains names and line breaks but may change expressions, comments and spacing. Token savings are **not guaranteed**; unchanged or increased output is a valid result. Only Minimal and Tokens are enabled; Safe, Aggressive, custom compiler scripts and Parens-8 are unsupported.
 
@@ -72,13 +72,13 @@ Independent cartridge-parser checks establish format/data preservation; they do 
 | --- | --- |
 | Local setup required | Use the launcher and its HTTP address. Retry cannot repair `file://`. Back up browser data before switching addresses. |
 | Engine failed to load / missing runtime | Check [packaging/setup](MINIFIER_ENGINE.md), prepare verified assets, then Retry engine. Retry never silently resubmits code. |
-| Optimize unavailable | Load a nonempty source, wait for readiness, or refresh an earlier editor capture. Only Minimal + Tokens is supported. |
+| Optimize unavailable | Load a nonempty source, wait for readiness, or refresh an earlier editor capture. Unknown level/focus values are refused. |
 | Invalid UTF-8, malformed cart or empty input | Use a UTF-8 text `.lua`/`.p8` with nonempty Lua. Cancelled/failed intake leaves earlier work intact. |
 | Include missing or denied | Open the folder in Code Editor, grant access through its explicit workflow, correct the dependency/path, then refresh. Minifier does not request access itself. |
 | Source location has no button | The location is stale, out of range or not in the displayed entry file. Read the reported path/position without assuming a safe jump exists. |
 | Copy failed | Use read-only selection and keyboard copy, or a permitted browser clipboard context. |
 | Download disabled / preservation failure | Read the validation message below the buttons. Refresh/Optimize current input; do not use a mismatched build. |
-| No saving or increased output | Valid outcome of Minimal + Tokens. Review other budgets and test the build; do not assume every source can shrink. |
+| No saving or increased output | Valid outcome, especially for Minimal or a focus on another measure. Review other budgets and test the build; do not assume every source can shrink. |
 
 ## Version, licenses and support
 

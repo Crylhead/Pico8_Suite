@@ -73,8 +73,8 @@ class NativeMinifierTests(unittest.TestCase):
         self.assertEqual(self.run_source('#include missing.lua\nprint(1)')['diagnostics'][0]['code'], 'E_INCLUDE_MISSING')
         self.assertTrue(self.run_source('print("#include missing.lua")')['ok'])
         self.assertEqual(self.run_source('print(1)', '../escape.lua')['diagnostics'][0]['code'], 'E_INPUT_INVALID')
-        self.assertEqual(self.run_source('print(1)', profile='aggressive')['diagnostics'][0]['code'], 'E_OPTIONS_UNSUPPORTED')
-        self.assertEqual(self.run_source('print(1)', target='chars')['diagnostics'][0]['code'], 'E_OPTIONS_UNSUPPORTED')
+        self.assertEqual(self.run_source('print(1)', profile='turbo')['diagnostics'][0]['code'], 'E_OPTIONS_UNSUPPORTED')
+        self.assertEqual(self.run_source('print(1)', target='speed')['diagnostics'][0]['code'], 'E_OPTIONS_UNSUPPORTED')
 
     def run_tree(self, files, entry='main.lua'):
         job = {'entryPath': entry, 'kind': entry.rsplit('.', 1)[1], 'files': [{'path': path, 'text': text} for path, text in files.items()]}
@@ -245,6 +245,78 @@ process.stdout.write(JSON.stringify(E.build(s,{...C.prepareInput(data.source),so
                 self.assertEqual((diagnostic['severity'], diagnostic['code']), ('error', case['code']))
                 self.assertGreater(len(diagnostic['message']), 10, 'message says what to fix')
                 self.assertEqual(minifier_corpus.export(job, result), {'canExport': False, 'built': False})
+
+    # --- #164 levels / focus ---------------------------------------------------------------------
+    def test_option_mapping_is_identical_in_javascript_and_python(self):
+        script = r'''
+const C = require('./js/minifier-core.js'); const out = [];
+for (const profile of C.PROFILES) for (const target of C.TARGETS) for (const keepLines of [false, true]) for (const renameAggressive of [false, true]) for (const reorderAggressive of [false, true]) {
+  const options = { profile, target, keepLines, renameAggressive, reorderAggressive };
+  out.push({ options, flags: [...C.flagsFor(options)] });
+}
+process.stdout.write(JSON.stringify(out));'''
+        node = subprocess.run(['node', '-e', script], text=True, capture_output=True, cwd=ROOT, check=True)
+        combos = json.loads(node.stdout)
+        self.assertEqual(len(combos), 3 * 6 * 8)
+        for combo in combos:
+            with self.subTest(options=combo['options']):
+                self.assertEqual(self.bridge.flags_for(combo['options']), combo['flags'])
+        self.assertEqual(self.bridge.flags_for({}), self.bridge.FLAGS)
+        for bad in [{'profile': 'turbo'}, {'target': 'speed'}, {'keepLines': 'yes'}]:
+            with self.subTest(bad=bad):
+                self.assertEqual(self.run_source('print(1)', **bad)['diagnostics'][0]['code'], 'E_OPTIONS_UNSUPPORTED')
+
+    def test_every_level_and_focus_matches_the_pinned_cli_on_corpus_carts(self):
+        cases = [c for c in minifier_corpus.manifest()['cases'] if c['name'] in ('shorthand', 'scopes', 'includes')]
+        options = [{'profile': p, 'target': t} for p in ('minimal', 'safe', 'aggressive') for t in ('balanced', 'tokens', 'chars', 'compressed', 'tokens-chars', 'tokens-compressed')]
+        options += [{'profile': 'safe', 'target': 'tokens', 'keepLines': True}, {'profile': 'aggressive', 'target': 'tokens', 'renameAggressive': True, 'reorderAggressive': True}]
+        sizes = {}
+        for case in cases:
+            files = minifier_corpus.files_for(case)
+            with tempfile.TemporaryDirectory() as directory:
+                folder = pathlib.Path(directory)
+                for rel, text in files.items():
+                    (folder / rel).parent.mkdir(parents=True, exist_ok=True)
+                    (folder / rel).write_bytes(text.encode('utf-8'))
+                for option in options:
+                    with self.subTest(case=case['name'], option=option):
+                        job = {**minifier_corpus.job(case['entry'], files), **option}
+                        result = json.loads(self.bridge.optimize(json.dumps(job)))
+                        self.assertTrue(result['ok'], result)
+                        flags = self.bridge.flags_for(option)
+                        self.assertEqual(result['flags'], flags)
+                        self.assertEqual(json.loads(self.bridge.optimize(json.dumps(job))), result, 'deterministic')
+                        output = folder / 'out.p8'
+                        command = [sys.executable, '-c', 'import sys;sys.path.insert(0,sys.argv.pop(1));import shrinko8;sys.exit(shrinko8.main())', str(BUNDLE), str(folder / case['entry']), str(output), *flags, *self.bridge.COUNT_FLAGS]
+                        cli = subprocess.run(command, text=True, capture_output=True, check=True)
+                        self.assertEqual(result['cartText'], output.read_bytes().decode('utf-8'))
+                        self.assertIn(f'count:None:tokens:{result["metrics"]["optimized"]["tokens"]}:8192', cli.stdout)
+                        sizes[(case['name'], option['profile'], option['target'])] = result['metrics']['optimized']
+        # Sanity: the levels really differ (Aggressive/Safe shrink characters below Minimal on a real cart).
+        minimal, safe, aggressive = (sizes[('scopes', p, 'chars')]['characters'] for p in ('minimal', 'safe', 'aggressive'))
+        self.assertLess(safe, minimal)
+        self.assertLessEqual(aggressive, safe)
+
+    def test_level_descriptions_match_what_the_engine_renames(self):
+        # The UI/help copy claims: Safe renames globals but keeps table fields; Rename aggressively
+        # also renames fields (and so breaks string-keyed access). Pin those claims to the engine.
+        source = ('score=0\nplayer={health=3,speed=2}\nfunction hurt(p) p.health-=1 score+=1 end\n'
+                  'function _update() hurt(player) local k="speed" player[k]+=1 end\n'
+                  'function _draw() cls() print(score..player.health..player.speed) end\n')
+        def lua(**options):
+            result = self.run_source(source, 'levels.lua', target='chars', **options)
+            self.assertTrue(result['ok'], result)
+            return result['lua']
+        minimal, safe, aggressive, fields = lua(profile='minimal'), lua(profile='safe'), lua(profile='aggressive'), lua(profile='aggressive', renameAggressive=True)
+        self.assertIn('score', minimal)
+        self.assertIn('player', minimal)
+        for text in (safe, aggressive):
+            self.assertNotIn('score', text, 'globals are renamed')
+            self.assertNotIn('hurt', text)
+            self.assertIn('_update', text, 'callbacks keep their names')
+            self.assertIn('.health', text, 'table fields keep their names')
+        self.assertNotIn('.health', fields, 'Rename aggressively renames fields')
+        self.assertIn('"speed"', fields, 'while the string key stays: the documented breakage')
 
 
 if __name__ == '__main__':

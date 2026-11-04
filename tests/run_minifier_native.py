@@ -25,7 +25,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 BUNDLE = ROOT / 'vendor/shrinko8/runtime/engine.zip'
 ENCODER = ROOT / 'vendor/shrinko8/suite_png.py'
 # Update deliberately when real-engine tests are added or removed.
-EXPECTED = {'test_minifier_native': 12, 'test_minifier_png': 5}
+EXPECTED = {'test_minifier_native': 15, 'test_minifier_png': 5}
 
 
 def verify_bundle():
