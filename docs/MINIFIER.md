@@ -6,11 +6,11 @@ Minimal retains names and line breaks but may change expressions, comments and s
 
 ## Start locally or on a host
 
-Use an HTTP(S) address with the packaged runtime files. Direct `file://` opening cannot run the worker. On Windows, double-click **Start_Pico8_Suite.bat** with Python 3.9+ installed. On other systems, run `python tools/serve_suite.py` from the Suite folder. Keep the launcher running and use the address it opens. The helper verifies/prepares pinned assets; first setup needs Internet or the pinned archives. A hosted installation needs no Python service or Run bridge.
+Run `python tools/package_minifier.py` once in the Suite folder (Python 3.9+; the first run needs Internet or the pinned archives). Then simply **open `index.html` directly** in Chrome or Edge; no server is needed. The setup writes `vendor/pyodide/runtime/file-assets.js`, which the page loads as a script; the worker starts from a blob URL and answers the engine's own file requests from that memory, with the same SHA-256 and version checks as the HTTP mode (#162). If the file is missing, the workspace shows **One-time setup required**; run the command, then choose **Retry engine**. The optional launcher (**Start_Pico8_Suite.bat** or `python tools/serve_suite.py`) still works and serves the Suite at localhost; it also prepares the same files. A hosted installation needs no Python service or Run bridge. Firefox and Safari are not tested for direct opening.
 
 Processing stays in the browser; source is not uploaded. All runtime requests use the Suite's origin. Once runtime assets are loaded, the initialized engine can process in memory offline; this does not promise a cold offline reload without cached assets. See [engine packaging and offline setup](MINIFIER_ENGINE.md).
 
-Browser Library and session data belong to each address. Export a Library backup before moving from `file://` to localhost and import it there. Minifier source snapshots are page-only and are **lost on reload**; retain the original source outside this workspace.
+Browser Library and session data belong to each address. Export a Library backup before moving between a directly opened `index.html` (`file://`) and localhost, and import it there. Minifier source snapshots are page-only and are **lost on reload**; retain the original source outside this workspace.
 
 ## First build
 
@@ -70,7 +70,7 @@ Independent cartridge-parser checks establish format/data preservation; they do 
 
 | Symptom | Next step |
 | --- | --- |
-| Local setup required | Use the launcher and its HTTP address. Retry cannot repair `file://`. Back up browser data before switching addresses. |
+| One-time setup required | Run `python tools/package_minifier.py` in the Suite folder, then choose Retry engine (or reload). For an unsupported address type, open `index.html` directly or use the launcher. |
 | Engine failed to load / missing runtime | Check [packaging/setup](MINIFIER_ENGINE.md), prepare verified assets, then Retry engine. Retry never silently resubmits code. |
 | Optimize unavailable | Load a nonempty source, wait for readiness, or refresh an earlier editor capture. Unknown level/focus values are refused. |
 | Invalid UTF-8, malformed cart or empty input | Use a UTF-8 text `.lua`/`.p8` with nonempty Lua. Cancelled/failed intake leaves earlier work intact. |

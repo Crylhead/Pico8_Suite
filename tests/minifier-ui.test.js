@@ -38,7 +38,7 @@ function fixture(wide = true, protocol, io = {}) {
   const root = node('root'); root.querySelector = (selector) => { const n = nodes.get(selector.slice(1)); assert.ok(n, selector); return n; };
   const media = { matches: wide, addEventListener(_, fn) { this.change = fn; }, removeEventListener() { this.change = null; } };
   const adapter = Engine.create({ workerFactory() {
-    if (protocol === 'file:') return require('../js/minifier-worker-host.js').create({ protocol });
+    if (protocol && !['file:', 'http:', 'https:'].includes(protocol)) return require('../js/minifier-worker-host.js').create({ protocol });
     const listeners = {};
     const w = { requests: [], addEventListener(type, fn) { listeners[type] = fn; }, removeEventListener(type) { delete listeners[type]; }, terminate() { this.terminated = true; },
       postMessage(message) { this.requests.push(message); },
@@ -124,17 +124,31 @@ t('MIN-03 cancellation is explicit, leaves source intact and releases presenter 
   f.view.dispose(); assert.strictEqual(f.media.change, null); assert.strictEqual(f.$('mnCompareMode').listeners.click, undefined);
 });
 
-t('#134 file launch shows setup rather than a failed job, suppresses futile Retry and retains input', async () => {
+t('#162 opening index.html directly needs no server; missing one-time setup shows guidance, keeps input and Retry recovers', async () => {
+  const Host = require('../js/minifier-worker-host.js');
   const f = fixture(true, 'file:');
+  assert.strictEqual(f.$('mnLocalSetup').hidden, true, 'no setup notice merely for opening index.html directly');
+  f.view.load(source());
+  const first = f.view.initialize(); await flush();
+  f.workers.at(-1).reply({ type: 'error', engine: undefined, result: { ok: false, diagnostics: [{ severity: 'error', code: 'E_FILE_SETUP', message: Host.SETUP }] } });
+  await first.catch(() => {});
   assert.strictEqual(f.$('mnLocalSetup').hidden, false);
+  assert.match(f.$('mnStatus').textContent, /One-time setup required/); assert.doesNotMatch(f.$('mnStatus').textContent, /failed/);
+  assert.strictEqual(f.$('mnRetry').hidden, false, 'after running the setup, Retry engine can load it');
+  assert.strictEqual(f.$('mnRetry').disabled, false, 'and it is usable, not just visible');
+  assert.strictEqual(f.$('mnSourceCode').value, 'cls()');
+  const retry = f.actions['mn-retry'](); await flush(); f.workers.at(-1).reply(); await retry;
+  assert.strictEqual(f.$('mnLocalSetup').hidden, true);
+  assert.strictEqual(f.$('mnOptimize').disabled, false);
+  assert.strictEqual(f.$('mnSourceCode').value, 'cls()'); f.view.dispose();
+});
+
+t('#134 an unsupported address type still shows guidance and suppresses a futile Retry', async () => {
+  const f = fixture(true, 'chrome-extension:');
   f.view.load(source()); await f.view.initialize();
   assert.strictEqual(f.view.getState().status, 'unsupported');
-  assert.strictEqual(f.workers.length, 0); assert.ok(f.$('mnRetry').disabled); assert.ok(f.$('mnOptimize').disabled);
-  assert.match(f.$('mnStatus').textContent, /Local setup required/); assert.doesNotMatch(f.$('mnStatus').textContent, /failed/);
-  await f.actions['mn-retry']();
-  f.view.load(source('flip()')); // A different input cannot repair the hosting origin.
-  assert.strictEqual(f.$('mnLocalSetup').hidden, false); assert.ok(f.$('mnRetry').disabled);
-  assert.strictEqual(f.$('mnSourceCode').value, 'flip()'); f.view.dispose();
+  assert.strictEqual(f.$('mnLocalSetup').hidden, false); assert.strictEqual(f.$('mnRetry').hidden, true); assert.ok(f.$('mnRetry').disabled); assert.ok(f.$('mnOptimize').disabled);
+  assert.strictEqual(f.$('mnSourceCode').value, 'cls()'); f.view.dispose();
 });
 
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };

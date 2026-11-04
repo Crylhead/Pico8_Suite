@@ -43,7 +43,10 @@ const P8Minifier = (() => {
       }
       return false;
     }
-    const needsLocalSetup = (s) => protocol === 'file:' || s.diagnostics.some((d) => d.code === 'E_LOCAL_HTTP');
+    // #162: file:// runs the engine too; setup is only needed when its prepared files are missing.
+    const needsLocalSetup = (s) => s.diagnostics.some((d) => d.code === 'E_LOCAL_HTTP' || d.code === 'E_FILE_SETUP');
+    // An unsupported address cannot be repaired from this tab; missing setup can (run it, then Retry).
+    const retryBlocked = (s) => s.diagnostics.some((d) => d.code === 'E_LOCAL_HTTP');
     const setValue = (node, value) => {
       // Textareas expose LF even after assigning CRLF. Compare display text so renders keep selection/scroll.
       const display = value.replace(/\r\n?/g, '\n');
@@ -105,7 +108,7 @@ const P8Minifier = (() => {
       }
     }
     function statusText(s, rows) {
-      if (needsLocalSetup(s)) return 'Local setup required. Start the local Suite launcher to use Minifier.';
+      if (needsLocalSetup(s)) return 'One-time setup required: run python tools/package_minifier.py, then choose Retry engine.';
       if (editorStale) return 'Earlier Code Editor snapshot. Use current editor to refresh before optimizing.';
       if (s.status === 'ready' && s.enginePhase === 'cold') return 'Source loaded. Engine not ready. Load the engine to optimize.';
       const messages = {
@@ -201,7 +204,7 @@ const P8Minifier = (() => {
       actionButtons('mn-optimize', editorStale || intakePending || localSetup || !controls.canOptimize);
       actionButtons('mn-cancel', !controls.busy && !intakePending && !pngPending);
       for (const b of root.ownerDocument.querySelectorAll('[data-action="mn-cancel"]')) b.textContent = intakePending ? 'Cancel input' : 'Cancel';
-      actionButtons('mn-retry', intakePending || controls.busy || localSetup);
+      actionButtons('mn-retry', intakePending || controls.busy || retryBlocked(s));
       $('mnOptimize').setAttribute('aria-busy', String(controls.busy));
       $('mnProgress').hidden = !controls.busy && !pngPending;
       $('mnTarget').disabled = controls.busy;
@@ -222,7 +225,7 @@ const P8Minifier = (() => {
       setText($('mnSupported'), FOCUS_TEXT[s.options.target] || '');
       const retryText = s.status === 'error' ? 'Retry engine' : 'Load engine';
       for (const b of root.ownerDocument.querySelectorAll('[data-action="mn-retry"]')) b.textContent = retryText;
-      $('mnRetry').hidden = localSetup || (s.enginePhase === 'ready' && s.status !== 'error');
+      $('mnRetry').hidden = retryBlocked(s) || (s.enginePhase === 'ready' && s.status !== 'error');
       $('mnEngine').textContent = s.engine ? `Shrinko8 ${s.engine.shrinko8Version} · Pyodide ${s.engine.pyodideVersion}` : s.enginePhase === 'loading' ? 'Engine initializing locally…' : 'Engine not ready.';
       $('mnFlags').textContent = Core.validateSettings(s.options).ok ? Core.flagsFor(s.options).join(' ') : 'Unsupported settings.';
       setText($('mnMetricsState'), !s.result ? 'No measurements. Choose Optimize to measure with Shrinko8.' : `${current ? 'Current result' : 'Stale measurements · earlier snapshot'} · Shrinko8 ${s.result.engine.shrinko8Version} · Lua code from “${s.result.job.entryPath}”.`);
@@ -324,7 +327,7 @@ const P8Minifier = (() => {
       }, 'Code Editor');
       if (loaded) {
         if (navigate) app.setWorkspace?.('minifier');
-        if (adapter.getState().enginePhase === 'cold' && !needsLocalSetup(adapter.getState())) swallow(() => adapter.initialize());
+        if (adapter.getState().enginePhase === 'cold' && !needsLocalSetup(adapter.getState())) swallow(() => adapter.initialize()); // no repeated automatic attempts while setup is missing
       } else if (navigate && problem) app.showMessage?.('Minifier', problem.message, 'error');
       else if (navigate && captured && !editorSource.isCurrent(captured.identity)) app.toast?.('Code Editor changed before the handoff completed. Choose Minify again.', 'warn');
       return loaded === true;
@@ -440,7 +443,7 @@ const P8Minifier = (() => {
       'mn-copy': copyLua, 'mn-download': downloadBuild,
       'mn-optimize': () => { if (!invalidateEditor() && !editorStale && !intakePending && Core.describe(adapter.getState()).canOptimize) return swallow(() => adapter.optimize()); },
       'mn-cancel': () => { if (intakePending) cancelIntake(); else adapter.cancel(); },
-      'mn-retry': () => { const s = adapter.getState(); if (!intakePending && !Core.describe(s).busy && !needsLocalSetup(s)) return swallow(() => adapter.retry()); },
+      'mn-retry': () => { const s = adapter.getState(); if (!intakePending && !Core.describe(s).busy && !retryBlocked(s)) return swallow(() => adapter.retry()); },
       ...Object.fromEntries(['compare', 'original', 'optimized'].map((view) => ['mn-view-' + view, () => setMode(view)])),
     };
     app.registerActions(actions);
