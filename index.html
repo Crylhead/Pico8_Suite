@@ -186,7 +186,7 @@
         <div class="menu-pop" role="menu">
           <button role="menuitem" data-action="code-new">New Cart<kbd>Ctrl+Alt+N</kbd></button>
           <button role="menuitem" data-action="code-open">Open .p8 / .lua…<kbd>Ctrl+O</kbd></button>
-          <button role="menuitem" data-action="code-open-folder">Open Folder…</button>
+          <button role="menuitem" data-action="code-open-folder">Open Project Folder…</button>
           <hr>
           <button role="menuitem" data-action="code-save">Save<kbd>Ctrl+S</kbd></button>
           <button role="menuitem" data-action="code-save-as">Save As…<kbd>Ctrl+Shift+S</kbd></button>
@@ -812,7 +812,7 @@
     <aside class="ce-side">
       <section class="card ps-panel ce-files-panel">
         <header class="ps-panel-head"><h2>Files <span class="muted" id="ceFolderName"></span></h2>
-          <button class="btn btn-sm" data-action="code-open-folder" title="Work in a folder: its carts and .lua files, #include followed">Open Folder…</button>
+          <button class="btn btn-sm" data-action="code-open-folder" title="Edits files in place: lists the carts and .lua files of the folder and follows #include; Save writes the open file back">Open Project Folder…</button>
         </header>
         <div class="ce-files" id="ceFiles"></div>
       </section>
@@ -1076,7 +1076,7 @@
   <main class="layout-audit" data-ws="audit" id="auStage" hidden data-layout="fluid">
     <section class="card au-top" role="region" tabindex="0" aria-label="Project Audit commands">
       <div class="dt-row command-row command-row-inset">
-        <button class="btn btn-primary" id="auOpen" data-help-id="audit.scan" title="Ctrl+O">Choose Project Folder…</button>
+        <button class="btn btn-primary" id="auOpen" data-help-id="audit.scan" title="Ctrl+O. Read only: the folder is scanned in this browser and nothing in it is changed. Data Carts shows the same folder.">Open Project Folder…</button>
         <button class="btn" id="auRescan" disabled title="Read the folder again (F5). A folder chosen with the button has to be chosen again; a dropped folder is reread directly.">Rescan</button>
         <strong id="auRoot" class="au-root"></strong>
         <span class="muted" id="auStatus">Choose a folder or drop it here. Nothing is uploaded; the files are read in this browser.</span>
@@ -1091,7 +1091,8 @@
     </section>
     <section class="card au-main">
       <div class="au-empty" id="auEmpty">
-        <p><b>Drop a PICO-8 project folder here</b> or use <i>Choose Project Folder…</i></p>
+        <p><b>Drop a PICO-8 project folder here</b> or use <i>Open Project Folder…</i></p>
+        <p class="hint">Read only: nothing in the folder is changed. Data Carts shows the same folder.</p>
         <p class="muted">Every .p8 in the folder and its subfolders is scanned: tokens and characters with <code>#include</code> files expanded, includes in both directions, <code>load</code> / <code>run</code> / <code>reload</code> / <code>cstore</code> references, and carts nothing refers to.</p>
       </div>
       <div class="au-table-wrap" id="auTableWrap" hidden><table class="au-table" id="auTable"></table></div>
@@ -1247,7 +1248,7 @@
   <main class="layout-dc" data-ws="cartbuilder" hidden data-layout="fluid">
     <section class="card dc-top" role="region" tabindex="0" aria-label="Cart Builder commands">
       <div class="dt-row command-row command-row-inset">
-        <button class="btn btn-primary" id="cbOpen" data-help-id="cartbuilder.open" title="The demo project folder (contains demo/, tools/, music/); outside AppData so the browser may write to it">Open Demo Project…</button>
+        <button class="btn btn-primary" id="cbOpen" data-help-id="cartbuilder.open" title="Read and write: a project folder with demo/ (e.g. a copy of demoframe) or a flat folder with main.p8, outside protected folders such as AppData so the browser may write to it. It becomes the active project that Code Editor, Project Audit and Data Carts can use.">Open Project Folder…</button>
         <button class="btn" id="cbReconnect" hidden></button>
         <strong id="cbRoot"></strong>
         <span class="muted" id="cbStatus"></span>
@@ -1274,7 +1275,7 @@
   <main class="layout-dc" data-ws="datacarts" hidden data-layout="fluid">
     <section class="card dc-top" role="region" tabindex="0" aria-label="Data Carts commands">
       <div class="dt-row command-row command-row-inset">
-        <button class="btn btn-primary" id="dcOpen" title="Same folder as Project Audit">Open Project Folder…</button>
+        <button class="btn btn-primary" id="dcOpen" title="Read only: the same folder as Project Audit (opening it in either tool shows it in both). Packed carts are downloads.">Open Project Folder…</button>
         <button class="btn" id="dcFiles">Open .p8 Files…</button>
         <strong id="dcRoot"></strong>
         <span class="muted" id="dcStatus"></span>
@@ -1536,7 +1537,7 @@
           <li><b>Keys</b>: Ctrl+/ comment, Ctrl+D duplicate line, Alt+↑/↓ move lines, Tab / Shift+Tab indent, Ctrl+F find, Ctrl+H replace, F3 next, Ctrl+G go to line, Ctrl+= / Ctrl+- text size. View menu: indent with 1 space (PICO-8 style), 2 spaces or a tab, and the PICO-8 look (upper case).</li>
           <li><b>Code tabs</b> (the numbers above the code) jump to each <code>--&gt;8</code> tab, <b>+</b> adds one. <b>Functions</b> lists every function (Ctrl+Shift+O filters). The status bar counts tokens (8192) and characters (65535) as you type.</li>
           <li><b>Run</b> (Ctrl+R, as in PICO-8): saves the cart and starts it in PICO-8 (if you type while it saves, Run stops so that the newer code is not mistaken for the file on disk); <code>printh()</code> output appears in the panel below the code, <b>■ Stop</b> closes PICO-8. A web page cannot start programs, so this needs the small helper <code>tools/run_pico8_bridge.bat</code> (Python, nothing to install) running on your computer; <i>Cart → Set Up Run…</i> explains it, shows its status and is where you paste the pairing token the helper prints (once each time it starts). The cart runs where it is on disk (found in PICO-8's carts folder and the folders you give the helper with <code>--root</code>), so <code>#include</code>, <code>reload()</code> and <code>load()</code> work.</li>
-          <li><b>Folders and #include</b>: <i>Open Folder…</i> lists the folder's carts and .lua files. <code>#include</code> lines are highlighted and listed under <i>Cart</i> with their tokens; Ctrl+click a line (or the list entry) opens the file, <b>←</b> goes back to the cart. The token count adds the included code, as PICO-8 does, resolved the same way as Project Audit: a file included twice (or through two other files) counts each time, <code>cart.p8:1</code> and <code>cart.p8:2</code> are separate code tabs, and an include cycle stops there (shown as <i>cycle stopped</i>, not as missing). Moving to another file of the folder saves the one you leave; if that save is cancelled or you type while it runs, the file stays open with your newest code. Run in an included .lua file runs the cart that includes it.</li>
+          <li><b>Folders and #include</b>: <i>Open Project Folder…</i> (edits files in place: Save writes the open file) lists the folder's carts and .lua files. <code>#include</code> lines are highlighted and listed under <i>Cart</i> with their tokens; Ctrl+click a line (or the list entry) opens the file, <b>←</b> goes back to the cart. The token count adds the included code, as PICO-8 does, resolved the same way as Project Audit: a file included twice (or through two other files) counts each time, <code>cart.p8:1</code> and <code>cart.p8:2</code> are separate code tabs, and an include cycle stops there (shown as <i>cycle stopped</i>, not as missing). Moving to another file of the folder saves the one you leave; if that save is cancelled or you type while it runs, the file stays open with your newest code. Run in an included .lua file runs the cart that includes it.</li>
           <li><b>Cart</b>: open the cart's sprite sheet in Pixel Studio or its map in the Map Editor.</li>
         </ul>
 
@@ -1548,7 +1549,7 @@
 
         <h3 id="doc-audit">Project Audit</h3>
         <ul>
-          <li><b>Choose Project Folder…</b> (<kbd>Ctrl</kbd>+<kbd>O</kbd>) or drop a folder onto the workspace. Every <code>.p8</code> in it and its subfolders is read in the browser; nothing is uploaded. Folders starting with a dot, <code>node_modules</code>, <code>dist</code> and <code>build</code> are skipped.</li>
+          <li><b>Open Project Folder…</b> (<kbd>Ctrl</kbd>+<kbd>O</kbd>, read only) or drop a folder onto the workspace. Every <code>.p8</code> in it and its subfolders is read in the browser; nothing is uploaded. Folders starting with a dot, <code>node_modules</code>, <code>dist</code> and <code>build</code> are skipped.</li>
           <li><b>Rescan</b> (<kbd>F5</kbd>) reads the folder again. A folder you dropped (Chrome, Edge) is reread directly; a folder chosen with the button has to be chosen again. The browser's “upload files?” question only means the page may read them; nothing leaves your computer. Folders under <code>AppData</code> (where PICO-8 keeps its carts) work with both ways; when dropped, they are also chosen again on rescan.</li>
           <li><b>Tokens / chars (exp)</b> include every <code>#include</code> file (relative to the cart, then to the project folder, <code>.lua</code> / <code>.p8</code> may be left out, upper/lower case does not matter). <code>#include cart.p8:1</code> pulls in only code tab 1 of that cart (tabs count from 0). An <code>#include</code> line inside a comment or string is not a directive and is not expanded; a file included twice is counted twice, and include cycles stop with a warning. <b>(self)</b> is the cart on its own. The bars show how close a cart is to 8192 tokens and 65535 characters (orange from 90%, red when over).</li>
           <li>Token counts are estimates that follow the PICO-8 rules (commas, periods, semicolons, closing brackets, <code>local</code>, <code>end</code> and comments are free; a string or a negative number is one token). Comments and strings are read with the Code Editor's lexer, so long brackets of any level (<code>--[==[ … ]==]</code>, <code>[=[ … ]=]</code>) count like <code>--[[ … ]]</code> / <code>[[ … ]]</code>. The estimate can be off by a few tokens; PICO-8's own count is authoritative. Unlike the desktop tool, <code>..</code> counts as one token, as it does in PICO-8.</li>
@@ -1571,7 +1572,7 @@
         <h3 id="doc-cartbuilder">Cart Builder</h3>
         <p>Manages a demo project's data: assets, the data carts they are packed into, and the <code>--@data</code> anchors that tell the fx code where each piece is. The format is described in <code>docs/PROJECT_MODEL.md</code>.</p>
         <ul>
-          <li><b>Open Demo Project…</b>: the folder that contains <code>demo/</code> (a demoframe project), or a flat demo folder with <code>main.p8</code> in it. Use a writable working copy outside protected folders such as <code>AppData</code>; browser restrictions can prevent writes there. The suite remembers the folder; after a restart, <i>Reconnect</i> asks for permission again.</li>
+          <li><b>Open Project Folder…</b> (read and write; it becomes the active project the other tools can use): the folder that contains <code>demo/</code> (a demoframe project), or a flat demo folder with <code>main.p8</code> in it. Use a writable working copy outside protected folders such as <code>AppData</code>; browser restrictions can prevent writes there. The suite remembers the folder; after a restart, <i>Reconnect</i> asks for permission again.</li>
           <li><b>Adopt</b> (projects without <code>demo/suite.json</code>): every <code>reload()</code> of a data cart with a literal cart name becomes a part (its bytes go to <code>assets/</code>), and its line gets a <code>--@data asset.part</code> comment. Ranges inside another range of the same cart become <code>--@data asset.part+offset</code>. A loop over a list of carts (<code>reload(0,0,0x4300,cartnames[i])</code> with <code>cartnames={"a.p8",…}</code>) becomes a <b>cart set</b>: one part per cart, anchored as <code>--@data asset[]</code>; Write Carts also rewrites the names in the list, and the set's parts all sit at offset 0. Music carts and <code>tracks.p8</code> are made by other tools: they are listed (<i>Made by other tools</i>) but never packed.</li>
           <li><b>Segments</b>: what a part holds, found by the Data Carts analysis (image, palette / fade table, data), e.g. Logolit's image and its tables in one part. <b>→ Library</b> puts an image segment into the library in its palette and with its fades (open it in Pixel Studio, Palette &amp; Fades, Tile Maker), a palette segment as a palette; <b>← Library</b> writes an edited image of the same size (or a palette into row 0) back into the part. Write Carts puts it into the data carts.</li>
           <li><b>Rename</b> renames an asset and its <code>--@data</code> anchors in the fx code.</li>

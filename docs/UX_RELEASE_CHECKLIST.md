@@ -53,7 +53,7 @@ For each tour, start it from its tool with Help › Tour this tool, and once fro
 | Map Editor | tools, name/save badge, Size…, map canvas, tileset, brush, menu bar |
 | Code Editor | editor, code tabs, Save, Run, token meter, Files, Functions, Sprites → Pixel Studio |
 | Cart Builder | project folder, Add Image, parts, stages, Auto-pack, report, Write Carts |
-| Project Audit | Choose Project Folder, carts table, columns, details, Export CSV |
+| Project Audit | Open Project Folder, carts table, columns, details, Export CSV |
 | Data Carts | Open Project Folder, Inspect/Pack, cart list; with a cart open also the memory map, viewer and output buttons |
 | Data Tools | Binary → string card, input mode, generated code, nibble card |
 | Extra Tools overview | tabs, description, tool area; the panel splitter step appears only while the Terrain Lab tab is selected |
@@ -85,7 +85,7 @@ Recorded 2026-11-04 with Chromium 153.0.8010.0 on Linux/headless, using a dispos
 | Pixel Studio | Ink select/group | Pixel perfect keeps `Pixel perfect (P)` | Full child title restored; no inherited Ink tip over it |
 | Tile Maker | Threshold | Disabled Auto Generate Tiles explanation removed | Native explanation restored, custom tip suppressed while disabled |
 | Map Editor | Size… | Draw keeps `Draw (B)` | Full native explanation restored; icon name retained |
-| Project Audit | Choose Project Folder… | Rescan keeps `F5` | Full native explanation restored |
+| Project Audit | Open Project Folder… | Rescan keeps `F5` | Full native explanation restored |
 
 Additional checks passed: importing/building an 8×8 test image enabled Auto Generate Tiles, after which its native title was claimed and exactly one registry tip appeared; empty-title buttons in Terrain's dynamically built mode group allowed registry help and obeyed Off; the live Map fit status survived preference changes; a tap on the already-selected Pixel Studio Preview radio supplied a hint in Concise and none in Off; icon names and Preview F1 help remained available. No browser JavaScript errors occurred. Focused regressions cover disabled controls, a control disabled during the delay, nested native ownership and empty-title builders.
 

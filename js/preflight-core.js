@@ -56,7 +56,7 @@ const P8Preflight = (() => {
    * "Commit" is only 'done' after a verified write and while nothing changed since.
    */
   function stages(s) {
-    const analyze = !s.open ? { status: 'todo', detail: 'Open a demo project folder. Reading is analysis only: nothing is written.' }
+    const analyze = !s.open ? { status: 'todo', detail: 'Open Project Folder… (a folder with demo/ or main.p8). Reading is analysis only: nothing is written.' }
       : !s.hasProject ? { status: 'current', detail: 'Folder read (read-only). Adopting it writes anchors and assets: you see every file first.' }
         : { status: 'done', detail: `Project read: ${s.partCount} part${s.partCount === 1 ? '' : 's'}. Read-only.` };
     const plan = !s.hasProject ? { status: 'todo', detail: 'Arrange the parts into data carts (buttons, drag or Auto-pack).' }

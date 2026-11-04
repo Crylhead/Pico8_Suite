@@ -146,7 +146,7 @@
     },
     el('span', { className: 'dc-item-name', textContent: c.name }),
     el('span', { className: 'dc-item-bar' }, el('i', { className: 'read', style: `width:${(c.readBytes / ROM) * 100}%` }), el('i', { className: 'used', style: `width:${(c.usedBytes / ROM) * 100}%` })),
-    el('span', { className: 'muted dc-item-meta', textContent: `${kb(c.usedBytes)} data · ${c.reads.length ? `${kb(c.readBytes)} read` : c.ownBytes ? 'read by its own code' : 'not reloaded'}${c.uncertain.length ? ' · uncertain reads' : ''}` }))) : [el('p', { className: 'muted', textContent: dc.carts.size ? 'No data carts. Untick “Only data carts” to see all carts.' : 'Open a project folder (shared with Project Audit) or single .p8 files.' })]));
+    el('span', { className: 'muted dc-item-meta', textContent: `${kb(c.usedBytes)} data · ${c.reads.length ? `${kb(c.readBytes)} read` : c.ownBytes ? 'read by its own code' : 'not reloaded'}${c.uncertain.length ? ' · uncertain reads' : ''}` }))) : [el('p', { className: 'muted', textContent: dc.carts.size ? 'No data carts. Untick “Only data carts” to see all carts.' : 'Open Project Folder… reads the same folder as Project Audit (read only), or Open .p8 Files… loads single carts. Packed carts are downloads.' })]));
   }
 
   const CELL = 128; // bytes per map row

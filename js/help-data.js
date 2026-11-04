@@ -132,7 +132,7 @@ const P8HelpData = (() => {
         { id: 'code.minify', name: 'Minify…', text: 'Cart → Minify… copies the current unsaved Lua, cart sections and available folder context to Minifier. Uses already-granted read access for reachable includes from the folder opened in Code Editor. No save, Run, folder scan or permission prompt is requested. Back to Code Editor returns to the existing buffer, caret and undo history. Optimized code is never applied back; later edits make the captured snapshot earlier.' },
         { id: 'code.save', name: 'Save', text: 'Ctrl+S. Rechecks the current file, preserves external changes to non-Lua sections, and asks you to resolve concurrent Lua edits before saving.' },
         { id: 'code.run', name: 'Run', text: 'Ctrl+R. Saves and starts the cart in PICO-8 through tools/run_pico8_bridge.bat (needs Python). printh() output appears below the code. A .lua file runs the cart of the open folder that #includes it; after Open Folder switches to another folder, the old cart is never used: open the folder the cart is in to run it.' },
-        { id: 'code.include', name: 'Folders and #include', text: 'Open Folder… lists carts; Ctrl+click an #include line to open it.' },
+        { id: 'code.include', name: 'Folders and #include', text: 'Open Project Folder… lists carts; Ctrl+click an #include line to open it. The Code Editor edits files in place: Save writes the open file.' },
         { id: 'code.tabs', name: 'Code tabs', text: 'Jump to each -->8 tab; Functions lists every function.' },
       ],
       controls: [{ id: 'code.tokens', label: 'Token counter', text: 'Counts tokens (8192) and characters (65535), including #include files.' }],
@@ -195,7 +195,7 @@ const P8HelpData = (() => {
       tasks: ['count tokens in a project', 'find unused carts', 'check load/run/reload references'],
       actions: [
         { id: 'audit.bar-layout', name: 'Controls in smaller windows', text: 'On desktop the project commands use a reserved scrollable area. Focus it and use Page Down, or scroll to reach further controls and long messages. Small windows let the commands grow with the scrolling page.' },
-        { id: 'audit.scan', name: 'Choose Project Folder / Rescan', text: 'Reads every .p8 in the folder and subfolders locally; nothing is uploaded. Ctrl+O chooses a folder, F5 rescans.' },
+        { id: 'audit.scan', name: 'Open Project Folder / Rescan', text: 'Read only. Reads every .p8 in the folder and subfolders locally; nothing is uploaded. Ctrl+O chooses a folder, F5 rescans.' },
         { id: 'audit.summary', name: 'Project summary', text: 'Shows which carts are used and which nothing points to.' },
       ],
       controls: [{ id: 'audit.columns', label: 'Column checkboxes', text: 'Hide columns; click a header to sort.' }],
@@ -222,12 +222,12 @@ const P8HelpData = (() => {
     {
       id: 'cartbuilder', kind: 'tool', ws: 'cartbuilder', title: 'Cart Builder', rev: 4,
       summary: 'Manages a demo project’s data as assets packed into data carts, with --@data anchors telling the fx code where each piece is.',
-      inputs: ['a demo project folder (contains demo/ or main.p8)', 'Library images and maps', 'files'],
+      inputs: ['a project folder (contains demo/ or main.p8)', 'Library images and maps', 'files'],
       outputs: ['data carts', 'rewritten reload() lines', 'demo/suite.json'],
       tasks: ['adopt an existing project', 'pack assets into data carts', 'rename an asset', 'write carts'],
       actions: [
         { id: 'cartbuilder.bar-layout', name: 'Controls in smaller windows', text: 'On desktop the project commands use a reserved scrollable area. Focus it and use Page Down, or scroll for longer messages and further actions. Small windows show all rows in the scrolling page.' },
-        { id: 'cartbuilder.open', name: 'Open Demo Project…', text: 'Needs Chrome or Edge. Use a writable working copy outside protected folders such as AppData. After a restart, Reconnect asks permission again.', detail: 'Choose the folder that contains demo/ (a demoframe project) or a flat folder with main.p8. Nothing is written until you press Write Carts.' },
+        { id: 'cartbuilder.open', name: 'Open Project Folder…', text: 'Read and write: needs a project folder with demo/ or main.p8; it becomes the active project that Code Editor, Project Audit and Data Carts can use. Needs Chrome or Edge. Use a writable working copy outside protected folders such as AppData. After a restart, Reconnect asks permission again.', detail: 'Choose the folder that contains demo/ (a demoframe project) or a flat folder with main.p8. Nothing is written until you press Write Carts.' },
         { id: 'cartbuilder.adopt', name: 'Adopt', text: 'Turns literal reload() calls of data carts into parts with --@data comments.' },
         { id: 'cartbuilder.stages', name: 'Workflow strip', text: 'Analyze (read-only) → Plan (place every part) → Validate (checks, errors block writing) → Commit (preview, confirm, verified write). Opening a folder only reads; adopting a project writes anchors and assets, and lists those files first.', detail: 'On wide screens the Parts list and cart/report area scroll independently. On narrow screens the areas stack, the Parts list has its own scrolling, and the workspace below the top bars scrolls to the report and actions.' },
         { id: 'cartbuilder.move', name: 'Move…', text: 'Every part has a Move… button: choose its cart, a new cart or "not placed" without dragging. Nothing is written until Write Carts.' },
