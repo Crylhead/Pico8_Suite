@@ -1135,14 +1135,26 @@
         <span id="mnProfileLabel">Profile</span>
         <div id="mnProfile" class="seg mn-profiles" role="radiogroup" aria-labelledby="mnProfileLabel" aria-describedby="mnModeText mnSupported" data-help-id="minifier.profile">
           <button type="button" role="radio" data-value="minimal" aria-checked="true">Minimal</button>
-          <button type="button" role="radio" data-value="safe" aria-checked="false" disabled>Safe</button>
-          <button type="button" role="radio" data-value="aggressive" aria-checked="false" disabled>Aggressive</button>
+          <button type="button" role="radio" data-value="safe" aria-checked="false">Safe</button>
+          <button type="button" role="radio" data-value="aggressive" aria-checked="false">Aggressive</button>
+        </div>
+        <div id="mnAggressiveOptions" class="mn-switches" data-help-id="minifier.aggressive" hidden>
+          <label class="check"><input type="checkbox" id="mnRenameAggressive"><span>Rename aggressively</span></label>
+          <label class="check"><input type="checkbox" id="mnReorderAggressive"><span>Reorder aggressively</span></label>
         </div>
         <label class="field" for="mnTarget">Focus
-          <select id="mnTarget" class="select" aria-describedby="mnModeText mnSupported" data-help-id="minifier.target"><option value="tokens">Tokens</option></select>
+          <select id="mnTarget" class="select" aria-describedby="mnModeText mnSupported" data-help-id="minifier.target">
+            <option value="balanced">Balanced</option>
+            <option value="tokens">Tokens</option>
+            <option value="chars">Character count</option>
+            <option value="compressed">Compressed size</option>
+            <option value="tokens-chars">Tokens &amp; character count</option>
+            <option value="tokens-compressed">Tokens &amp; compressed size</option>
+          </select>
         </label>
-        <p id="mnModeText">Minimal keeps variable names and line breaks to make the result easier to debug. It may still change expressions, comments, and spacing. Focusing on tokens may leave character or compressed size unchanged—or increase them.</p>
-        <p id="mnSupported" class="muted">Only Minimal + Tokens is supported by this engine. Safe and Aggressive are unavailable.</p>
+        <label class="check" data-help-id="minifier.keepLines"><input type="checkbox" id="mnKeepLines"><span>Keep linebreaks (helps debugging)</span></label>
+        <p id="mnModeText">Minimal keeps variable names and line breaks to make the result easier to debug. It may still change expressions, comments, and spacing.</p>
+        <p id="mnSupported" class="muted">Focusing on tokens may leave character or compressed size unchanged—or increase them.</p>
       </fieldset>
       <div class="mn-run-actions">
         <button id="mnOptimize" class="btn btn-primary" data-action="mn-optimize" data-help-id="minifier.optimize" disabled>Optimize</button>
@@ -1154,7 +1166,7 @@
       <p id="mnEngine" class="muted">Engine not loaded.</p>
       <details id="mnAdvanced">
         <summary data-help-id="minifier.advanced">Advanced settings</summary>
-        <p class="muted">Fixed Minimal + Tokens configuration; custom scripts and compiler transforms are unsupported.</p>
+        <p class="muted">Exact Shrinko8 options for the current choice. Custom scripts and compiler transforms (--$switch-compiler, --$dynamic-include) are unsupported.</p>
         <code id="mnFlags"></code>
       </details>
     </aside>

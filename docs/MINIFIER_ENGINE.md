@@ -68,7 +68,7 @@ The fixed CLI argument array is input, output, explicit input/output format, the
 --input-count --count --parsable-count --error-format common
 ```
 
-No submitted source is interpolated into Python or a shell command. The bridge calls `shrinko8.main(argv)`; native tests invoke the CLI separately with the identical flags. Only **Minimal + Tokens** and `.lua` / `.p8` trees with a matching relative entry file are accepted. MIN-07 supplies reachable dependencies as plain paths/text; missing, ambiguous or unsupported includes fail explicitly. Other profiles/targets/formats return unsupported diagnostics rather than ignored options or partial success.
+No submitted source is interpolated into Python or a shell command. The bridge calls `shrinko8.main(argv)`; native tests invoke the CLI separately with the identical flags. Only the documented levels/focus choices (below) and `.lua` / `.p8` trees with a matching relative entry file are accepted. MIN-07 supplies reachable dependencies as plain paths/text; missing, ambiguous or unsupported includes fail explicitly. Other profiles/targets/formats return unsupported diagnostics rather than ignored options or partial success.
 
 **Important measured behavior:** `--no-minify-transform` alone does not reject compiler requests. On the pinned engine, `--$switch-compiler:parens8` followed by ordinary Lua succeeds with the transform disabled, ignoring the requested compilation. Therefore the bridge uses Shrinko8's actual tokenizer to find compiler/dynamic-include/alias/sublanguage/placeholder comments and refuses them before optimization. Compiler-looking strings are accepted as strings. The upstream compiler scripts and Parens-8 runtime are not packaged.
 
@@ -126,14 +126,25 @@ Callers must handle rejected promises. Cancellation rejects with `E_CANCELLED`, 
 | --- | --- |
 | `getState()` / `subscribe(fn)` | Immutable current state / unsubscribe function; observer errors cannot break transport cleanup |
 | `setSource(snapshotOrNull)` | Copies relative file paths/text only; replaces the document even if the filename is unchanged |
-| `setOptions({profile?, target?})` | Validates named options; defaults Minimal + Tokens; identical settings are a no-op |
+| `setOptions({profile?, target?, keepLines?, renameAggressive?, reorderAggressive?})` | Validates named options; defaults Minimal + Tokens; identical settings are a no-op |
 | `initialize()` | Shared pending promise; initializes only, never sends source |
 | `optimize()` | Captures an immutable job before any await; initializes lazily if needed; rejects simultaneous runs |
 | `cancel()` | Terminates pending initialization/CPU work and rejects it; idle cancellation is a no-op |
 | `retry()` | Replaces the worker and initializes it; a new Optimize action is still required |
 | `dispose()` | Terminates work and clears observers; terminal, create another adapter to reuse |
 
-Only Minimal + Tokens is mapped, to the five flags documented above. Unsupported names produce `unsupported`, and unknown settings keys are rejected rather than silently passed to the CLI. The current engine advertises `includes: true`; MIN-07 validates the immutable file map and upstream preprocessing before accepting output. Older workers advertising `includes: false` continue to reject multi-file jobs.
+Option mapping (#164):
+
+| Level | Flags | Focus | Flags |
+| --- | --- | --- | --- |
+| **Minimal** (default) | `--minify-safe-only --no-minify-rename --no-minify-lines` | Balanced | none |
+| Safe | `--minify-safe-only` | **Tokens** (default) | `--focus-tokens` |
+| Aggressive | `--minify` plus `--rename-safe-only` / `--reorder-safe-only` unless *Rename/Reorder aggressively* is on | Character count / Compressed size | `--focus-chars` / `--focus-compressed` |
+| *Keep linebreaks* (Safe/Aggressive) | `--no-minify-lines` | Tokens & characters / Tokens & compressed | both focus flags |
+
+`--no-minify-transform` is always added (compiler transforms stay unsupported). `js/minifier-core.js` `flagsFor()` and `suite_bridge.py` `flags_for()` produce identical lists; a native test checks every combination and CLI parity per level × focus.
+
+The default is unchanged: Minimal + Tokens maps to the five flags documented above. Unsupported names produce `unsupported`, and unknown settings keys are rejected rather than silently passed to the CLI. The current engine advertises `includes: true`; MIN-07 validates the immutable file map and upstream preprocessing before accepting output. Older workers advertising `includes: false` continue to reject multi-file jobs.
 
 One monotonic clock supplies `sourceRevision`, `optionsRevision` and job identities. A source/options change invalidates the active job immediately. During bootstrap, the source-free initialization can finish for the newly loaded input; after source has been posted, the worker is terminated. Replaced workers' saved callbacks and out-of-order request replies cannot make old output current.
 

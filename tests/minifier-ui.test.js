@@ -509,3 +509,38 @@ t('#147 a lexer failure or empty pane falls back to the plain textarea without l
   assert.strictEqual(f.$('mnSourcePane').dataset.syntax, 'on', 'recovers on the next text');
   f.view.dispose();
 });
+
+t('#164 level, focus and switches drive the job; Minimal locks Keep linebreaks; Aggressive options only for Aggressive', async () => {
+  const Core = require('../js/minifier-core.js');
+  const full = { ...engine(), capabilities: { ...engine().capabilities, profiles: [...Core.PROFILES], targets: [...Core.TARGETS] } };
+  const f = fixture(); await f.initialize({ engine: full }); f.view.load(source());
+  assert.strictEqual(f.$('mnKeepLines').checked, true); assert.ok(f.$('mnKeepLines').disabled, 'Minimal always keeps linebreaks');
+  assert.strictEqual(f.$('mnAggressiveOptions').hidden, true);
+  for (const b of f.$('mnProfile').children) assert.strictEqual(b.disabled, false, b.dataset.value);
+  const pick = (value) => f.$('mnProfile').listeners.click({ target: f.$('mnProfile').children.find((b) => b.dataset.value === value) });
+  const flip = (id, on) => { f.$(id).checked = on; f.$(id).listeners.change({ target: f.$(id) }); };
+  pick('safe');
+  assert.strictEqual(f.view.getState().options.profile, 'safe');
+  assert.strictEqual(f.$('mnKeepLines').disabled, false); assert.strictEqual(f.$('mnKeepLines').checked, false);
+  assert.match(f.$('mnModeText').textContent, /Table field names are kept/);
+  flip('mnKeepLines', true);
+  f.$('mnTarget').value = 'compressed'; f.$('mnTarget').listeners.change();
+  pick('aggressive');
+  assert.strictEqual(f.$('mnAggressiveOptions').hidden, false);
+  flip('mnRenameAggressive', true);
+  const options = f.view.getState().options;
+  assert.deepStrictEqual(options, { profile: 'aggressive', target: 'compressed', keepLines: true, renameAggressive: true, reorderAggressive: false });
+  assert.strictEqual(f.$('mnFlags').textContent, '--minify --reorder-safe-only --no-minify-lines --focus-compressed --no-minify-transform');
+  assert.match(f.$('mnModeText').textContent, /Rename aggressively also renames table fields/);
+  assert.match(f.$('mnSupported').textContent, /compressed size/);
+  const run = f.actions['mn-optimize'](); await flush();
+  const request = f.workers.at(-1).requests.at(-1);
+  assert.deepStrictEqual([request.job.profile, request.job.target, request.job.keepLines, request.job.renameAggressive, request.job.reorderAggressive], ['aggressive', 'compressed', true, true, false]);
+  f.workers.at(-1).reply({ result: { ...result(), flags: [...Core.flagsFor(options)] } }); await run;
+  assert.strictEqual(f.view.getState().status, 'success');
+  assert.strictEqual(f.view.getState().result.job.renameAggressive, true);
+  pick('minimal');
+  assert.strictEqual(f.$('mnAggressiveOptions').hidden, true); assert.ok(f.$('mnKeepLines').checked); assert.ok(f.$('mnKeepLines').disabled);
+  assert.match(f.$('mnOutputState').textContent, /Stale/, 'a changed level marks the earlier result stale');
+  f.view.dispose();
+});

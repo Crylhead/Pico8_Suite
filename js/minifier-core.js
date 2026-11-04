@@ -1,8 +1,15 @@
 // MIN-02: immutable, DOM-free Minifier model. No worker, filesystem or export side effects.
 'use strict';
 const P8MinifierCore = (() => {
-  const DEFAULTS = Object.freeze({ profile: 'minimal', target: 'tokens' });
+  // #164: the levels and focus targets of Shrinko8's web Minify tab. Minimal + Tokens stays the default,
+  // and its flags (FLAGS) are unchanged. vendor/shrinko8/suite_bridge.py mirrors flagsFor() exactly.
+  const PROFILES = Object.freeze(['minimal', 'safe', 'aggressive']);
+  const TARGETS = Object.freeze(['balanced', 'tokens', 'chars', 'compressed', 'tokens-chars', 'tokens-compressed']);
+  const SWITCHES = Object.freeze(['keepLines', 'renameAggressive', 'reorderAggressive']);
+  const DEFAULTS = Object.freeze({ profile: 'minimal', target: 'tokens', keepLines: false, renameAggressive: false, reorderAggressive: false });
   const FLAGS = Object.freeze(['--minify-safe-only', '--no-minify-rename', '--no-minify-lines', '--focus-tokens', '--no-minify-transform']);
+  const FOCUS = Object.freeze({ balanced: [], tokens: ['--focus-tokens'], chars: ['--focus-chars'], compressed: ['--focus-compressed'],
+    'tokens-chars': ['--focus-tokens', '--focus-chars'], 'tokens-compressed': ['--focus-tokens', '--focus-compressed'] });
   const STATES = Object.freeze(['empty', 'loading', 'ready', 'running', 'success', 'unchanged', 'stale', 'cancelled', 'error', 'unsupported']);
   const engineFields = ['shrinko8Version', 'shrinko8Commit', 'pyodideVersion', 'pythonVersion'];
   const freeze = (value) => {
@@ -16,22 +23,29 @@ const P8MinifierCore = (() => {
   const count = (v) => Number.isSafeInteger(v) && v >= 0;
 
   function settings(raw = {}) {
-    if (!record(raw) || Object.keys(raw).some((k) => !['profile', 'target'].includes(k))) throw error('E_OPTIONS_UNSUPPORTED', 'Only profile and target settings are supported.');
+    if (!record(raw) || Object.keys(raw).some((k) => !['profile', 'target', ...SWITCHES].includes(k))) throw error('E_OPTIONS_UNSUPPORTED', 'Only level, focus, Keep linebreaks and the Aggressive rename/reorder settings are supported.');
     const value = { ...DEFAULTS, ...raw };
-    if (typeof value.profile !== 'string' || typeof value.target !== 'string') throw error('E_OPTIONS_UNSUPPORTED', 'Profile and target must be named settings.');
+    if (typeof value.profile !== 'string' || typeof value.target !== 'string' || SWITCHES.some((k) => typeof value[k] !== 'boolean')) throw error('E_OPTIONS_UNSUPPORTED', 'Level and focus must be named settings; switches must be on or off.');
     return freeze(value);
   }
   function validateSettings(raw = {}) {
     try {
       const value = settings(raw);
-      if (value.profile !== 'minimal' || value.target !== 'tokens') throw error('E_OPTIONS_UNSUPPORTED', 'This pinned worker supports Minimal + Tokens only.');
+      if (!PROFILES.includes(value.profile)) throw error('E_OPTIONS_UNSUPPORTED', `Unknown level "${value.profile}". Choose Minimal, Safe or Aggressive.`);
+      if (!TARGETS.includes(value.target)) throw error('E_OPTIONS_UNSUPPORTED', `Unknown focus "${value.target}".`);
       return { ok: true, value, diagnostics: [] };
     } catch (e) { return { ok: false, diagnostics: e.diagnostics }; }
   }
+  /** Exact pinned Shrinko8 flags for a setting (order matters: results are compared to it). */
   function flagsFor(raw) {
     const v = validateSettings(raw);
     if (!v.ok) throw error('E_OPTIONS_UNSUPPORTED', v.diagnostics[0].message);
-    return FLAGS;
+    const o = v.value;
+    const level = o.profile === 'minimal' ? ['--minify-safe-only', '--no-minify-rename', '--no-minify-lines']
+      : o.profile === 'safe' ? ['--minify-safe-only']
+        : ['--minify', ...(o.renameAggressive ? [] : ['--rename-safe-only']), ...(o.reorderAggressive ? [] : ['--reorder-safe-only'])];
+    const lines = o.profile !== 'minimal' && o.keepLines ? ['--no-minify-lines'] : [];
+    return Object.freeze([...level, ...lines, ...FOCUS[o.target], '--no-minify-transform']);
   }
 
   function sourceSnapshot(raw) {
@@ -127,7 +141,7 @@ const P8MinifierCore = (() => {
     if (diagnostics.some((d) => d.severity === 'error')) throw error('E_RESULT_INVALID', 'An output containing errors cannot be accepted as current.', diagnostics);
     return freeze({ job, engine, lua: raw.lua, cartText: job.kind === 'p8' ? raw.cartText : null, metrics, diagnostics, flags: [...raw.flags] });
   }
-  const jobOptions = (job) => ({ profile: job.profile, target: job.target });
+  const jobOptions = (job) => Object.fromEntries(Object.keys(DEFAULTS).map((k) => [k, job[k] ?? DEFAULTS[k]]));
   const idle = (s) => !validateSettings(s.options).ok ? 'unsupported' : s.enginePhase === 'loading' ? 'loading' : !hasSource(s) ? 'empty' : s.result ? 'stale' : 'ready';
   function initialState() {
     return freeze({ revision: 0, sourceRevision: 0, optionsRevision: 0, source: null, options: DEFAULTS, engine: null, enginePhase: 'cold', status: 'empty', latestJobId: null, activeJob: null, result: null, diagnosticJob: null, diagnostics: [] });
@@ -243,6 +257,6 @@ const P8MinifierCore = (() => {
     return runs;
   }
 
-  return { DEFAULTS, FLAGS, STATES, settings, validateSettings, flagsFor, sourceSnapshot, inputKind, decodeText, prepareInput, textInput, normalizeDiagnostics, engineSnapshot, engineKey, sameJob, resultSnapshot, initialState, transition, describe, canExport, metricDelta, metricRows, diagnosticLocation, outputFilename, syntaxRuns, error };
+  return { DEFAULTS, FLAGS, PROFILES, TARGETS, STATES, settings, validateSettings, flagsFor, sourceSnapshot, inputKind, decodeText, prepareInput, textInput, normalizeDiagnostics, engineSnapshot, engineKey, sameJob, resultSnapshot, initialState, transition, describe, canExport, metricDelta, metricRows, diagnosticLocation, outputFilename, syntaxRuns, error };
 })();
 if (typeof module !== 'undefined') module.exports = P8MinifierCore;

@@ -19,6 +19,33 @@ from pico_srcdefs import Source
 FLAGS = ['--minify-safe-only', '--no-minify-rename', '--no-minify-lines',
          '--focus-tokens', '--no-minify-transform']
 COUNT_FLAGS = ['--input-count', '--count', '--parsable-count', '--error-format', 'common']
+# #164: levels and focus targets of Shrinko8's web Minify tab; js/minifier-core.js flagsFor() is identical.
+# FLAGS above stays the default (Minimal + Tokens).
+PROFILES = ('minimal', 'safe', 'aggressive')
+FOCUS = {'balanced': [], 'tokens': ['--focus-tokens'], 'chars': ['--focus-chars'], 'compressed': ['--focus-compressed'],
+         'tokens-chars': ['--focus-tokens', '--focus-chars'], 'tokens-compressed': ['--focus-tokens', '--focus-compressed']}
+SWITCHES = ('keepLines', 'renameAggressive', 'reorderAggressive')
+
+
+def flags_for(job):
+    """Exact pinned flags for a job's options, or Unsupported for unknown values."""
+    profile, target = job.get('profile', 'minimal'), job.get('target', 'tokens')
+    switches = {name: job.get(name, False) for name in SWITCHES}
+    if profile not in PROFILES:
+        raise Unsupported('E_OPTIONS_UNSUPPORTED', f'Unknown level "{profile}". Choose Minimal, Safe or Aggressive.')
+    if target not in FOCUS:
+        raise Unsupported('E_OPTIONS_UNSUPPORTED', f'Unknown focus "{target}".')
+    if any(not isinstance(value, bool) for value in switches.values()):
+        raise Unsupported('E_OPTIONS_UNSUPPORTED', 'Level and focus must be named settings; switches must be on or off.')
+    if profile == 'minimal':
+        level = ['--minify-safe-only', '--no-minify-rename', '--no-minify-lines']
+    elif profile == 'safe':
+        level = ['--minify-safe-only']
+    else:
+        level = (['--minify'] + ([] if switches['renameAggressive'] else ['--rename-safe-only'])
+                 + ([] if switches['reorderAggressive'] else ['--reorder-safe-only']))
+    lines = ['--no-minify-lines'] if profile != 'minimal' and switches['keepLines'] else []
+    return level + lines + FOCUS[target] + ['--no-minify-transform']
 
 
 class Unsupported(ValueError):
@@ -144,8 +171,7 @@ def diagnostics(text, root, failed):
 def optimize(job_json):
     try:
         job = json.loads(job_json)
-        if job.get('profile', 'minimal') != 'minimal' or job.get('target', 'tokens') != 'tokens':
-            raise Unsupported('E_OPTIONS_UNSUPPORTED', 'This foundation worker supports Minimal + Tokens only.')
+        flags = flags_for(job)
         kind = job.get('kind')
         if kind not in ('p8', 'lua'):
             raise Unsupported('E_FORMAT_UNSUPPORTED', 'Use a .p8 or .lua file tree. PNG export is not packaged.')
@@ -186,7 +212,7 @@ def optimize(job_json):
             stream = io.StringIO()
             with contextlib.redirect_stdout(stream), contextlib.redirect_stderr(stream):
                 _, project_notes = preflight(source, kind, allowed)
-                exit_code = main([str(source), str(output), '-F', kind, '-f', kind] + FLAGS + COUNT_FLAGS)
+                exit_code = main([str(source), str(output), '-F', kind, '-f', kind] + flags + COUNT_FLAGS)
             failed = exit_code not in (None, 0, 2) or not output.is_file()
             notes = project_notes + diagnostics(stream.getvalue(), input_root, failed)
             if failed:
@@ -206,7 +232,7 @@ def optimize(job_json):
             result_cart = read_cart(str(output), CartFormat(kind))
             return json.dumps({'ok': True, 'lua': from_p8str(result_cart.code),
                                'cartText': result_text if kind == 'p8' else None,
-                               'metrics': metrics, 'diagnostics': notes, 'flags': FLAGS})
+                               'metrics': metrics, 'diagnostics': notes, 'flags': flags})
     except Unsupported as error:
         return json.dumps({'ok': False, 'diagnostics': [{'severity': 'error', 'code': error.code, 'message': str(error)}]})
     except Exception as error:

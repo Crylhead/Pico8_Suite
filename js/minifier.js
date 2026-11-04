@@ -5,6 +5,19 @@ const P8Minifier = (() => {
   const Export = typeof P8MinifierExport !== 'undefined' ? P8MinifierExport : require('./minifier-export-core.js');
   const Lua = typeof P8Code !== 'undefined' ? P8Code : require('./code-core.js');
   const SYNTAX_LIMIT = 200000; // characters; larger text stays plain so rendering never stalls the page
+  const PROFILE_TEXT = {
+    minimal: 'Minimal keeps variable names and line breaks to make the result easier to debug. It may still change expressions, comments, and spacing.',
+    safe: 'Safe also renames variables (locals and globals, never PICO-8 callbacks or built-ins) and removes spaces and line breaks, using only changes Shrinko8 considers always safe. Table field names are kept.',
+    aggressive: 'Aggressive also allows changes Shrinko8 cannot prove safe. Rename aggressively also renames table fields, so code that reaches fields or globals through strings (t["name"], _ENV) breaks; Reorder aggressively reorders statements more freely. Test the result in PICO-8.',
+  };
+  const FOCUS_TEXT = {
+    balanced: 'Balanced reduces tokens, characters and compressed size without favoring one.',
+    tokens: 'Focusing on tokens may leave character or compressed size unchanged—or increase them.',
+    chars: 'Focusing on characters may leave tokens or compressed size unchanged—or increase them.',
+    compressed: 'Focusing on compressed size may leave tokens or characters unchanged—or increase them.',
+    'tokens-chars': 'Focusing on tokens and characters may leave compressed size unchanged—or increase it.',
+    'tokens-compressed': 'Focusing on tokens and compressed size may leave characters unchanged—or increase them.',
+  };
   function mount({ root, adapter, app, media, protocol = globalThis.location?.protocol, editorSource = null, clipboard = globalThis.navigator?.clipboard }) {
     const $ = (id) => root.querySelector('#' + id);
     const radios = (id) => [...$(id).querySelectorAll('[role=radio]')];
@@ -96,7 +109,7 @@ const P8Minifier = (() => {
       if (editorStale) return 'Earlier Code Editor snapshot. Use current editor to refresh before optimizing.';
       if (s.status === 'ready' && s.enginePhase === 'cold') return 'Source loaded. Engine not ready. Load the engine to optimize.';
       const messages = {
-        empty: 'No source loaded.', loading: 'Loading Minifier engine…', running: 'Optimizing tokens…',
+        empty: 'No source loaded.', loading: 'Loading Minifier engine…', running: 'Optimizing…',
         ready: 'Ready to optimize.', success: 'Optimization complete.', unchanged: 'No token savings found in Minimal mode.',
         stale: 'Options or input changed. Optimize again.', cancelled: 'Optimization cancelled. Original source unchanged.',
         error: 'Minifier failed.', unsupported: 'Unsupported input or settings.',
@@ -194,9 +207,19 @@ const P8Minifier = (() => {
       $('mnTarget').disabled = controls.busy;
       setValue($('mnTarget'), s.options.target);
       for (const b of radios('mnProfile')) {
-        b.disabled = controls.busy || b.dataset.value !== 'minimal';
+        b.disabled = controls.busy;
         b.setAttribute('aria-checked', String(b.dataset.value === s.options.profile));
       }
+      // #164: Minimal always keeps linebreaks; the rename/reorder switches only apply to Aggressive.
+      const minimal = s.options.profile === 'minimal', aggressive = s.options.profile === 'aggressive';
+      $('mnKeepLines').checked = minimal || s.options.keepLines;
+      $('mnKeepLines').disabled = controls.busy || minimal;
+      $('mnAggressiveOptions').hidden = !aggressive;
+      $('mnRenameAggressive').checked = s.options.renameAggressive;
+      $('mnReorderAggressive').checked = s.options.reorderAggressive;
+      $('mnRenameAggressive').disabled = $('mnReorderAggressive').disabled = controls.busy;
+      setText($('mnModeText'), PROFILE_TEXT[s.options.profile] || '');
+      setText($('mnSupported'), FOCUS_TEXT[s.options.target] || '');
       const retryText = s.status === 'error' ? 'Retry engine' : 'Load engine';
       for (const b of root.ownerDocument.querySelectorAll('[data-action="mn-retry"]')) b.textContent = retryText;
       $('mnRetry').hidden = localSetup || (s.enginePhase === 'ready' && s.status !== 'error');
@@ -430,6 +453,10 @@ const P8Minifier = (() => {
       if (b && !b.disabled) adapter.setOptions({ profile: b.dataset.value });
     };
     const onTarget = () => adapter.setOptions({ target: $('mnTarget').value });
+    const onSwitch = (e) => {
+      const key = { mnKeepLines: 'keepLines', mnRenameAggressive: 'renameAggressive', mnReorderAggressive: 'reorderAggressive' }[e.target?.id];
+      if (key && !e.target.disabled) adapter.setOptions({ [key]: !!e.target.checked });
+    };
     const onDiagnosticFilter = (e) => {
       const b = e.target.closest('[role=radio]');
       if (b && ['all', 'error', 'warning', 'info'].includes(b.dataset.value)) { diagnosticFilter = b.dataset.value; renderDiagnostics(adapter.getState()); }
@@ -438,6 +465,7 @@ const P8Minifier = (() => {
     $('mnCompareMode').addEventListener('click', onView);
     $('mnProfile').addEventListener('click', onProfile);
     $('mnTarget').addEventListener('change', onTarget);
+    for (const id of ['mnKeepLines', 'mnRenameAggressive', 'mnReorderAggressive']) $(id).addEventListener('change', onSwitch);
     $('mnDiagnosticFilter').addEventListener('click', onDiagnosticFilter);
     media.addEventListener('change', onResize);
     const unsubscribe = adapter.subscribe(render);
@@ -459,6 +487,7 @@ const P8Minifier = (() => {
         $('mnCompareMode').removeEventListener('click', onView);
         $('mnProfile').removeEventListener('click', onProfile);
         $('mnTarget').removeEventListener('change', onTarget);
+        for (const id of ['mnKeepLines', 'mnRenameAggressive', 'mnReorderAggressive']) $(id).removeEventListener('change', onSwitch);
         $('mnDiagnosticFilter').removeEventListener('click', onDiagnosticFilter);
         adapter.dispose();
       },
@@ -472,7 +501,7 @@ if (typeof window !== 'undefined' && window.Suite && window.P8App) (() => {
   const App = window.P8App, S = window.Suite;
   const root = document.querySelector('main[data-ws="minifier"]');
   S.registerTool({ ws: 'minifier', category: 'develop', name: 'Minifier',
-    desc: 'Use the live Code Editor buffer, open .p8 / .lua files or paste Lua, then compare local Shrinko8 output with Minimal profile and Tokens focus. Copy validated Lua or download a separate .lua/.p8 build copy. Original files are unchanged.',
+    desc: 'Use the live Code Editor buffer, open .p8 / .lua files or paste Lua, then compare local Shrinko8 output (Minimal, Safe or Aggressive; tokens, characters or compressed size). Copy validated Lua or download a separate .lua/.p8 build copy. Original files are unchanged.',
     tags: ['minify', 'optimize', 'tokens', 'shrinko8', 'lua', 'cartridge'] });
   const view = P8Minifier.mount({ root, adapter: P8MinifierEngine.create(), app: App, media: matchMedia('(min-width: 1200px)'), editorSource: S.codeSource });
   let attempted = false;

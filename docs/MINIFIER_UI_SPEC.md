@@ -17,7 +17,7 @@ Minifier is implemented on `main` through [PR #144](https://github.com/Crylhead/
 
 | Area | Current behavior / evidence |
 | --- | --- |
-| Workspace and defaults | Develop → Minifier, immediately after Code Editor; only **Minimal + Tokens** is supported. Safe/Aggressive and other focus values remain disabled/unavailable. |
+| Workspace and defaults | Develop → Minifier, immediately after Code Editor; **Minimal + Tokens** is the default; since #164 Safe/Aggressive (with Rename/Reorder aggressively), all six web focus choices and Keep linebreaks are available. |
 | Input and project handoff | UTF-8 `.lua` / `.p8`, pasted Lua and unsaved Code Editor snapshots; verified include forms from the already-opened project folder. Original source, caret/save context and undo are retained. |
 | Outputs | Copy generated Lua; separate `.min.lua` / `.min.p8`; optional `.min.p8.png` for complete cart input when its local encoder is available and capacity checks pass. PNG import is unsupported. |
 | Hosting and assets | HTTP(S) with packaged pinned Shrinko8/Pyodide assets; `file://` requires the localhost launcher. No source upload, CDN fallback or mandatory Run bridge. See [setup](MINIFIER_ENGINE.md). |

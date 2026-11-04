@@ -20,7 +20,7 @@ t('MIN-02 immutable source/options snapshots contain only plain contract data', 
   assert.strictEqual(C.describe(s).canOptimize, false);
   s = move(s, { type: 'ready', engine: engine() });
   s = move(s, { type: 'start' });
-  assert.deepStrictEqual(Object.keys(s.activeJob).sort(), ['jobId', 'sourceRevision', 'optionsRevision', 'entryPath', 'files', 'kind', 'profile', 'target'].sort());
+  assert.deepStrictEqual(Object.keys(s.activeJob).sort(), ['jobId', 'sourceRevision', 'optionsRevision', 'entryPath', 'files', 'kind', 'profile', 'target', 'keepLines', 'renameAggressive', 'reorderAggressive'].sort());
   assert.deepStrictEqual(C.flagsFor(s.options), ['--minify-safe-only', '--no-minify-rename', '--no-minify-lines', '--focus-tokens', '--no-minify-transform']);
   assert.throws(() => move(s, { type: 'start' }), (e) => e.code === 'E_BUSY');
 });
@@ -29,10 +29,38 @@ t('MIN-02 validates paths, entry files and explicit presets without arbitrary en
   for (const input of [source('cls()', '../demo.lua'), { ...source(), files: [] }, { ...source(), kind: 'png' }, { ...source(), files: [source().files[0], source().files[0]] }]) assert.throws(() => C.sourceSnapshot(input));
   assert.throws(() => C.settings({ flags: ['--run'] }), (e) => e.code === 'E_OPTIONS_UNSUPPORTED');
   assert.throws(() => move(ready(), { type: 'options', options: null }));
-  const s = move(ready(), { type: 'options', options: { profile: 'aggressive' } });
+  assert.throws(() => C.settings({ keepLines: 'yes' }), (e) => e.code === 'E_OPTIONS_UNSUPPORTED');
+  const s = move(ready(), { type: 'options', options: { profile: 'turbo' } });
   assert.strictEqual(s.status, 'unsupported');
   assert.strictEqual(C.describe(s).canOptimize, false);
   assert.throws(() => move(s, { type: 'start' }), (e) => e.code === 'E_OPTIONS_UNSUPPORTED');
+  assert.strictEqual(move(ready(), { type: 'options', options: { target: 'speed' } }).status, 'unsupported');
+});
+
+t('#164 levels, focus and switches map to the exact pinned Shrinko8 flags; the default is unchanged', () => {
+  const T = '--no-minify-transform';
+  assert.deepStrictEqual(C.flagsFor({}), [...C.FLAGS]);
+  const cases = [
+    [{ profile: 'minimal', target: 'balanced' }, ['--minify-safe-only', '--no-minify-rename', '--no-minify-lines', T]],
+    [{ profile: 'minimal', keepLines: true, renameAggressive: true }, [...C.FLAGS]], // Minimal ignores switches that do not apply
+    [{ profile: 'safe', target: 'chars' }, ['--minify-safe-only', '--focus-chars', T]],
+    [{ profile: 'safe', target: 'tokens', keepLines: true }, ['--minify-safe-only', '--no-minify-lines', '--focus-tokens', T]],
+    [{ profile: 'aggressive', target: 'compressed' }, ['--minify', '--rename-safe-only', '--reorder-safe-only', '--focus-compressed', T]],
+    [{ profile: 'aggressive', target: 'tokens-chars', renameAggressive: true }, ['--minify', '--reorder-safe-only', '--focus-tokens', '--focus-chars', T]],
+    [{ profile: 'aggressive', target: 'tokens-compressed', renameAggressive: true, reorderAggressive: true, keepLines: true }, ['--minify', '--no-minify-lines', '--focus-tokens', '--focus-compressed', T]],
+  ];
+  for (const [options, flags] of cases) assert.deepStrictEqual(C.flagsFor(options), flags, JSON.stringify(options));
+  assert.deepStrictEqual([...C.PROFILES], ['minimal', 'safe', 'aggressive']);
+  assert.deepStrictEqual([...C.TARGETS], ['balanced', 'tokens', 'chars', 'compressed', 'tokens-chars', 'tokens-compressed']);
+  // A changed option is a new options revision: an earlier reply cannot be accepted for it.
+  let st = move(ready(), { type: 'start' }); const job = st.activeJob;
+  st = move(st, { type: 'options', options: { profile: 'safe' } });
+  assert.strictEqual(move(st, { type: 'complete', job, result: result() }), st);
+  st = move(st, { type: 'start' });
+  assert.strictEqual(st.activeJob.profile, 'safe');
+  assert.throws(() => move(st, { type: 'complete', job: st.activeJob, result: result() }), (e) => e.code === 'E_RESULT_INVALID', 'Minimal flags are not a valid Safe result');
+  const safe = move(st, { type: 'complete', job: st.activeJob, result: { ...result(), flags: C.flagsFor({ profile: 'safe' }) } });
+  assert.strictEqual(safe.result.job.profile, 'safe');
 });
 
 t('MIN-02 one monotonic clock invalidates same-filename replacements and old replies', () => {
