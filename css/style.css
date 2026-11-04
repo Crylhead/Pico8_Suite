@@ -550,6 +550,17 @@ main[data-layout="dashboard"][data-width-tier="wide"] { --workspace-max-width: v
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
+/* #187 empty preview: same frame, dark neutral checker in both themes, readable text; pointer events
+   pass through to the frame (drag and drop, panning). Hide it as soon as the preview has content. */
+.preview-host { position: relative; }
+.preview-empty {
+  position: absolute; inset: 0; margin: 0; padding: 12px;
+  display: grid; place-content: center; text-align: center;
+  font-size: var(--fs-md); line-height: 1.4; color: #c9c9d3;
+  background: repeating-conic-gradient(#15151a 0 25%, #1c1c22 0 50%) 0 0 / 16px 16px;
+  border-radius: inherit; pointer-events: none;
+}
+.preview-empty[hidden] { display: none; }
 .canvas-frame.dragover { outline: 2px dashed var(--accent); outline-offset: 3px; }
 .canvas-frame.scrollable canvas { cursor: grab; touch-action: none; }
 .canvas-frame.scrolling canvas { cursor: grabbing; }

@@ -436,6 +436,7 @@
             <figcaption>Gradient preview</figcaption>
             <div class="canvas-frame">
               <canvas id="gradientCanvas" width="128" height="128"></canvas>
+              <p class="preview-empty" id="gradientEmpty" hidden>Add colors and fade stops to preview the fade.</p>
             </div>
             <div class="preview-actions">
               <button class="btn" id="orientationBtn">↔ Horizontal</button>
@@ -575,7 +576,7 @@
             <span class="tm-mode-caption" id="tmModeCaption" hidden><span id="tmModeCaptionText"></span>
               <button class="btn btn-ghost btn-sm" id="tmMatchColors" data-action="tiles-match-colors" data-help-id="tiles.match" hidden
                       title="Switch to Custom palette · nearest color and rebuild: each pixel takes the closest color of your custom palette (the nearest available colors, not an exact copy of the source)">Match source colors</button></span></figcaption>
-          <div class="tm-frame" id="tmOutFrame"><canvas id="tmOutCanvas"></canvas></div>
+          <div class="tm-frame" id="tmOutFrame"><canvas id="tmOutCanvas"></canvas><p class="preview-empty" id="tmOutEmpty">Import an image to see the result.</p></div>
         </figure>
         <figure class="tm-tileset">
           <figcaption>Tileset <span class="muted" id="tmTilesetCount"></span></figcaption>
@@ -1293,7 +1294,7 @@
       <div class="au-stats" id="dcStats"></div>
       <div class="dc-grid">
         <figure class="dc-mapbox">
-          <canvas id="dcMap" class="dc-map" aria-label="Memory map 0x0000 to 0x42ff, 128 bytes per row"></canvas>
+          <div class="preview-host"><canvas id="dcMap" class="dc-map" aria-label="Memory map 0x0000 to 0x42ff, 128 bytes per row"></canvas><p class="preview-empty" id="dcMapEmpty">Select a cart to see its memory map.</p></div>
           <figcaption class="dc-legend">
             <span><i style="background:#29adff"></i>data, read (reload() or the cart's own code)</span>
             <span><i style="background:#ff004d"></i>data, no read detected</span>
@@ -1331,7 +1332,7 @@
             <label class="field" id="dcRowWrap" title="Fade row (the fx picks it from a rocket parameter; the default is the row the code uses at value 0)"><span>Row</span><input type="number" id="dcRow" min="0" value="0" style="width:64px"></label>
           </div>
           <p class="muted" id="dcViewInfo"></p>
-          <div class="dc-canvas-wrap"><canvas id="dcViewer"></canvas><pre class="dc-hex" id="dcHex" hidden></pre></div>
+          <div class="dc-canvas-wrap" id="dcViewerWrap"><canvas id="dcViewer"></canvas><pre class="dc-hex" id="dcHex" hidden></pre><p class="preview-empty" id="dcViewerEmpty">Select a cart to view its data.</p></div>
           <div class="dt-row">
             <button class="btn btn-sm" id="dcToLib">Image → Library</button>
             <button class="btn btn-sm" id="dcToLayers" hidden>Layers → Pixel Studio</button>
