@@ -87,7 +87,7 @@ const P8TourData = (() => {
         { id: 'save', target: '#ceSave', helpId: 'code.save', title: 'Save' },
         { id: 'run', areas: ['controls'], target: '#ceRun', title: 'Run in PICO-8', text: 'Run saves and starts the cart in your own PICO-8 through the optional local helper tools/run_pico8_bridge.bat (needs Python). The browser itself cannot start programs; printh() output appears below the code.' },
         { id: 'meters', target: '#ceTokens', optional: true, helpId: 'code.tokens', title: 'Token and character meters' },
-        { id: 'files', areas: ['input'], target: '.ce-files-panel', title: 'Files', text: 'File › Open Folder… lists the carts of a project folder. It needs Chrome or Edge, and the browser asks you to allow access to that folder.' },
+        { id: 'files', areas: ['input'], target: '.ce-files-panel', title: 'Files', text: 'File › Open Project Folder… lists the carts of a project folder and edits its files in place. It needs Chrome or Edge, and the browser asks you to allow access to that folder.' },
         { id: 'outline', target: '.ce-outline-panel', title: 'Functions', text: 'Every function in the open file; filter the list with Ctrl+Shift+O and click a name to jump to it.' },
         { id: 'handoff', areas: ['output', 'handoff'], target: '#ceGfxBtn', title: 'Hand off', text: 'Sprites → Pixel Studio and Map → Map Editor open this cart’s graphics and map. Cart › Minify… copies the current code to the Minifier without saving it.' },
       ],
@@ -110,7 +110,7 @@ const P8TourData = (() => {
       id: 'cartbuilder', title: 'Cart Builder tour', major: 1, ws: 'cartbuilder',
       summary: 'Pack a demo project’s data into data carts, validate the plan and write it with --@data anchors.',
       steps: [
-        { id: 'open', areas: ['input'], before: { ws: 'cartbuilder' }, target: '#cbOpen', title: 'Project folder', text: 'Opens a demo project folder. It needs Chrome or Edge, and a writable working copy outside protected folders such as AppData. Opening only reads; after a restart, Reconnect asks for permission again.' },
+        { id: 'open', areas: ['input'], before: { ws: 'cartbuilder' }, target: '#cbOpen', title: 'Project folder', text: 'Open Project Folder… opens a project folder for reading and writing (it needs demo/ or main.p8). It needs Chrome or Edge, and a writable working copy outside protected folders such as AppData. Opening only reads; after a restart, Reconnect asks for permission again.' },
         { id: 'add', target: '#cbAddLib', title: 'Add parts', text: 'Add images or maps from the Library, or any file, as parts. Each part becomes data in a cart that the code finds through its --@data anchor.' },
         { id: 'parts', areas: ['work'], target: '#cbParts', title: 'Parts', text: 'Every part with its size and group. Each part has a Move… button to choose its cart without dragging.' },
         { id: 'stages', target: '#cbStages', optional: true, helpId: 'cartbuilder.stages', title: 'Workflow stages' },

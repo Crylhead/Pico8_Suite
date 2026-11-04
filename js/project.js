@@ -601,7 +601,7 @@
   const KIND_TEXT = { img: 'image', pal: 'palette / fades', hex: 'data' };
 
   function renderParts() {
-    if (!pj.project) { dom.parts.replaceChildren(el('p', { className: 'muted', textContent: pj.root ? 'Adopt the demo first.' : 'Open a demo project folder (outside AppData), e.g. a copy of demoframe.' })); return; }
+    if (!pj.project) { dom.parts.replaceChildren(el('p', { className: 'muted', textContent: pj.root ? 'Adopt the demo first.' : 'Open Project Folder… (read and write): a folder with demo/ (e.g. a copy of demoframe) or main.p8, outside AppData. It becomes the active project that Code Editor, Project Audit and Data Carts can use.' })); return; }
     const anchors = anchorsByRef();
     const isPlaced = placed();
     const out = [];

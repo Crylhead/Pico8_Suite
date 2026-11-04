@@ -377,3 +377,15 @@ Not run: the opt-in Playwright check `tests/studio-indices.mjs` (Playwright is n
 - No exceptions.
 
 Not covered: the viewer's "cart open, no bytes" text is hard to reach, because a length of 0 is clamped to 1 byte. Screen readers and non-Chromium browsers were not tested.
+
+## Follow-up: #188 One label for project folders (2026-11-05)
+
+**Behaviour change:** every tool's folder button is now **Open Project Folder…**. It was *Open Demo Project…* in Cart Builder, *Open Folder…* in Code Editor (button and File menu) and *Choose Project Folder…* in Project Audit; Data Carts already used the new label. All `data-help-id` values and Home routes are unchanged. Each tool now says what it does with the folder, in its existing empty state and in the button title or help tip; no header row was added. The descriptions were checked against the code:
+- **Cart Builder:** read and write (it packs carts and rewrites anchors). It is the only tool that publishes the active project.
+- **Code Editor:** edits files in place; Save writes the open file.
+- **Project Audit:** read only, and Data Carts shows the same folder.
+- **Data Carts:** reads the folder through Project Audit, and its output is downloads.
+
+Status copy now describes the real sharing. Home said "Open one in Cart Builder, Code Editor or Project Audit", but only Cart Builder makes a folder the active project, so it now says that and that the other tools can then use it. The tool strip says "No project folder open in this tool."; when another tool knows a project, it already names it and offers **Use "…"** (#56). Help, tours, F1, README, the release checklist and `tests/project-adapter.test.js` were updated.
+
+**Checked** in headless Chrome 156 (fresh profile) at 1440×900: Home's empty project text, plus every tool's button label, empty-state purpose line and project strip; no old label remains. A real test folder (`demo/main.p8` plus a data cart) scanned in Project Audit through its folder input (2 carts), and Data Carts then showed the same folder with its data cart. No exceptions. Not covered: the native directory picker and permission prompts (not drivable headlessly) and Cart Builder writes.

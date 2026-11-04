@@ -45,7 +45,7 @@
     tokenCount: 0,
     find: { open: false, q: '', matches: [], cur: -1 },
     complete: null,         // {items, sel, from}
-    folder: null,           // FileSystemDirectoryHandle of "Open Folder…"
+    folder: null,           // FileSystemDirectoryHandle of "Open Project Folder…"
     folderReady: false,     // permission granted (after a page reload it has to be asked again)
     files: new Map(),       // relative path (lower case) -> {rel, handle}
     rel: null,              // the open file's path inside the folder
@@ -878,7 +878,7 @@
 
   async function openFolder() {
     App.setWorkspace('code');
-    if (!window.showDirectoryPicker) { showMessage('Open Folder', 'This browser cannot open folders. Use Chrome or Edge.'); return; }
+    if (!window.showDirectoryPicker) { showMessage('Open Project Folder', 'This browser cannot open folders. Use Chrome or Edge.'); return; }
     let h;
     try { h = await window.showDirectoryPicker({ id: 'p8-code-folder', mode: 'readwrite' }); } catch { return; }
     await useFolder(h, false);
@@ -958,7 +958,7 @@
   function renderFiles() {
     dom.folderName.textContent = ed.folder ? `· ${ed.folder.name}` : '';
     if (!ed.folder) {
-      dom.files.replaceChildren(el('p', { className: 'muted', textContent: 'Open a folder to see its carts and .lua files, follow #include and count their tokens.' }));
+      dom.files.replaceChildren(el('p', { className: 'muted', textContent: 'Open Project Folder… to see its carts and .lua files, follow #include and count their tokens. The Code Editor edits files in place: Save writes the open file.' }));
       return;
     }
     if (!ed.folderReady) {

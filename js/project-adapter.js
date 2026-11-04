@@ -36,7 +36,7 @@
 
     function describe() {
       const p = ctx.get();
-      const own = mode === 'adopted' ? `Working on ${adoptedId === p.id ? 'the active' : 'a previously adopted'} project “${adoptedName}”.` : (ownName ? `Working on its own folder “${ownName}”.` : 'No folder open in this tool.');
+      const own = mode === 'adopted' ? `Working on ${adoptedId === p.id ? 'the active' : 'a previously adopted'} project “${adoptedName}”.` : (ownName ? `Working on its own folder “${ownName}”.` : 'No project folder open in this tool.');
       if (p.access === 'none') return { msg: own, action: null };
       const same = mode === 'adopted' && adoptedId === p.id;
       if (same && p.access === 'granted') return { msg: `${own} Independent of other tools’ documents.`, action: null };

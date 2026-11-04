@@ -33,7 +33,7 @@ t('#56 nothing is adopted automatically; the strip says the tool is independent'
   x.listeners['p8:projectcontext']?.();
   const { text, btn } = parts(x.created);
   assert.strictEqual(adopted, 0);
-  assert.match(text.textContent, /No folder open in this tool/);
+  assert.match(text.textContent, /No project folder open in this tool/);
   assert.strictEqual(btn.hidden, false);
   assert.match(btn.textContent, /Use “demo”/);
 });
@@ -78,7 +78,7 @@ t('#56 a failing adopt keeps the previous mode and reports; an adopt returning f
   assert.match(x.toasts[0][0], /read failed.*Nothing was changed/);
   mode = 'false';
   await parts(x.created).btn.listeners.click();
-  assert.match(parts(x.created).text.textContent, /No folder open in this tool/);
+  assert.match(parts(x.created).text.textContent, /No project folder open in this tool/);
 });
 
 t('#56 own folder picks are independent; stale and name-only projects give actionable text without an action', async () => {
