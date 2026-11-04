@@ -23,6 +23,10 @@ Choose `data-layout="fluid"` for a canvas/editor or `data-layout="dashboard"` fo
 
 Keep internal grids, panel resizing/collapse, pixel aspect/zoom and independent scrolling owned by the tool. Declare and test its viewport/document scroll breakpoint; the mode annotation does not choose one. Older unannotated extension wrappers retain their legacy geometry.
 
+### Shared header slots
+
+Keep optional project/preset context in `.menubar-end`, not the primary `.appbar-end` action row. The latter is reserved for global actions. Use existing menus and their keyboard handlers; popovers are fitted when opened/resized. Do not add workspace-specific primary-row heights or wrapping. Long names must truncate in the context rail or wrap inside consumer cards. See [the responsive chrome contract](docs/DESIGN_SYSTEM.md#shared-app-chrome-166).
+
 ### Keyboard and accessibility contract
 
 The shell provides keyboard behavior for standard markup; use it instead of custom key handling (details and the manual regression script: [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md)):

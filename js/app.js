@@ -1771,7 +1771,7 @@
     if (node.hidden) { node.textContent = ''; node.removeAttribute('title'); return; }
     const note = ACCESS_LABEL[p.access];
     node.textContent = `Project: ${p.name}${note ? ` (${note})` : ''}`;
-    node.title = p.message;
+    node.title = `${node.textContent} — ${p.message}`;
     node.dataset.access = p.access;
   }
 
@@ -1938,11 +1938,22 @@
 
   const menuItems = (menu) => [...menu.querySelectorAll('.menu-pop button:not(:disabled)')].filter((b) => !b.hidden);
 
+  // Keep the existing anchored popover inside the visible page, including the scrollbar rail.
+  function fitMenu(menu) {
+    const pop = menu.querySelector('.menu-pop');
+    pop.style.left = '0px';
+    const r = pop.getBoundingClientRect();
+    const edge = Math.min(document.documentElement.clientWidth, document.body.clientWidth) - 8;
+    pop.style.left = `${Math.max(8 - r.left, Math.min(0, edge - r.right))}px`;
+    pop.style.maxHeight = `${Math.max(0, window.innerHeight - r.top - 8)}px`;
+  }
+
   /** focus: 'first' | 'last' | null (pointer opening leaves focus on the button) */
   function openMenu(menu, focus = null) {
     closeMenus();
     menu.classList.add('open');
     menu.querySelector('.menu-btn').setAttribute('aria-expanded', 'true');
+    fitMenu(menu);
     const items = menuItems(menu);
     if (focus) items[focus === 'last' ? items.length - 1 : 0]?.focus();
   }
@@ -1951,6 +1962,10 @@
   // item, Up on the last; inside, Up/Down/Home/End move, Left/Right switch to the neighbouring
   // menu, Escape closes and returns to the button, Tab closes and moves on.
   function bindMenus() {
+    window.addEventListener('resize', () => {
+      const open = document.querySelector('.menu.open');
+      if (open) fitMenu(open);
+    });
     const visibleMenus = () => [...document.querySelectorAll('#menubar .menu')].filter((m) => m.getClientRects().length);
     for (const menu of document.querySelectorAll('.menu')) {
       const btn = menu.querySelector('.menu-btn');

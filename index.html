@@ -36,7 +36,6 @@
     <button type="button" id="wsFind" class="btn btn-ghost ws-find" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" title="Find a tool (Ctrl+K)" aria-label="Find tool"><svg class="ws-find-search" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12.6 12.6 17 17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span class="ws-find-current" aria-hidden="true"></span><svg class="ws-find-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 8 10 12.5 14.5 8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 
     <div class="appbar-end">
-      <span id="projectIndicator" class="project-indicator" role="status" aria-live="polite" hidden></span>
       <button id="libraryBtn" class="btn" aria-pressed="false" title="Shared asset library">Library <span class="count" id="libraryCount"></span></button>
       <button id="themeToggle" class="btn btn-ghost icon-btn" title="Theme: system" aria-label="Toggle theme">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20V2z"/><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/></svg>
@@ -357,6 +356,7 @@
     </nav>
 
     <div class="menubar-end">
+      <span id="projectIndicator" class="project-indicator" role="status" aria-live="polite" hidden></span>
       <span id="loadedPreset" class="loaded-preset" hidden></span>
       <button id="toggleIndices" class="btn btn-ghost btn-sm" aria-pressed="true" data-show="palette tiles">Hide indices</button>
     </div>
@@ -1436,6 +1436,7 @@
         <p>The PICO-8 Dev Suite combines Pixel Studio, Palette &amp; Fades, the Tile Maker, the Map Editor, the Data Tools and the project tools. Switch tools with the icons at the top (the current tool's name is shown left of them); each tool keeps its work while you switch.</p>
         <ul>
           <li><b>Finding tools</b>: the workspace bar groups the tools as <i>Create</i> (Pixel Studio, Palette &amp; Fades, Tile Maker, Map Editor, Terrain Lab), <i>Develop</i> (Code Editor, Minifier, Cart Builder), <i>Inspect</i> (Project Audit, Data Carts) and <i>Utilities</i> (Data Tools, Extra Tools); Home lists them the same way. On wide screens the tabs show their names. The magnifier button (or <kbd>Ctrl</kbd>+<kbd>K</kbd>, <kbd>⌘</kbd>+<kbd>K</kbd> on a Mac) opens <b>Find tool</b>: type part of a name or task (e.g. <i>tokens</i>, <i>terrain</i>, <i>fade</i>) to search names and descriptions, including the tools inside Extra Tools; <kbd>↑</kbd> <kbd>↓</kbd> choose, <kbd>Enter</kbd> opens, <kbd>Esc</kbd> closes without switching. On narrow screens the tabs are replaced by this button, which shows the current tool's name.</li>
+          <li><b>Header layout</b>: navigation, Find tool, Library and theme stay in the top row. The tab strip scrolls when needed; small windows use Find tool to name and switch the tool. Project context appears beside the menus, or below them on small windows; long context text is shortened visually. Menu lists scroll in short windows and <kbd>Esc</kbd> returns to their button.</li>
           <li><b>Workspace layout</b>: editors use the full window width. Home and Data Tools stay centered; Palette &amp; Fades and Tile Maker use a wider centered layout for comparing images. On smaller windows, panels stack and the page scrolls where the tool needs more room.</li>
           <li><b>Links</b>: the address follows the open tool (e.g. <code>index.html#map</code> or <code>index.html#extras/terrain</code>); open or bookmark such a link to start in that tool. Without one, the Suite reopens the tool you used last.</li>
           <li><b>Library</b> (button at the top right): images, palettes and maps shared by all tools. Click an asset for <i>Open in…</i>, rename, duplicate, PNG download and delete; the trash button next to each entry deletes it directly (after asking). Palette &amp; Fades saves and loads palettes with the <i>Save to Library…</i> / <i>From Library…</i> buttons of the custom palette. Drag an asset thumbnail onto a tool's canvas to load it there. Drop image files onto the library to import them (colors snap to the nearest PICO-8 color).</li>

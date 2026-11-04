@@ -53,3 +53,31 @@ t('#53 deep links: #ws and #ws/sub round trip; malformed hashes are rejected', (
   assert.strictEqual(N.formatRoute('map'), '#map');
   assert.deepStrictEqual(N.parseRoute(N.formatRoute('extras', 'line')), { ws: 'extras', sub: 'line' });
 });
+
+
+// Exercise the actual shell open/fit adapters; layout itself is checked in the browser.
+t('#166 menu opening fits the page gutter and short viewport while preserving keyboard focus', () => {
+  const vm = require('vm');
+  const { read, fn } = require('./source-extract.js');
+  const src = read('js/app.js');
+  for (const fixture of [
+    { left: 16, right: 286, top: 80, width: 1280, page: 1265, height: 900, offset: 0 },
+    { left: 267, right: 537, top: 80, width: 360, page: 345, height: 450, offset: -200 },
+    { left: 6, right: 276, top: 106, width: 360, page: 345, height: 450, offset: 2 },
+  ]) {
+    const pop = { style: {}, getBoundingClientRect: () => fixture };
+    const button = { setAttribute(k, v) { this[k] = v; } };
+    let focused = null, closed = 0, opened = false;
+    const menu = { classList: { add() { opened = true; } }, querySelector: (s) => s === '.menu-pop' ? pop : button };
+    const items = [0, 1].map((i) => ({ focus() { focused = i; } }));
+    const ctx = vm.createContext({ document: { documentElement: { clientWidth: fixture.width }, body: { clientWidth: fixture.page } }, window: { innerHeight: fixture.height }, closeMenus() { closed++; }, menuItems: () => items, menu });
+    vm.runInContext(fn(src, 'fitMenu') + '\n' + fn(src, 'openMenu'), ctx);
+    vm.runInContext('openMenu(menu, "last")', ctx);
+    assert.ok(opened); assert.strictEqual(closed, 1); assert.strictEqual(button['aria-expanded'], 'true');
+    assert.strictEqual(focused, 1);
+    assert.strictEqual(Number.parseFloat(pop.style.left), fixture.offset);
+    assert.strictEqual(Number.parseFloat(pop.style.maxHeight), fixture.height - fixture.top - 8);
+    vm.runInContext('openMenu(menu)', ctx);
+    assert.strictEqual(focused, 1, 'pointer opening leaves existing focus alone');
+  }
+});

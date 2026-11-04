@@ -288,11 +288,12 @@ const P8HelpData = (() => {
 
     // ---- guides and reference ------------------------------------------------------------
     {
-      id: 'suite', kind: 'guide', title: 'The Suite', rev: 5,
+      id: 'suite', kind: 'guide', title: 'The Suite', rev: 6,
       summary: 'What the Suite is, how tools share work, and how to run it offline.',
       inputs: [], outputs: [],
       tasks: ['switch tools', 'run the Suite offline', 'understand what is stored in the browser'],
       actions: [
+        { id: 'suite.navigation', name: 'Navigation and project context', text: 'The top row keeps tool navigation, Find tool, Library and theme controls in place as you switch. A long tab strip scrolls; on small windows Find tool names the current tool. Project context appears beside the menus, or below them on small windows, and long text is shortened visually. Menu lists scroll in short windows; Escape closes a menu and returns to its button.' },
         { id: 'suite.workspace', name: 'Workspace layout', text: 'Editors use the full window width for working space. Home and Data Tools stay centered; Palette & Fades and Tile Maker use a wider centered layout for comparing images. On smaller windows, panels stack and the page scrolls where the tool needs more room.' },
         { id: 'suite.tours', name: 'Quick tours', text: 'Help › Tour this tool starts the current tool’s tour, using the selected Extra Tools tab. If no tour exists, read Help or browse the available tours. Help › Quick tours searches tours by tool or subject and shows progress, replay and the Suite overview. Manual tours remain available when automatic offers are off. Esc closes a tour and returns to editing.' },
         { id: 'suite.help', name: 'Contextual Help', text: 'F1 opens the focused control’s explanation when available, otherwise the selected Extra Tool or workspace. Search and the Help index remain available; clearing search returns to the topic being read. The Return link restores the original context, and Full documentation follows the current topic.' },

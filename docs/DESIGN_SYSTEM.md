@@ -40,6 +40,21 @@ Rules:
 - Announcements: dialogs and toasts are covered by the shell (`App.modal`, `App.toast`); a `.status-line` that is the only report of a one-off result may use `role="status"`, but do not put live regions on text that updates during drags or sliders.
 - Document-save state uses `P8DocStatus` and `.doc-status` (see [EXTENDING.md](../EXTENDING.md#document-save-status)), not ad-hoc status lines.
 
+## Shared app chrome (#166)
+
+The header has separate navigation and menu/context slots. Tool-specific context must not participate in sizing the primary navigation row.
+
+| Slot | Contract |
+| --- | --- |
+| Primary row | `--chrome-nav-height`: 48px minimum; grid slots for brand, shrinkable tab strip, Find tool and global actions. Tabs retain their icon/button sizes and scroll rather than wrapping. The overlapping workspace-name frame remains intact. |
+| Menu row above 640px | `--chrome-menu-height`: 33px minimum; 26px menu buttons (`--chrome-menu-line`) and a reserved context rail, `min(38%, 400px)`. Empty context space stays reserved. |
+| Menu/context at or below 640px | Existing logo/Find tool navigation; reserve two 26px menu lines and a separate 28px context row (`--chrome-context-height`), including when empty. This deliberately trades a little height for stable tool switches and reachable controls. |
+| Project / preset context | Shares the bounded menu rail with indices; names ellipsize without widening navigation. Full project/access text stays in the live status and title. Consumer project strips and Home notes wrap long names. |
+| Popovers | Preserve anchored menus and keyboard behavior; fit horizontally inside the page with an 8px inset and vertically inside the remaining viewport. Long lists scroll; opening or resizing refits the popover. |
+| Scrollbar rail | Root `scrollbar-gutter: stable` reserves classic scrollbar space across document/pane tools. Overlay-scrollbar browsers use their normal behavior. All workspace centering uses available document width, not an assumed viewport width. |
+
+At standard font settings the total header is 82px above 640px and 134px at/below 640px, including borders. These are measured outcomes of minimum row sizes, not clipped fixed-height containers; enlarged/custom fonts may require more space. Menu labels keep wrapping available, and no workspace hides global menus or navigation to fit. Same-width workspace and project-state switches must preserve primary-control DOMRects and the content top. See [the recorded browser checks](UX_RELEASE_CHECKLIST.md#shared-header-geometry-166).
+
 ## Workspace geometry (#168)
 
 Every built-in workspace declares one of two outer layout modes on its existing `main` wrapper. Widths include the gutters (`border-box`); centering uses the available document width.
@@ -68,7 +83,7 @@ Both modes use `--workspace-gutter` (16px) on all four edges. A dashboard can ad
 
 The shared rule governs only the outer wrapper. Keep specialized grids, panel widths/collapse, internal spacing, canvas aspect/zoom and scroll owners in tool styles. Legacy `.layout-*` geometry remains a fallback for extensions without the mode annotation; new tools must declare a mode. See [EXTENDING.md](../EXTENDING.md#workspace-geometry) and the [before/after checks](UX_RELEASE_CHECKLIST.md#workspace-geometry-168).
 
-Header alignment (#166), command/status rows (#169), the broader panel-breakpoint audit (#170) and a reusable visual-regression runner (#171) remain separate work.
+Command/status rows (#169), the broader panel-breakpoint audit (#170) and a reusable visual-regression runner (#171) remain separate work.
 
 ## Data-cart workspace sizing (#167)
 
