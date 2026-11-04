@@ -406,3 +406,18 @@ The help registry (`map.save`) and F1 were updated.
 - No exceptions.
 
 Not covered: screen readers, non-Chromium browsers.
+
+## Follow-up: #200 Editor canvases stay on screen after a resize (2026-11-05)
+
+**Behaviour change:** in Pixel Studio and Map Editor the view is *automatic* until you zoom or pan by hand. Fit (`0`), a new or opened document and first entry make it automatic again. When the stage changes size (a window resize, the phone layout, or the timeline toggled), an automatic view refits. A manual view keeps its zoom, and keeps its pan unless the document would cover less than half of the visible extent (half the stage, or half the document when it is smaller); only then is it pulled back. Both stage `ResizeObserver`s now call one `onStageResize()`, which ignores a hidden (0×0) stage and unchanged sizes, so redraws can't start a refit loop. Zoom limits and `zoomFit` margins are unchanged. `docs/GEOMETRY_SMOKE.md` gains a manual resize step.
+
+**Reproduced first** in headless Chrome 156: on `main`, a fresh load fits at 390×844 and 1440×900, but resizing 1440 → 390 leaves **2%** of the Pixel Studio image on screen, and part of the Map Editor map off-stage. A manual 400% zoom followed by a resize to 390 leaves a 73px strip (10%).
+
+**Checked** after the change (same probe, fresh profiles):
+- Pixel Studio refits 300% → 200% at 390 and back to 300% at 1440, fully visible. Map Editor refits 98% → 31% and back.
+- Manual 400% zoom: 1440 → 1300 keeps zoom and pan exactly. → 390 keeps 400% and pulls the image back to cover half the stage. Back at 1440, zoom and pan are kept.
+- Fit at 390 shows the whole image. With an automatic view, hiding the timeline refits to 400%.
+- Map manual 200% zoom is kept across 1440 → 390 → 1440, with the map spanning the stage.
+- No exceptions.
+
+`tests/view-resize.test.js` runs the real `clampView` and `onStageResize` of both editors (4 cases, failing on the old code). Not run: the opt-in Playwright geometry smoke (not configured here).
