@@ -302,6 +302,9 @@ canvas.thumb {
 /* timeline hidden (Tab): the canvas takes its room */
 .layout-studio.no-timeline { grid-template-rows: minmax(0, 1fr); grid-template-areas: "tools main side"; }
 .layout-studio.no-timeline .ps-timeline { display: none; }
+/* #199: one-frame image, timeline in automatic mode: one row (Play, FPS, Onion, + Frame, Duplicate) */
+.layout-studio.compact-timeline .ps-frames,
+.layout-studio.compact-timeline :is(#psFrameLeft, #psFrameRight, #psFrameDel) { display: none; }
 
 /* full screen view: only the image, pan and zoom */
 .ps-fullview { position: fixed; inset: 0; z-index: 100; background: var(--stage-bg); cursor: grab; touch-action: none; }

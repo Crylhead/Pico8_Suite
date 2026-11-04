@@ -87,7 +87,10 @@
     altTool: null,          // tool to return to when Alt (temporary color picker) is released
     rotAlgo: saved.rotAlgo === 'fast' ? 'fast' : 'rotsprite',
     ink: ['lock', 'behind', 'shade', 'fade'].includes(saved.ink) ? saved.ink : 'normal',
-    timeline: saved.timeline !== false,
+    // #199: 'auto' (compact strip for one frame, full with more), or an explicit 'shown' / 'hidden'.
+    // Older settings only stored timeline: false (hidden).
+    timelineMode: ['auto', 'shown', 'hidden'].includes(saved.timelineMode) ? saved.timelineMode : (saved.timeline === false ? 'hidden' : 'auto'),
+    timeline: saved.timeline !== false, // visible (derived from timelineMode by applyTimeline)
     fades: null,            // fade tables the image brought along ({dark, bright, from}), used by the fade ink
     pixelPerfect: !!saved.pixelPerfect,
     customBrush: null,      // {w, h, data} picked up from a selection (brush 0)
@@ -184,7 +187,7 @@
       brush: ps.brush, filled: ps.filled, contiguous: ps.contiguous, pattern: ps.pattern, patternAlt: ps.patternAlt,
       gridPx: ps.gridPx, grid8: ps.grid8, gridSize: ps.gridSize, onion: ps.onion, previewScale: ps.previewScale,
       sieves: ps.sieves, sieveIndex: ps.sieveIndex, rotAlgo: ps.rotAlgo, ink: ps.ink, pixelPerfect: ps.pixelPerfect,
-      timeline: ps.timeline,
+      timeline: ps.timeline, timelineMode: ps.timelineMode,
     });
   }
 
@@ -2387,6 +2390,7 @@
       type: 'button', className: `ps-frame${f === ps.frame ? ' selected' : ''}`, dataset: { frame: f }, title: `Frame ${f + 1}`,
     }, frameThumb(f), el('span', { textContent: f + 1 }))));
     renderFrameChrome();
+    applyTimeline(); // the frame count decides compact vs full in 'auto' (#199)
   }
 
   function renderFrameChrome() {
@@ -3224,11 +3228,25 @@
   // Timeline toggle + full screen view                                 //
   // ------------------------------------------------------------------ //
 
+  /** an explicit choice (Timeline button, T, View menu): always full when shown, or hidden (#199) */
   function setTimeline(on) {
-    ps.timeline = on;
-    $('main.layout-studio').classList.toggle('no-timeline', !on);
-    dom.timelineBtn.setAttribute('aria-pressed', String(on));
+    ps.timelineMode = on ? 'shown' : 'hidden';
+    applyTimeline();
     persistSettings();
+  }
+
+  /**
+   * #199: applies timelineMode. In 'auto' a one-frame image gets the compact strip (no thumbnail row), which
+   * expands as soon as there is a second frame. The stage changes size, so an automatic view refits (#200).
+   */
+  function applyTimeline() {
+    const visible = ps.timelineMode !== 'hidden';
+    const compact = visible && ps.timelineMode === 'auto' && ps.doc.frames.length <= 1;
+    ps.timeline = visible;
+    const main = $('main.layout-studio');
+    main.classList.toggle('no-timeline', !visible);
+    main.classList.toggle('compact-timeline', compact);
+    dom.timelineBtn.setAttribute('aria-pressed', String(visible));
     requestDraw();
   }
 
@@ -3411,7 +3429,7 @@
   bind();
   P8DocStatus.mount(dom.docStatus, status, { onRetry: (intent) => saveToLibrary(intent || {}), title: 'Image save status' });
   setTool('pencil');
-  setTimeline(ps.timeline);
+  applyTimeline(); // #199: start-up keeps the stored mode (setTimeline would make it an explicit choice)
   renderOptions();
   rebuildComposite();
   renderPalette();
