@@ -8,6 +8,10 @@ Use this before a release or a larger UX change (see [UX_DEVELOPMENT_PLAN.md](UX
 - `node tests/check-static.js` when `index.html` ids or script/style references changed.
 - A documentation-only change needs only a diff review, link check and `git diff --check`; do not run the full suite for it.
 
+## Optional cross-workspace geometry
+
+For shared layout changes, run [the repeatable browser matrix](GEOMETRY_SMOKE.md) with an available browser setup, or follow its manual fallback. Save the baseline before editing and use `--baseline` for the changed revision; record environment, output summary and intentional differences. This is separate from the default offline checks.
+
 ## Adding or changing a tool (same PR)
 
 1. **Help topic** in `js/help-data.js` (`kind: 'tool'`, `ws` = the workspace id): purpose, inputs, outputs, actions, restrictions, shortcuts, related. Bump `rev`.

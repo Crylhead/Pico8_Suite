@@ -42,6 +42,10 @@ GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs all
 
 For a UI change, test its main journey and cancellation/error path in a browser, watching the console. For a byte-layout or decoder change, validate representative exports in PICO-8 when available. If it is unavailable, report that limit; JS round trips alone do not establish runtime parity.
 
+## Optional geometry smoke
+
+For shared chrome or workspace layout changes, see [the opt-in browser matrix and manual fallback](docs/GEOMETRY_SMOKE.md). It reuses an available Playwright/browser setup without adding an application dependency or changing default CI. Capture an accepted baseline and compare the changed revision in the same environment; unrelated codec/prose changes do not need it.
+
 ## Agent and collaborator workflow
 
 1. Start with the assigned [issue](https://github.com/Crylhead/Pico8_Suite/issues) and the [current health review](docs/HEALTH_REVIEW_2026-11-03_fd31e3c.md). Compare its pinned reviewed source against your current base and reproduce before changing code.
