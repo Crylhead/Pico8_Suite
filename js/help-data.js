@@ -31,12 +31,13 @@ const P8HelpData = (() => {
       related: ['suite', 'library', 'shortcuts'], keywords: ['start', 'launcher', 'welcome'], legacy: 'doc-suite',
     },
     {
-      id: 'studio', kind: 'tool', ws: 'studio', title: 'Pixel Studio', rev: 4,
+      id: 'studio', kind: 'tool', ws: 'studio', title: 'Pixel Studio', rev: 5,
       summary: 'Pixel editor for sprites, sprite sheets and whole-map images with 16 palette slots mapped to the 32 PICO-8 colors, layers and frames.',
       inputs: ['PNG images', 'Library images', 'the gfx of a .p8 cart'],
       outputs: ['Library images', 'PNG', '.p8 gfx section'],
       tasks: ['draw a sprite', 'edit a sprite sheet', 'remap palette colors', 'animate with frames', 'create a tileable texture', 'save an image to the Library'],
       actions: [
+        { id: 'studio.bar-layout', name: 'Controls in smaller windows', text: 'The two options rows scroll horizontally when needed; Tab brings a focused option into view. Status readouts reserve space, and the view/zoom button groups wrap in smaller windows so every control remains reachable.' },
         { id: 'studio.canvas', name: 'Canvas size', text: '1×1 to 1024×1024 with presets (sprite, 128×128 sheet, half sheet, whole map 1024×512). Orange dashed boxes mark 128×128 screens.' },
         { id: 'studio.tools', name: 'Drawing tools', text: 'Pencil, eraser, line, rectangle, ellipse, fill, color picker, selection tools, pan. Brush sizes 1–4 or a custom brush; mirror X/Y.' },
         { id: 'studio.ink', name: 'Ink', text: 'How the pencil, line, shapes and fill put their color down: normal, lock alpha, behind, shade and shade along the fades.' },
@@ -99,12 +100,13 @@ const P8HelpData = (() => {
       related: ['map', 'studio', 'palette'], keywords: ['tileset', 'sprite sheet', 'viewport', 'mae', 'dither'], legacy: 'doc-tiles',
     },
     {
-      id: 'map', kind: 'tool', ws: 'map', title: 'Map Editor', rev: 1,
+      id: 'map', kind: 'tool', ws: 'map', title: 'Map Editor', rev: 2,
       summary: 'Edits PICO-8 maps against a tileset, with 128×32 cart maps, 128×64 maps using the lower sheet half, and sizes up to 256×256.',
       inputs: ['tileset image (≤128×128)', '.p8 carts (map + sprites)', 'Library maps'],
       outputs: ['Library maps (with tileset and palette)', '.p8 cart', 'raw bytes', 'PNG'],
       tasks: ['paint a level map', 'import a map from a cart', 'write a map into an existing cart', 'copy and paste cell blocks'],
       actions: [
+        { id: 'map.bar-layout', name: 'Controls in smaller windows', text: 'Options wrap into additional rows in smaller windows. The status readout reserves space for coordinates and selection details without changing the canvas while the pointer moves.' },
         { id: 'map.tools', name: 'Tools', text: 'Draw, rectangle fill, flood fill, pick, select, pan.' },
         { id: 'map.tileset', name: 'Tileset', text: 'Click a tile, or drag across several, to make the brush. Reload reads the tileset image from the Library again after you edited it in Pixel Studio.' },
         { id: 'map.sizes', name: 'Map sizes', text: '128×32 is __map__; 128×64 also uses sprites 128–255 for rows 32–63.' },
@@ -117,12 +119,13 @@ const P8HelpData = (() => {
       related: ['tiles', 'studio', 'cartbuilder', 'library'], keywords: ['level', 'tilemap', 'cells', 'mget', 'mset'], legacy: 'doc-map',
     },
     {
-      id: 'code', kind: 'tool', ws: 'code', title: 'Code Editor', rev: 4,
+      id: 'code', kind: 'tool', ws: 'code', title: 'Code Editor', rev: 5,
       summary: 'Edits the __lua__ section of a .p8 cart or a .lua file with PICO-8 syntax, completion, token count and Run through the optional helper.',
       inputs: ['.p8 or .lua files', 'project folders'],
       outputs: ['the same file (Save)', 'PICO-8 run via the bridge'],
       tasks: ['edit cart code', 'count tokens', 'follow #include', 'run a cart'],
       actions: [
+        { id: 'code.bar-layout', name: 'Controls in smaller windows', text: 'Long filenames shorten visually. Run, Open and Save wrap when needed; token and character meters move to another status row in small windows rather than being hidden.' },
         { id: 'code.minify', name: 'Minify…', text: 'Cart → Minify… copies the current unsaved Lua, cart sections and available folder context to Minifier. Uses already-granted read access for reachable includes from the folder opened in Code Editor. No save, Run, folder scan or permission prompt is requested. Back to Code Editor returns to the existing buffer, caret and undo history. Optimized code is never applied back; later edits make the captured snapshot earlier.' },
         { id: 'code.save', name: 'Save', text: 'Ctrl+S. Rechecks the current file, preserves external changes to non-Lua sections, and asks you to resolve concurrent Lua edits before saving.' },
         { id: 'code.run', name: 'Run', text: 'Ctrl+R. Saves and starts the cart in PICO-8 through tools/run_pico8_bridge.bat (needs Python). printh() output appears below the code. A .lua file runs the cart of the open folder that #includes it; after Open Folder switches to another folder, the old cart is never used: open the folder the cart is in to run it.' },
@@ -135,12 +138,13 @@ const P8HelpData = (() => {
       related: ['minifier', 'audit', 'datacarts', 'project-context'], keywords: ['lua', 'token', 'editor', 'syntax', 'include', 'run'], legacy: 'doc-code',
     },
     {
-      id: 'minifier', kind: 'tool', ws: 'minifier', title: 'Minifier', rev: 7,
+      id: 'minifier', kind: 'tool', ws: 'minifier', title: 'Minifier', rev: 8,
       summary: 'Open a .p8 / .lua file or paste Lua, then compare original and generated code with local Shrinko8. Minimal profile and Tokens focus are the defaults. Use current editor copies its live unsaved buffer; Back to Code Editor preserves editing context. Copy optimized Lua or download a validated separate .lua/.p8 build copy.',
       inputs: ['UTF-8 .p8 text cartridges', 'UTF-8 .lua files', 'pasted Lua', 'current Code Editor buffer'],
       outputs: ['read-only original/optimized comparison', 'copied optimized Lua', 'validated .lua/.p8 build-copy downloads'],
       tasks: ['inspect original and generated source', 'compare local Minifier results', 'recover from an engine load error', 'tour the Minifier workspace', 'download a build copy'],
       actions: [
+        { id: 'minifier.bar-layout', name: 'Controls in smaller windows', text: 'On desktop, Source and commands has a reserved scrollable area so long source messages do not keep shrinking the comparison. Focus the area and use Page Down, or scroll it. Small windows show its content in the scrolling page.' },
         { id: 'minifier.cancel', name: 'Cancel', text: 'Stops pending intake or optimization without replacing the retained source. Cancelled or earlier output cannot export.', detail: 'The worker may be replaced to stop a running job. Load the engine again if required, then explicitly Optimize. Switching workspaces also cancels pending work.' },
         { id: 'minifier.retry', name: 'Load engine / Retry engine', text: 'Loads a fresh local engine without submitting source. When ready, choose Optimize yourself.', detail: 'If the workspace says One-time setup required, run python tools/package_minifier.py once in the Suite folder, then Retry; index.html opened directly needs no server. See docs/MINIFIER_ENGINE.md.' },
         { id: 'minifier.exports', name: 'Copy optimized Lua / Download…', text: 'Requires a current successful result with matching source and validation. Copy writes only Lua; denied or unavailable clipboard access reports failure and offers manual selection. Download… offers .lua and, for a cartridge input, .p8 under distinct .min names. When the optional local PNG encoder is ready, .p8.png is also offered. It requests a browser download, never a project Save or editor replacement.', detail: 'Cartridge exports retain the exact original header and non-Lua text, including metadata and empty sections; generated Lua uses the header’s line endings. Decoded engine ROM and the final cartridge are checked, and any mismatch blocks both actions. Stale, cancelled, failed or partially resolved results cannot export. A source change while choosing a download cancels it. --@data and keep/preserve hints may be removed or changed: keep the original editable project. Preservation checks are separate from budget compliance and do not prove runtime equivalence. Export warnings list each exceeded metric, limit and exact excess. Above 8,192 tokens or 65,535 characters, Lua stays available; .p8 requires Download .p8 for debugging only, an inspection copy rather than a compatible build. PNG is blocked for known overages. Zero savings and increases within limits allow normal exports. PNG generation uses the same current validated cart and rechecks identity before download. PNG preserves cartridge ROM/code/label, not text-only metadata. PNG compressed code must be less than 15,360 bytes (maximum 15,359); this restriction does not apply to text .p8/.lua. Unknown compression is checked during encoding. PNG image bytes are reported separately. A missing encoder or capacity failure retains text/Lua exports. Export completion returns focus to its invoking control, or Source actions if that control became unavailable, without stealing later focus.' },
@@ -181,12 +185,13 @@ const P8HelpData = (() => {
       related: ['datacarts', 'studio'], keywords: ['binary', 'string', 'nibble', 'encode', 'peek'], legacy: 'doc-data',
     },
     {
-      id: 'audit', kind: 'tool', ws: 'audit', title: 'Project Audit', rev: 1,
+      id: 'audit', kind: 'tool', ws: 'audit', title: 'Project Audit', rev: 2,
       summary: 'Scans a project folder in the browser: tokens and characters per cart (with #include), file references and unused carts.',
       inputs: ['a project folder (picker or drop)'],
       outputs: ['on-screen tables', 'CSV and JSON', 'copied summary'],
       tasks: ['count tokens in a project', 'find unused carts', 'check load/run/reload references'],
       actions: [
+        { id: 'audit.bar-layout', name: 'Controls in smaller windows', text: 'On desktop the project commands use a reserved scrollable area. Focus it and use Page Down, or scroll to reach further controls and long messages. Small windows let the commands grow with the scrolling page.' },
         { id: 'audit.scan', name: 'Choose Project Folder / Rescan', text: 'Reads every .p8 in the folder and subfolders locally; nothing is uploaded. Ctrl+O chooses a folder, F5 rescans.' },
         { id: 'audit.summary', name: 'Project summary', text: 'Shows which carts are used and which nothing points to.' },
       ],
@@ -196,12 +201,13 @@ const P8HelpData = (() => {
       related: ['code', 'datacarts', 'cartbuilder', 'project-context'], keywords: ['tokens', 'scan', 'unused', 'include', 'csv'], legacy: 'doc-audit',
     },
     {
-      id: 'datacarts', kind: 'tool', ws: 'datacarts', title: 'Data Carts', rev: 2,
+      id: 'datacarts', kind: 'tool', ws: 'datacarts', title: 'Data Carts', rev: 3,
       summary: 'Shows what every data cart holds and which ranges the code reloads; packs new data carts and writes the reload() lines.',
       inputs: ['a project folder', '.p8 files', 'Library images'],
       outputs: ['.p8 data cart', 'reload() lines', 'Library images and palettes', 'range downloads'],
       tasks: ['inspect a memory map', 'view data as image or hex', 'pack a data cart', 'decide raw or LZ'],
       actions: [
+        { id: 'datacarts.bar-layout', name: 'Controls in smaller windows', text: 'On desktop the project commands use a reserved scrollable area. Focus it and use Page Down, or scroll for long project messages. Small windows show all rows in the scrolling page.' },
         { id: 'datacarts.map', name: 'Memory map', text: '128 bytes per row. "No read detected" is a heuristic, not proof that bytes are free.' },
         { id: 'datacarts.view', name: 'View as', text: '4-bit image, palette/fade table, greyscale, hex or fixed-point plots.' },
         { id: 'datacarts.pack', name: 'Pack', text: 'Builds a data cart (17,152 bytes) from ranges, images and files and verifies the cart text before download.' },
@@ -211,12 +217,13 @@ const P8HelpData = (() => {
       related: ['audit', 'cartbuilder', 'code', 'project-context'], keywords: ['reload', 'memory', 'lz', 'pack', 'hex'], legacy: 'doc-datacarts',
     },
     {
-      id: 'cartbuilder', kind: 'tool', ws: 'cartbuilder', title: 'Cart Builder', rev: 3,
+      id: 'cartbuilder', kind: 'tool', ws: 'cartbuilder', title: 'Cart Builder', rev: 4,
       summary: 'Manages a demo project’s data as assets packed into data carts, with --@data anchors telling the fx code where each piece is.',
       inputs: ['a demo project folder (contains demo/ or main.p8)', 'Library images and maps', 'files'],
       outputs: ['data carts', 'rewritten reload() lines', 'demo/suite.json'],
       tasks: ['adopt an existing project', 'pack assets into data carts', 'rename an asset', 'write carts'],
       actions: [
+        { id: 'cartbuilder.bar-layout', name: 'Controls in smaller windows', text: 'On desktop the project commands use a reserved scrollable area. Focus it and use Page Down, or scroll for longer messages and further actions. Small windows show all rows in the scrolling page.' },
         { id: 'cartbuilder.open', name: 'Open Demo Project…', text: 'Needs Chrome or Edge. Use a writable working copy outside protected folders such as AppData. After a restart, Reconnect asks permission again.', detail: 'Choose the folder that contains demo/ (a demoframe project) or a flat folder with main.p8. Nothing is written until you press Write Carts.' },
         { id: 'cartbuilder.adopt', name: 'Adopt', text: 'Turns literal reload() calls of data carts into parts with --@data comments.' },
         { id: 'cartbuilder.stages', name: 'Workflow strip', text: 'Analyze (read-only) → Plan (place every part) → Validate (checks, errors block writing) → Commit (preview, confirm, verified write). Opening a folder only reads; adopting a project writes anchors and assets, and lists those files first.', detail: 'On wide screens the Parts list and cart/report area scroll independently. On narrow screens the areas stack, the Parts list has its own scrolling, and the page scrolls to the report and actions.' },
@@ -275,10 +282,11 @@ const P8HelpData = (() => {
       restrictions: ['The drawing area is 128×128 pixels.'], related: ['extras', 'library'], keywords: ['line', 'line tool'], legacy: 'doc-extras',
     },
     {
-      id: 'extras-terrain', kind: 'guide', ws: 'extras', sub: 'terrain', title: 'Terrain Lab', rev: 1,
+      id: 'extras-terrain', kind: 'guide', ws: 'extras', sub: 'terrain', title: 'Terrain Lab', rev: 2,
       summary: 'Generate and edit seamless terrain, then export color and height maps.',
       inputs: ['procedural settings', 'heightmaps and Library images', 'palettes'], outputs: ['color and height maps', 'PICO-8 cart', 'Library images', 'scene JSON'], tasks: ['generate seamless terrain', 'paint heightmaps', 'export terrain'],
       actions: [
+        { id: 'extras-terrain.bar-layout', name: 'Controls in smaller windows', text: 'View and brush commands wrap in smaller windows. The coordinate readout reserves two text lines; focus Terrain coordinates or Terrain render details and scroll for longer values. Pointer updates keep the readout area the same size.' },
         { id: 'extras.terrain', name: 'Terrain Lab', text: 'Seamless terrain from noise or a heightmap with brushes, stamps, erosion and a 128×128 PICO-8 color map. The preview answers at once; the final render follows when you pause.' },
         { id: 'extras.terrain.workflow', name: 'Workflow', text: 'Simple exposes terrain presets and the main shaping controls; Advanced adds erosion, brushes, stamps and full-resolution settings. Preview is the fast response to an edit; exports use the final render. Save to Library or use the export and handoff actions to continue in another tool.' },
       ],
@@ -288,11 +296,12 @@ const P8HelpData = (() => {
 
     // ---- guides and reference ------------------------------------------------------------
     {
-      id: 'suite', kind: 'guide', title: 'The Suite', rev: 6,
+      id: 'suite', kind: 'guide', title: 'The Suite', rev: 7,
       summary: 'What the Suite is, how tools share work, and how to run it offline.',
       inputs: [], outputs: [],
       tasks: ['switch tools', 'run the Suite offline', 'understand what is stored in the browser'],
       actions: [
+        { id: 'suite.bar-layout', name: 'Controls in smaller windows', text: 'Command rows and headings share control sizing. Tools keep the extra rows they need; smaller windows wrap status controls or scroll options instead of hiding actions. Desktop project and Minifier command areas reserve space and scroll long content.' },
         { id: 'suite.navigation', name: 'Navigation and project context', text: 'The top row keeps tool navigation, Find tool, Library and theme controls in place as you switch. A long tab strip scrolls; on small windows Find tool names the current tool. Project context appears beside the menus, or below them on small windows, and long text is shortened visually. Menu lists scroll in short windows; Escape closes a menu and returns to its button.' },
         { id: 'suite.workspace', name: 'Workspace layout', text: 'Editors use the full window width for working space. Home and Data Tools stay centered; Palette & Fades and Tile Maker use a wider centered layout for comparing images. On smaller windows, panels stack and the page scrolls where the tool needs more room.' },
         { id: 'suite.tours', name: 'Quick tours', text: 'Help › Tour this tool starts the current tool’s tour, using the selected Extra Tools tab. If no tour exists, read Help or browse the available tours. Help › Quick tours searches tours by tool or subject and shows progress, replay and the Suite overview. Manual tours remain available when automatic offers are off. Esc closes a tour and returns to editing.' },
