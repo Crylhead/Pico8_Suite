@@ -1780,7 +1780,7 @@
   function bindProjectContext() {
     projectCtx.context.subscribe((d) => {
       renderProjectIndicator(d.project);
-      // not 'p8:project': Project Audit already uses that name ({ root }) to hand its scan to Data Carts
+      // not 'p8:project': Project Audit already uses that name ({ root }) to hand its scan to Cart Inspector
       document.dispatchEvent(new CustomEvent('p8:projectcontext', { detail: d }));
     });
     // a remembered reference comes back as "reconnect needed" until permission is verified. Suite.kv exists only

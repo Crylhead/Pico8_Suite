@@ -52,7 +52,7 @@ The header has separate navigation and menu/context slots. Tool-specific context
 
 | Slot | Contract |
 | --- | --- |
-| Primary row | `--chrome-nav-height`: 48px minimum; grid slots for brand, shrinkable tab strip, Find tool and global actions. Tabs retain their icon/button sizes and scroll rather than wrapping. The overlapping workspace-name frame remains intact. |
+| Primary row | `--chrome-nav-height`: 48px minimum; grid slots for brand, shrinkable tab strip, Find tool and global actions. Tabs retain their icon/button sizes and scroll rather than wrapping. The overlapping workspace-name frame remains intact. Tab names beside the icons (`data-nav-labels`, #189) are shown only while every named tab fits without scrolling, as measured by `js/suite.js` on resize and when tools register. Otherwise the bar stays icon-only with the name frame. They never wrap, truncate or add a scrollbar row. At standard fonts that means 1710px and wider for the 12 tabs, measured. Each tab's native title is its name plus the tool's one-line registry `desc`. |
 | Menu row above 640px | `--chrome-menu-height`: 33px minimum; 26px menu buttons (`--chrome-menu-line`) and a reserved context rail, `min(38%, 400px)`. Empty context space stays reserved. |
 | Menu/context at or below 640px | Existing logo/Find tool navigation; reserve two 26px menu lines and a separate 28px context row (`--chrome-context-height`), including when empty. This deliberately trades a little height for stable tool switches and reachable controls. |
 | Project / preset context | Shares the bounded menu rail with indices; names ellipsize without widening navigation. Full project/access text stays in the live status and title. Consumer project strips and Home notes wrap long names. |
@@ -77,14 +77,14 @@ Both modes use `--workspace-gutter` (16px) on all four edges. A dashboard can ad
 | Home | Dashboard / 1240px | Workspace host |
 | Palette & Fades | Dashboard, wide / 1640px | Workspace host |
 | Tile Maker | Dashboard, wide / 1640px | Workspace host |
-| Data Tools | Dashboard / 1240px | Workspace host |
+| Converters | Dashboard / 1240px | Workspace host |
 | Pixel Studio | Fluid | Independent panes above 860px; workspace host at/below |
 | Map Editor | Fluid | Independent panes above 900px; workspace host at/below |
 | Code Editor | Fluid | Independent panes above 900px; workspace host at/below |
 | Minifier | Fluid | Independent panes above 699px; workspace host at/below |
 | Project Audit | Fluid | Independent panes above 1000px; workspace host at/below |
-| Cart Builder | Fluid | Independent panes above 1000px; workspace host at/below |
-| Data Carts | Fluid | Independent panes above 1000px; workspace host at/below |
+| Cart Packer | Fluid | Independent panes above 1000px; workspace host at/below |
+| Cart Inspector | Fluid | Independent panes above 1000px; workspace host at/below |
 | Extra Tools (all four tabs) | Fluid | Independent panes above 1000px; workspace host at/below |
 
 The shared rule governs only the outer wrapper. Keep specialized grids, panel widths/collapse, internal spacing, canvas aspect/zoom and scroll owners in tool styles. Legacy `.layout-*` geometry remains a fallback for extensions without the mode annotation; new tools must declare a mode. See [EXTENDING.md](../EXTENDING.md#workspace-geometry) and the [before/after checks](UX_RELEASE_CHECKLIST.md#workspace-geometry-168).
@@ -103,7 +103,7 @@ Tool breakpoints reflect different working-area needs; do not unify them. The do
 | Code Editor | 900 | 280px fixed rail |
 | Minifier | 699 | 250px from 700–1199px with stacked comparison panes; 300px from 1200px |
 | Project Audit | 1000 | 360px fixed rail |
-| Cart Builder / Data Carts | 1000 | 280px fixed rail; narrow lists cap at 240px, cart charts keep native sizing/scrolling |
+| Cart Packer / Cart Inspector | 1000 | 280px fixed rail; narrow lists cap at 240px, cart charts keep native sizing/scrolling |
 
 The resizable panels share a 320px minimum **center grid track**, leaving 318px inside Pixel/Map's existing 1px borders. Bounds use border-box width minus computed horizontal padding/borders. Only then subtract fixed toolbar columns/gaps (52px + two 10px gaps for Pixel/Map; one 10px gap for Terrain). Outer gutters must never be counted as stage room. This fixes the formerly 298px center/296px canvas at the first desktop width.
 
@@ -129,20 +129,20 @@ Use minima and explicit overflow policies, not fixed heights that crop controls.
 | Terrain | View and brush rows use command sizing. Coordinates and render details have reserved two-line heights and can scroll by keyboard; render feedback/Retry share a reserved command slot. Its status row grows to fit this expanded readout, independently of pointer text. |
 | Minifier | Above 699px, source/commands reserves `--bar-expanded-command` = 240px, capped at 35dvh, with overflow scrolling. Heading and action rows use the shared minima. At/below 699px it grows in the document. |
 | Audit | Above 1000px the expanded command region reserves 180px (same variable locally overridden), capped at 35dvh, including primary/column rows and context. Long content scrolls. Narrow mode grows in the document. |
-| Cart Builder / Data Carts | Same policy as Audit, with a 112px desktop region for their command workflow. More rows or long context scroll inside that region; narrow mode grows in the document. |
+| Cart Packer / Cart Inspector | Same policy as Audit, with a 112px desktop region for their command workflow. More rows or long context scroll inside that region; narrow mode grows in the document. |
 
 Expanded command regions are named, keyboard-focusable areas: Page Down/Up and normal focus scrolling reach their contents. Their reserved heights keep text updates from consuming additional stage area. All minima can grow for controls/text where no explicit scrolling region is declared; no pixel canvas is stretched to equalize bars. `.card-head` retains the card's own boundary; edge-to-edge command/status rows keep their existing 1px divider. See the [recorded comparison](UX_RELEASE_CHECKLIST.md#workspace-bars-169).
 
 ## Data-cart workspace sizing (#167)
 
-Cart Builder and Data Carts share `.layout-dc` and the same body sizing rules in `css/suite.css`:
+Cart Packer and Cart Inspector share `.layout-dc` and the same body sizing rules in `css/suite.css`:
 
 | Width | Body / grid | Scroll ownership |
 | --- | --- | --- |
 | Above 1000 CSS px | Viewport-height column; the grid fills the remainder below the app chrome, with `min-height: 0` | Parts/cart list and main visualization/report scroll within their own panes; the page stays fixed |
 | At or below 1000 CSS px | Document-height body; top controls, side list and main area stack | The document scrolls; both lists cap at 240px with their own scrolling, keeping the main area reachable |
 
-Capacity charts keep their fixed 430px height and horizontal scrolling for multiple carts. Do not stretch chart data or change packing to fit the viewport. Command rows can wrap as their controls require; this contract does not force identical command content or row counts. Keep the shared Cart Builder/Data Carts body selectors together when changing their breakpoint behavior. See the [browser regression checklist](UX_RELEASE_CHECKLIST.md#cart-builder-viewport-167).
+Capacity charts keep their fixed 430px height and horizontal scrolling for multiple carts. Do not stretch chart data or change packing to fit the viewport. Command rows can wrap as their controls require; this contract does not force identical command content or row counts. Keep the shared Cart Packer/Cart Inspector body selectors together when changing their breakpoint behavior. See the [browser regression checklist](UX_RELEASE_CHECKLIST.md#cart-builder-viewport-167).
 
 ## Main document action placement (#201)
 
@@ -155,7 +155,7 @@ A document tool's main document action (Save, or Export when the tool has no Lib
 
 Audit (2026-11-05): Pixel Studio, Map Editor, Code Editor and Tile Maker follow this. Gaps, not changed here:
 - Code Editor has no `P8DocStatus` badge yet. If it gets one, Save should move beside it.
-- Cart Builder's command row has two primaries (**Open Project Folder…** and **Write Carts**); it is a multi-step tool, so a later pass should decide which one leads.
+- Cart Packer's command row has two primaries (**Open Project Folder…** and **Write Carts**); it is a multi-step tool, so a later pass should decide which one leads.
 
 ## Preview frame roles (#172)
 
@@ -174,7 +174,7 @@ Palette cards share caption, image, action and settings rows. Preview images rem
 
 ### Empty previews (#187)
 
-A preview that has nothing to show yet uses `p.preview-empty` inside its own frame, so the frame keeps its loaded size. It is a dark neutral checker (`#15151a` / `#1c1c22`, the same as the Tile Maker drop area) in every theme, with centered `--fs-md` text in `#c9c9d3`. That text measures **10.32:1** on the lighter checker square and **11.07:1** on the darker one. The text says what fills the preview, and it is a real text node, so screen readers read it. `pointer-events: none` passes drag and drop, panning and clicks through to the frame. Set `hidden` as soon as the preview has content. An empty state is about missing *input*, not dark content: an all-black image or data range is content and shows no overlay. Current uses: Tile Maker *Reconstructed* (no result yet), Palette *Gradient preview* (no fade generated) and the Data Carts memory map and viewer (no cart, or no bytes selected).
+A preview that has nothing to show yet uses `p.preview-empty` inside its own frame, so the frame keeps its loaded size. It is a dark neutral checker (`#15151a` / `#1c1c22`, the same as the Tile Maker drop area) in every theme, with centered `--fs-md` text in `#c9c9d3`. That text measures **10.32:1** on the lighter checker square and **11.07:1** on the darker one. The text says what fills the preview, and it is a real text node, so screen readers read it. `pointer-events: none` passes drag and drop, panning and clicks through to the frame. Set `hidden` as soon as the preview has content. An empty state is about missing *input*, not dark content: an all-black image or data range is content and shows no overlay. Current uses: Tile Maker *Reconstructed* (no result yet), Palette *Gradient preview* (no fade generated) and the Cart Inspector memory map and viewer (no cart, or no bytes selected).
 
 ### Artwork surround (#198)
 

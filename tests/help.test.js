@@ -54,7 +54,7 @@ t('#59 lookups by control id work for tooltips and tours; unknown ids give null'
   assert.strictEqual(H.control('code.run').topic.id, 'code');
   assert.strictEqual(H.control('map.status').topic.id, 'map');
   assert.strictEqual(H.control('nope.nothing'), null);
-  assert.strictEqual(H.forWorkspace('cartbuilder').title, 'Cart Builder');
+  assert.strictEqual(H.forWorkspace('cartbuilder').title, 'Cart Packer');
   assert.strictEqual(H.forWorkspace('missing'), null);
 });
 

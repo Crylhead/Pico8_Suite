@@ -46,7 +46,7 @@ const P8Home = (() => {
    */
   function projectEntry(p, workspaces) {
     if (!p || p.access === 'none') {
-      return { kind: 'none', text: 'No project folder is open. Open Project Folder… in Cart Builder makes a folder the active project; Code Editor, Project Audit and Data Carts can then use it (each also opens folders of its own). Needs Chrome or Edge. Project files stay on disk; the browser asks for permission on each visit.' };
+      return { kind: 'none', text: 'No project folder is open. Open Project Folder… in Cart Packer makes a folder the active project; Code Editor, Project Audit and Cart Inspector can then use it (each also opens folders of its own). Needs Chrome or Edge. Project files stay on disk; the browser asks for permission on each visit.' };
     }
     const where = workspaces.includes(p.source) ? p.source : null;
     switch (p.access) {

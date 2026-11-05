@@ -1,5 +1,5 @@
 // js/datatools.js
-// Data Tools workspace: ports of binary_data_converter (bytes -> PICO-8 string
+// Converters workspace: ports of binary_data_converter (bytes -> PICO-8 string
 // literal) and nibble_converter (greyscale -> hi/lo nibble images), wired to the library.
 
 'use strict';
@@ -316,7 +316,7 @@
   }
 
   S.registerTool({
-    ws: 'data', category: 'utilities', name: 'Data Tools',
+    ws: 'data', category: 'utilities', name: 'Converters',
     desc: 'Binary → PICO-8 string literals (files, text or library images) and greyscale nibble splitting.',
     tasks: [{ group: 'create', label: 'Turn a file or image into a Lua string', hint: 'Binary → PICO-8 string, nibble split' }], color: '#ffa300', tags: ['bytes', 'strings', 'nibbles'], category: 'utilities',
   });

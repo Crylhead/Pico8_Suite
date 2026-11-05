@@ -107,7 +107,7 @@ const P8TourData = (() => {
       ],
     },
     {
-      id: 'cartbuilder', title: 'Cart Builder tour', major: 1, ws: 'cartbuilder',
+      id: 'cartbuilder', title: 'Cart Packer tour', major: 1, ws: 'cartbuilder',
       summary: 'Pack a demo project’s data into data carts, validate the plan and write it with --@data anchors.',
       steps: [
         { id: 'open', areas: ['input'], before: { ws: 'cartbuilder' }, target: '#cbOpen', title: 'Project folder', text: 'Open Project Folder… opens a project folder for reading and writing (it needs demo/ or main.p8). It needs Chrome or Edge, and a writable working copy outside protected folders such as AppData. Opening only reads; after a restart, Reconnect asks for permission again.' },
@@ -127,11 +127,11 @@ const P8TourData = (() => {
         { id: 'table', areas: ['work'], target: '.au-main', title: 'Carts table', text: 'One row per cart with tokens and characters, including #include files. Click a header to sort; Ctrl+F filters the carts.' },
         { id: 'columns', areas: ['controls'], target: '#auCols', helpId: 'audit.columns', title: 'Columns' },
         { id: 'details', target: '.au-side', title: 'Details', text: 'Cart shows details for the selected cart; Project summary shows which carts are used and which nothing points to. Copy puts the view on the clipboard as plain text.' },
-        { id: 'export', areas: ['output', 'handoff'], target: '#auCsv', title: 'Export and hand off', text: 'Export CSV or JSON saves the scan as a download. Data Carts and Cart Builder work with the same project folder.' },
+        { id: 'export', areas: ['output', 'handoff'], target: '#auCsv', title: 'Export and hand off', text: 'Export CSV or JSON saves the scan as a download. Cart Inspector and Cart Packer work with the same project folder.' },
       ],
     },
     {
-      id: 'datacarts', title: 'Data Carts tour', major: 1, ws: 'datacarts',
+      id: 'datacarts', title: 'Cart Inspector tour', major: 1, ws: 'datacarts',
       summary: 'See what each data cart holds and which ranges the code reloads, then pack new data carts.',
       steps: [
         { id: 'open', areas: ['input'], before: { ws: 'datacarts' }, target: '#dcOpen', title: 'Open carts', text: 'Open Project Folder… (the same folder as Project Audit) or Open .p8 Files… reads carts locally in this browser.' },
@@ -143,7 +143,7 @@ const P8TourData = (() => {
       ],
     },
     {
-      id: 'data', title: 'Data Tools tour', major: 1, ws: 'data',
+      id: 'data', title: 'Converters tour', major: 1, ws: 'data',
       summary: 'Convert files, text and images into PICO-8 strings and split greyscale images into nibbles.',
       steps: [
         { id: 'string', areas: ['input'], before: { ws: 'data' }, target: '#bdCard', title: 'Binary → PICO-8 string', text: 'Turns a file, text or a Library image into a Lua string literal; non-printable bytes become \\ddd escapes.' },

@@ -52,10 +52,10 @@ For each tour, start it from its tool with Help › Tour this tool, and once fro
 | Tile Maker | import bar, tile reduction, views, viewport heatmap switch, stats, Edit Tiles, Export to PICO-8 |
 | Map Editor | tools, name/save badge, Size…, map canvas, tileset, brush, menu bar |
 | Code Editor | editor, code tabs, Save, Run, token meter, Files, Functions, Sprites → Pixel Studio |
-| Cart Builder | project folder, Add Image, parts, stages, Auto-pack, report, Write Carts |
+| Cart Packer | project folder, Add Image, parts, stages, Auto-pack, report, Write Carts |
 | Project Audit | Open Project Folder, carts table, columns, details, Export CSV |
-| Data Carts | Open Project Folder, Inspect/Pack, cart list; with a cart open also the memory map, viewer and output buttons |
-| Data Tools | Binary → string card, input mode, generated code, nibble card |
+| Cart Inspector | Open Project Folder, Inspect/Pack, cart list; with a cart open also the memory map, viewer and output buttons |
+| Converters | Binary → string card, input mode, generated code, nibble card |
 | Extra Tools overview | tabs, description, tool area; the panel splitter step appears only while the Terrain Lab tab is selected |
 | LUT Creator / Wave Designer / Line Tool | the tab is selected first; preview/stage and controls (Wave: presets, thumbnail strip, scopes, parameter groups) |
 | Suite / Minifier | existing overview and source/options/comparison/exports tours |
@@ -93,7 +93,7 @@ These checks inspect actual browser DOM/title state and custom popovers; operati
 
 ## Contextual help on primary controls (#110)
 
-With Help detail Concise, hover and keyboard-focus one marked control per workspace and check that exactly one tooltip appears (no browser tooltip beside it) and that it matches F1: Pixel Studio Ink, Sieve, Remap…, Layers; Palette & Fades Normal/Ramp, Dark/Bright, Auto Fill, Gamma, fade slider; Tile Maker Import Image…, threshold, Rebuild, view switch, Edit Tiles…; Map Editor Size…, Reload tileset; Code Editor Run, Save, token meter; Data Tools Convert, Image File…; Project Audit Choose Project Folder…, columns, details view; Data Carts Inspect/Pack, Show as; Cart Builder stages and a part’s Move…; Extra Tools LUT type, Wave Export waves.p8, Line Export Lua…, Terrain Simple/Advanced and the Terrain splitter. Switch to Off: none of these tips appears and every control keeps its name. Switch to Detailed: the same text plus the F1 pointer.
+With Help detail Concise, hover and keyboard-focus one marked control per workspace and check that exactly one tooltip appears (no browser tooltip beside it) and that it matches F1: Pixel Studio Ink, Sieve, Remap…, Layers; Palette & Fades Normal/Ramp, Dark/Bright, Auto Fill, Gamma, fade slider; Tile Maker Import Image…, threshold, Rebuild, view switch, Edit Tiles…; Map Editor Size…, Reload tileset; Code Editor Run, Save, token meter; Converters Convert, Image File…; Project Audit Choose Project Folder…, columns, details view; Cart Inspector Inspect/Pack, Show as; Cart Packer stages and a part’s Move…; Extra Tools LUT type, Wave Export waves.p8, Line Export Lua…, Terrain Simple/Advanced and the Terrain splitter. Switch to Off: none of these tips appears and every control keeps its name. Switch to Detailed: the same text plus the F1 pointer.
 
 ## Pixel Studio preview scale (#102)
 
@@ -105,9 +105,9 @@ On disposable images sized 64×64, 128×128 (including the default sheet), 256×
 4. Paint, toggle a layer, change frames and play animation. Verify the preview follows the current composite, retains transparency background behavior and stays sharp at 1×/2×. Changing preview scale must not change main-canvas zoom or document pixels.
 5. Focus the scale group with optional help enabled, search F1 for Preview scale and replay the Pixel Studio tour; all must describe the same Fit/1×/2× behavior.
 
-## Cart Builder viewport (#167)
+## Cart Packer viewport (#167)
 
-At 360/768/1280/1920 CSS px, compare Cart Builder → Data Carts → Code Editor → Cart Builder in one window. Above 1000px, Cart Builder fills the viewport below the same header; at/below 1000px it deliberately uses document scrolling. With many parts and report rows, scroll Parts and the main report independently on desktop, reach the final action by keyboard, and check that the horizontal cart row keeps 430px charts. In narrow mode, Parts caps at 240px and document scrolling reaches the main report. Repeat in light/dark, a short viewport and a 640 CSS px reflow viewport (equivalent layout width to 200% zoom of 1280px).
+At 360/768/1280/1920 CSS px, compare Cart Packer → Cart Inspector → Code Editor → Cart Packer in one window. Above 1000px, Cart Packer fills the viewport below the same header; at/below 1000px it deliberately uses document scrolling. With many parts and report rows, scroll Parts and the main report independently on desktop, reach the final action by keyboard, and check that the horizontal cart row keeps 430px charts. In narrow mode, Parts caps at 240px and document scrolling reaches the main report. Repeat in light/dark, a short viewport and a 640 CSS px reflow viewport (equivalent layout width to 200% zoom of 1280px).
 
 Quick browser-console regression assertions after each switch/resize:
 
@@ -127,12 +127,12 @@ if (innerWidth > 1000) {
 
 Recorded 2026-11-04, Chromium 153.0.8010.0 on Linux/headless, base `62cdbdd` plus the fix. Empty workspace measurements at 800px viewport height:
 
-| Width | Cart Builder height before → after | Result |
+| Width | Cart Packer height before → after | Result |
 | --- | --- | --- |
 | 360 | 711.11 → 711.11px | Document scrolling retained |
 | 768 | 446.36 → 446.36px | Document scrolling retained |
-| 1280 | 228.92 → 721.16px | Now matches Data Carts / Code viewport fill |
-| 1920 | 228.92 → 721.16px | Now matches Data Carts / Code viewport fill |
+| 1280 | 228.92 → 721.16px | Now matches Cart Inspector / Code viewport fill |
+| 1920 | 228.92 → 721.16px | Now matches Cart Inspector / Code viewport fill |
 
 Four empty cases and ten populated light/dark cases passed DOMRect/scroll assertions, plus a 1280×420 short-viewport check. At fixed widths, repeated switches kept header height/width and content top within 1px. Parts and main scroll positions were independent; last report actions remained focus-reachable; charts stayed 430px high; no page horizontal overflow or browser errors occurred. Populated cases used passive layout fixtures with the real classes (60 parts, 16 charts, 45 report rows), not project writes or packing verification. Screenshots were compared before/after. Physical browser zoom, native Windows scrollbars and other engines remain untested; the 640px case verifies equivalent CSS reflow width.
 
@@ -165,14 +165,14 @@ Recorded 2026-11-04, Chromium 153.0.8010.0 on Linux/headless, base `574443f` plu
 | Home | 22/16/40/16 → 16/16/16/16 | 22 → 16 | Centered 1240px, unchanged |
 | Palette & Fades | 16 all → 16 all | 16 → 16 | Centered 1640px, unchanged |
 | Tile Maker | 16 all → 16 all | 16 → 16 | Centered 1640px, unchanged |
-| Data Tools | 16 all → 16 all | 16 → 16 | Centered 1240px, unchanged |
+| Converters | 16 all → 16 all | 16 → 16 | Centered 1240px, unchanged |
 | Pixel Studio | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
 | Map Editor | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
 | Code Editor | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
 | Minifier | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
 | Project Audit | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
-| Cart Builder | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
-| Data Carts | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
+| Cart Packer | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
+| Cart Inspector | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
 | Extra Tools: LUT / Wave / Line / Terrain | 10 all → 16 all | 10 → 10 | Fluid, unchanged |
 
 Baseline: 75 measured cases (15 contexts × 360/640/768/1280/1920px, light). Final: 150 cases (same widths, light/dark). Each final case checks mode, centering/width ceiling, four gutters, gap and absence of horizontal page overflow. Before/after screenshots at 1280×900/light were compared across every built-in workspace and all four Extra Tools tabs; narrow final screenshots at 360×900/dark also checked stacking. Home becomes slightly more compact vertically; editors move their cards 6px inward, with useful stages still filling the remaining area. Existing dashboard ceilings and specialized grids remain intact.
@@ -217,14 +217,14 @@ Recorded 2026-11-04, Chromium 153.0.8010.0 on Linux/headless. Application base `
 | Palette headings | 20.30 / 34.30 / 34.30 → 28 / 28 / 30 | Heading minimum plus a deliberate 30px color-chip exception |
 | Minifier source/commands | 224.52 → 240 | Explicit reserved scroll region above 699px |
 | Audit commands/context | 161.98 → 180 | Explicit reserved region above 1000px |
-| Cart Builder / Data Carts commands/context | 56.30 / 81.69 → 112 each | Reserved space supports project/status rows without consuming more stage area when messages change |
+| Cart Packer / Cart Inspector commands/context | 56.30 / 81.69 → 112 each | Reserved space supports project/status rows without consuming more stage area when messages change |
 | Terrain status | 26 → 41 | Shared 32px minimum plus the bounded two-line coordinate readout |
 
 Reserved desktop regions add some empty space for shorter/empty workflows; the intentional tradeoff is stable stage allocation when context/messages grow. These values are declared tool roles, not a claim that all tools have the same total number of rows. The old saved baseline must flag these intentional bar/stage changes; capture a new accepted baseline after review.
 
 The complete #171 matrix checks all built-ins and all four Extra Tools tabs in light/dark, normal widths 360/768/1280/1920 plus the 640×450/device-scale-2 reflow equivalent. Main rails, shared header and return-visit bar heights must remain stable, with no horizontal page overflow or fixture mutation. Geometry collection also includes the adopted `.command-row` primitives and heading roles. Final result: all 600 cases passed, with no page errors, horizontal page overflow, fixture mutation or return-visit height changes. All 346 regression tests passed; syntax/static checks and Help/tour integrity passed (477 IDs, 52 references). Physical browser zoom and native Windows/macOS were not exercised.
 
-Focused checks cover 40 cases at 360/768/1280 and short 640px widths, auditing visible bar buttons/inputs/selects against clipping ancestors (424 control instances, no clipped controls). Internal scrollable rows/regions are permitted. Studio/Map/Terrain status readouts keep the same height under short/long coordinate fixtures (12 cases). Tab reaches the last drawing option and scrolls it into view; Tiled/Fit and Data Carts Pack remain operable. Long feedback keeps all four expanded command regions at the same height and Page Down scrolls their contents; Terrain coordinates and render details are named readout regions. The repeat-visit sweep exposed a 98px → 70px Terrain command-row collapse at 360px while Queued/Preview became Final; the render-feedback/Retry slot now reserves its width rather than changing row allocation. Before/after screenshots and measured rows are used for comparison.
+Focused checks cover 40 cases at 360/768/1280 and short 640px widths, auditing visible bar buttons/inputs/selects against clipping ancestors (424 control instances, no clipped controls). Internal scrollable rows/regions are permitted. Studio/Map/Terrain status readouts keep the same height under short/long coordinate fixtures (12 cases). Tab reaches the last drawing option and scrolls it into view; Tiled/Fit and Cart Inspector Pack remain operable. Long feedback keeps all four expanded command regions at the same height and Page Down scrolls their contents; Terrain coordinates and render details are named readout regions. The repeat-visit sweep exposed a 98px → 70px Terrain command-row collapse at 360px while Queued/Preview became Final; the render-feedback/Retry slot now reserves its width rather than changing row allocation. Before/after screenshots and measured rows are used for comparison.
 
 To repeat manually, include long project/filename/status text and selected tools with extra options. At 360/768px and physical 200% zoom, Tab through both Studio option rows and all footer groups; reach Minifier Help/source actions and the final project action by scrolling the named command region. Move over Studio/Map/Terrain canvases: readouts must update without reallocating their rows. Check coordinate text, view controls, code token/character meters and all source actions remain reachable. Reset window size and verify the normal one-line minima and documented expanded regions.
 

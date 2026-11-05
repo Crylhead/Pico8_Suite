@@ -1,4 +1,4 @@
-// Cart Builder project mutation (issues #1, #2, #3, #4, #7): conservative adoption, anchor rewriting, recoverable writes, disk conflicts.
+// Cart Packer project mutation (issues #1, #2, #3, #4, #7): conservative adoption, anchor rewriting, recoverable writes, disk conflicts.
 const assert = require('assert');
 const { t } = require('./harness.js');
 const P = require('../js/project-core.js');

@@ -7,13 +7,13 @@ Browser-based PICO-8 graphics suite, developed in this standalone repository. It
 | **Pixel Studio** | Pixel editor restricted to PICO-8: 16 slots mapped to the 32 PICO-8 colors, `fillp()` patterns, a sieve (APaint-style dither mask), brush preview under the cursor, tiled view you can draw across, layers, frames with onion skin, canvases from 1×1 to 1024×1024, `[gfx]` clipboard in/out, `.p8` sprite sheet import, new carts and writing into existing carts |
 | **Palette & Fades** | Port of `palette_tool`: custom palettes, dark/bright fade tables, greyscale conversion, Lua/GPL/PNG/.p8 exports |
 | **Tile Maker** | Port of `tilemaker`: 8×8 tile packing, VRAM heatmap, tile editor, .p8/Aseprite/PNG exports |
-| **Map Editor** | PICO-8 tile maps painted with tiles or blocks of a sprite sheet (library image, `.p8` `__gfx__` or Tile Maker result): draw, rectangle and flood fill, pick, select / copy as brush, undo. 128×32 cart maps, 128×64 with the shared sprite rows, up to 256×256 for raw-byte export. Cart Builder accepts a map part only up to 17,152 bytes; larger maps need splitting outside the current UI. `.p8` import, new cart with viewer, write into an existing cart, map bytes / hex / PNG; maps are library assets and go into Cart Builder projects as `tiles` assets |
+| **Map Editor** | PICO-8 tile maps painted with tiles or blocks of a sprite sheet (library image, `.p8` `__gfx__` or Tile Maker result): draw, rectangle and flood fill, pick, select / copy as brush, undo. 128×32 cart maps, 128×64 with the shared sprite rows, up to 256×256 for raw-byte export. Cart Packer accepts a map part only up to 17,152 bytes; larger maps need splitting outside the current UI. `.p8` import, new cart with viewer, write into an existing cart, map bytes / hex / PNG; maps are library assets and go into Cart Packer projects as `tiles` assets |
 | **Code Editor** | PICO-8 Lua editor for the `__lua__` section of a `.p8` (or a `.lua` file): PICO-8 syntax highlighting, API completion and signature hints, auto-indent, find / replace, code tabs (`-->8`), function list, live estimated token / character count. Saves into the cart in Chrome / Edge: just before writing it rereads the file, keeps sprite/map/sound changes made meanwhile in PICO-8 or another tab, and asks (overwrite / reload / cancel) if the file's code itself changed; edits typed during a save stay unsaved. Folders with `#include` followed (tokens counted like Project Audit: repeated includes count each time, `.p8:N` tabs separately, cycles stop); moving to another file of the folder saves the one you leave, and code typed during that save keeps it open (opening other code never drops unsaved edits without asking). **Run** (Ctrl+R) saves and starts the cart in PICO-8 (it stops instead, asking you to Run again, if code was typed during that save, if the save had to go to another file through Save As, or if another file was opened or saved meanwhile; Save As into another file drops the old folder path and include parent) through `tools/pico8_bridge.py` and shows `printh()` output |
 | **Minifier** | Open UTF-8 .p8 / .lua files or paste Lua into an unsaved page-only snapshot; compare actual local Shrinko8 output (Minimal, Safe or Aggressive; focus on tokens, characters or compressed size; default Minimal + Tokens), read-only views, Cancel and Retry. Original files stay unchanged. Code Editor’s **Cart → Minify…** / **Use current editor** copies unsaved code; **Back to Code Editor** preserves its content, caret, save state and undo history. Later editor changes mark the snapshot earlier. Copy validated Lua or download a separate `.lua` / `.p8` build copy, plus `.p8.png` when its optional encoder is ready |
-| **Data Tools** | Ports of `binary_data_converter` (bytes → PICO-8 string literal; library images added as input) and `nibble_converter` (greyscale → hi/lo nibble images) |
+| **Converters** | Ports of `binary_data_converter` (bytes → PICO-8 string literal; library images added as input) and `nibble_converter` (greyscale → hi/lo nibble images) |
 | **Project Audit** | Port of `project_audit`: scans a project folder (picked or dropped, read in the browser) for estimated tokens / characters per cart with `#include` expanded, includes in both directions, `load` / `run` / `reload` / `cstore` references, used and unused carts; CSV / JSON export |
-| **Cart Builder** | A project folder with `demo/` or `main.p8` (read/write; opened with *Open Project Folder…*): adopts its data as assets, packs them into data carts (drag or auto-pack, LZ per part), checks generated cart text before writing and rewrites the `--@data` anchor lines the fx load from. See `docs/PROJECT_MODEL.md` |
-| **Data Carts** | Exact reader / writer for the cart data area (0x0000–0x42ff incl. `__sfx__` / `__music__`), memory map per cart with the ranges the project's `reload()` calls read, sections per cart (what each fx cuts out with `mem_store`), viewer in the palette and fade row the fx uses (read from its code and data), hex, fixed-point plots, packer for new data carts (raw or LZ per entry) with generated `reload()` lines |
+| **Cart Packer** | A project folder with `demo/` or `main.p8` (read/write; opened with *Open Project Folder…*): adopts its data as assets, packs them into data carts (drag or auto-pack, LZ per part), checks generated cart text before writing and rewrites the `--@data` anchor lines the fx load from. See `docs/PROJECT_MODEL.md` |
+| **Cart Inspector** | Exact reader / writer for the cart data area (0x0000–0x42ff incl. `__sfx__` / `__music__`), memory map per cart with the ranges the project's `reload()` calls read, sections per cart (what each fx cuts out with `mem_store`), viewer in the palette and fade row the fx uses (read from its code and data), hex, fixed-point plots, packer for new data carts (raw or LZ per entry) with generated `reload()` lines |
 | **Extra Tools** | Smaller tools behind one tab bar: **LUT Creator** (port of `lut_creator`: 2D motion paths, 3D ball formations incl. OBJ models, slots, `.p8` data cart / Lua / Picotron POD), **Wave Designer** (port of `osc_designer`: 16 scope waveforms → `waves.p8`), **Line Tool** (port of `line_tool`: 128×128 lines → Lua table, pixels → library), **Terrain Lab** (port of `terrain_lab_v0_4`: seamless terrain from noise or an imported heightmap, brushes, text / image / SVG stamps, erosion, terraces and sea level, baked light → 128×128 PICO-8 color map in the best 16/12/8/4 of 32 colors or the live palette of Palette & Fades / Pixel Studio, optionally shaded along their fade tables, + 16-level height map, `.p8` viewer cart, library; history window, status bar, any installed font) |
 
 ## Minifier workspace
@@ -47,7 +47,7 @@ For basic tools, or when runtime assets are already packaged, you can still serv
 python -m http.server 8000 --bind 127.0.0.1
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Keep using the same host and port: browser storage belongs to that origin. Chrome or Edge is needed for Cart Builder's writable folder access and Code Editor's in-place saves; other browsers can use supported import/download workflows. Clipboard, folder access and installed-font features depend on browser permissions and a secure context (localhost or HTTPS). Browser restrictions can prevent writing protected folders such as `AppData`; use a separate working copy of your demo.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Keep using the same host and port: browser storage belongs to that origin. Chrome or Edge is needed for Cart Packer's writable folder access and Code Editor's in-place saves; other browsers can use supported import/download workflows. Clipboard, folder access and installed-font features depend on browser permissions and a secure context (localhost or HTTPS). Browser restrictions can prevent writing protected folders such as `AppData`; use a separate working copy of your demo.
 
 **Run in PICO-8** is optional and needs your own PICO-8 installation plus Python 3:
 
@@ -67,21 +67,21 @@ The app can be hosted on a static server for the browser tools. A remote host do
 - Typical round trips:
   - Pixel Studio → File → Send to → Tile Maker, then Export → Tile Sprite Sheet → Library → open the sheet in Pixel Studio.
   - Palette & Fades palette → Pixel Studio palette panel → *From Palette & Fades* (or save it to the library).
-  - Any library image → Data Tools → string literal for your cart.
+  - Any library image → Converters → string literal for your cart.
 - **Back up** with Library → Export Library Backup (one JSON file of saved assets). This does not include every tool's working session, settings or project-folder files. Export before changing host/port/browser or clearing site data. When IndexedDB is unavailable at startup the session is memory-only (a warning appears and the Library says so). If a browser-storage save fails (for example storage is full), the suite reports it and leaves the work unsaved so you can free space and retry, or export/download it.
 
 ## Files
 
 - `index.html`: shell, all workspaces, in-app documentation (F1)
 - `css/style.css`: base styles and the Palette / Tile Maker layouts (from `palette_tool_web`)
-- `css/suite.css`: library, Home, Pixel Studio and Data Tools
+- `css/suite.css`: library, Home, Pixel Studio and Converters
 - `js/core.js`, `js/app.js`: palette logic and the shell (workspaces, menus, dialogs, `window.P8App`)
 - `js/suite.js`: asset library, "Open in…" registry, asset picker, Home page (`window.Suite`)
 - `js/tiles-core.js`, `js/tiles.js`: Tile Maker
 - `js/studio-core.js`, `js/studio.js`: Pixel Studio (pure logic / UI)
 - `js/map-core.js`, `js/map.js`: Map Editor (pure logic / UI)
 - `js/code-core.js`, `js/code.js`: Code Editor (pure logic / UI)
-- `js/datatools.js`: Data Tools
+- `js/datatools.js`: Converters
 - `js/doc-status-core.js`: shared save / operation status contract and status badge (`P8DocStatus`; Map Editor and Pixel Studio use it, see EXTENDING.md)
 - `js/ux-prefs-core.js`: shared UX preferences (`P8Prefs`: help detail, tours, compact workspace bar, reduced motion) behind Help › Settings…, see EXTENDING.md
 - `js/audit-core.js`, `js/audit.js`: Project Audit (pure logic / UI)
@@ -90,9 +90,9 @@ The app can be hosted on a static server for the browser tools. A remote host do
 - `docs/ACCESSIBILITY.md`: shared keyboard/focus/dialog behavior, measured contrast and target sizes, known canvas limitations and the manual keyboard regression script
 - `docs/COMPRESSION.md`: which data cart compression the suite offers, and the PICO-8 measurements behind it
 - `docs/DESIGN_SYSTEM.md`: shared UI tokens (colour, spacing, type, focus, states) and component primitives, with the live reference page `docs/design-system.html`
-- `js/project-core.js`, `js/project.js`: demo projects, anchors, packing (pure logic) / Cart Builder UI
+- `js/project-core.js`, `js/project.js`: demo projects, anchors, packing (pure logic) / Cart Packer UI
 - `js/datacarts-core.js`: sections and palettes of data carts, read from the fx code (pure logic)
-- `js/cart-core.js`, `js/datacarts.js`: .p8 data area reader / writer, `reload()` analysis, LZ codec (pure logic) / Data Carts UI
+- `js/cart-core.js`, `js/datacarts.js`: .p8 data area reader / writer, `reload()` analysis, LZ codec (pure logic) / Cart Inspector UI
 - `tools/pico8_bridge.py`, `tools/run_pico8_bridge.bat`: optional local PICO-8 launcher
 - `tests/regress.js`: six focused regression checks
 - `EXTENDING.md`: how to add a tool
@@ -100,7 +100,7 @@ The app can be hosted on a static server for the browser tools. A remote host do
 
 ## Changes compared to `palette_tool_web`
 
-- New workspaces: Home, Pixel Studio, Data Tools. Menus and shortcuts now belong to a workspace (`data-show`, `P8App.registerShortcuts`).
+- New workspaces: Home, Pixel Studio, Converters. Menus and shortcuts now belong to a workspace (`data-show`, `P8App.registerShortcuts`).
 - Palette & Fades: preview image from the library, palette and preview image to the library.
 - Tile Maker: import from the library (picker or drag & drop), sprite sheet and reconstructed image to the library.
 - PNG export (`P8.encodeIndexedPng`) can write a transparent color.

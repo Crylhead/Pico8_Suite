@@ -470,3 +470,17 @@ Older settings that only stored `timeline: false` load as hidden. Because the st
 - There is no horizontal overflow and no exception.
 
 The measurements per control type are in `docs/ACCESSIBILITY.md`.
+
+## Follow-up: #189 Cart Packer, Cart Inspector and Converters (2026-11-05)
+
+**Behaviour change:**
+- **Display names:** Cart Builder is now **Cart Packer**, Data Carts is **Cart Inspector** and Data Tools is **Converters**. Only display names changed. Workspace IDs, deep links (`#cartbuilder`, `#datacarts`, `#data`), saved sessions, storage keys, tour and help IDs and `window.P8CartBuilder` are unchanged.
+- **Old names still work:** they are search aliases in `js/nav-core.js` (`FORMER_NAMES`), so Ctrl+K still finds the tools, and F1 help search finds them through keywords. Historical reviews, the roadmap and this changelog keep the names they were written with.
+- **Tab tooltips:** each tab's title is its name plus the tool's one-line description. Before, it was the name and its category.
+- **Tab names beside the icons:** they used to appear from 1600px, but between 1600 and about 1700px the bar then scrolled and its scrollbar grew the 48px nav row to 63px. Now they show only while every tab fits, measured. At standard fonts that is 1710px and wider.
+
+**Checked** in headless Chrome, 1280–1920px wide:
+- The bar never scrolls and the nav row stays 48px. Labels appear and disappear when the window crosses the fit width in either direction, and the Compact setting still hides them.
+- Ctrl+K: *Data Carts*, *cart builder* and *data tools* list the renamed tool first.
+- Deep links and the restored workspace open the same tools, and the document title uses the new names.
+- No old name remains in the page's text, titles or labels.

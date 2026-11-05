@@ -8,6 +8,8 @@
 //   workspace (an Extra Tools tab); its deep link is #ws/sub.
 // - search() matches every query word against the name, description, tags and category name, so a
 //   task word ("tokens", "fade") finds the tool; the order is deterministic.
+// - FORMER_NAMES (#189): display names a tool had before, matched like part of its name so an old
+//   name still finds the tool. They are search aliases only, never shown.
 
 'use strict';
 
@@ -19,6 +21,8 @@ const P8Nav = (() => {
     Object.freeze({ id: 'utilities', label: 'Utilities', desc: 'Converters and generators' }),
   ]);
   const FALLBACK = 'utilities';
+  const FORMER_NAMES = Object.freeze({ cartbuilder: ['Cart Builder'], datacarts: ['Data Carts'], data: ['Data Tools'] });
+  const formerNames = (entry) => (!entry?.sub && Object.hasOwn(FORMER_NAMES, entry?.ws) ? FORMER_NAMES[entry.ws] : []);
   const rank = new Map(CATEGORIES.map((c, i) => [c.id, i]));
 
   const categoryOf = (entry) => (rank.has(entry?.category) ? entry.category : FALLBACK);
@@ -67,10 +71,11 @@ const P8Nav = (() => {
       const nameWords = name.split(/[^a-z0-9.]+/);
       const tags = (e.tags || []).map(fold).join(' ') + ' ' + fold(category(categoryOf(e)).label);
       const desc = fold(e.desc);
+      const former = formerNames(e).map(fold).join(' ');
       let score = 0;
       for (const t of terms) {
         if (nameWords.some((w) => w.startsWith(t))) score += 0;
-        else if (name.includes(t)) score += 1;
+        else if (name.includes(t) || former.split(/[^a-z0-9.]+/).some((w) => w.startsWith(t))) score += 1;
         else if (tags.includes(t)) score += 2;
         else if (desc.includes(t)) score += 3;
         else return;
@@ -93,7 +98,7 @@ const P8Nav = (() => {
 
   const formatRoute = (ws, sub = null) => `#${ws}${sub ? `/${sub}` : ''}`;
 
-  return { CATEGORIES, FALLBACK, categoryOf, category, sort, group, search, parseRoute, formatRoute };
+  return { CATEGORIES, FALLBACK, FORMER_NAMES, formerNames, categoryOf, category, sort, group, search, parseRoute, formatRoute };
 })();
 
 if (typeof module !== 'undefined') module.exports = P8Nav;

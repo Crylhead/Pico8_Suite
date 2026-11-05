@@ -686,7 +686,7 @@ const P8Project = (() => {
   const fxBaseOf = (file) => { const b = safeName(file).replace(/^s?fx_/, ''); return /^\d/.test(b) ? `fx${b}` : b.replace(/^_+/, ''); };
 
   /**
-   * Typed regions inside a part's bytes (from the Data Carts analysis of the source cart):
+   * Typed regions inside a part's bytes (from the Cart Inspector analysis of the source cart):
    * [{name, off, len, kind: img|pal|hex, w, pal}]; img = 4-bit image (w px wide), pal = palette /
    * fade table (row 0 = screen palette), hex = other data.
    */
@@ -724,7 +724,7 @@ const P8Project = (() => {
   }
 
   /**
-   * carts: Map(lower name -> {name, text, rom, lua, luaAt, used, reads}) as Data Carts builds it.
+   * carts: Map(lower name -> {name, text, rom, lua, luaAt, used, reads}) as Cart Inspector builds it.
    * Every reload() of a data cart becomes an anchor and its bytes a part:
    *   literal cart name  -> one part (ranges inside a bigger one become sub-anchors asset.part+off)
    *   list[i] cart name  -> a cart set (one part per cart in the literal list), anchor asset[]
@@ -1201,7 +1201,7 @@ const P8Project = (() => {
    */
   function createLock({ locks = globalThis.navigator?.locks, name = LOCK_NAME } = {}) {
     let held = false;
-    const busy = () => new WriteError('Another Cart Builder write or recovery is in progress (in this tab or another one). Nothing was written; try again when it has finished.', { stage: 'busy', file: null, restored: true, journalKept: false });
+    const busy = () => new WriteError('Another Cart Packer write or recovery is in progress (in this tab or another one). Nothing was written; try again when it has finished.', { stage: 'busy', file: null, restored: true, journalKept: false });
     return {
       crossTab: typeof locks?.request === 'function',
       get held() { return held; },
@@ -1276,7 +1276,7 @@ const P8Project = (() => {
       for (const c of checks) { reading = c; if ((await readOrNull(await dir(c.dir), c.name)) !== c.expect) conflicts.push(label(c)); }
       for (const r of retire) {
         reading = { dir: r.from, name: r.name };
-        // a cart that is written and retired would have two originals: never planned by Cart Builder
+        // a cart that is written and retired would have two originals: never planned by Cart Packer
         if (writes.some((w) => (w.dir === r.from || w.dir === r.to) && w.name === r.name)) throw new Error(`${r.from}/${r.name} is both written and retired`);
         const b = await readOrNull(await dir(r.from), r.name);
         reading = { dir: r.to, name: r.name };

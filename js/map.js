@@ -2,7 +2,7 @@
 // Map Editor workspace: PICO-8 style tile maps (1 byte per cell) painted with tiles of a
 // 128-pixel-wide sprite sheet. Maps are library assets (kind 'map', with their tileset), go into
 // carts (__map__, rows 32–63 in the shared sprite area) or, at any size up to 256×256, into
-// data carts through the Cart Builder.
+// data carts through the Cart Packer.
 
 'use strict';
 
@@ -345,7 +345,7 @@
   const FIT_TEXT = {
     cart: ['Cart map', '__map__ (128×32 max): any cart can hold it'],
     shared: ['Cart map · shared', 'Rows 32–63 are stored where sprites 128–255 are: the map costs the lower half of the sprite sheet'],
-    data: ['Data cart', 'Larger than a cart map (128×64): load the bytes from a data cart (Cart Builder) and draw with your own code'],
+    data: ['Data cart', 'Larger than a cart map (128×64): load the bytes from a data cart (Cart Packer) and draw with your own code'],
   };
 
   function renderInfo() {
@@ -1061,7 +1061,7 @@
 
   function notCartSized(title) {
     if (M.cartFit(me.map) !== 'data') return false;
-    showMessage(title, `A ${me.map.w}×${me.map.h} map is bigger than a cart's map memory (128×32, or 128×64 with the shared sprite rows).\n\nExport the map bytes (.bin), or add the map to a demo project in the Cart Builder, which packs it into data carts.`);
+    showMessage(title, `A ${me.map.w}×${me.map.h} map is bigger than a cart's map memory (128×32, or 128×64 with the shared sprite rows).\n\nExport the map bytes (.bin), or add the map to a demo project in the Cart Packer, which packs it into data carts.`);
     return true;
   }
 

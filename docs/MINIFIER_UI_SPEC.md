@@ -32,7 +32,7 @@ Sections 1–15 and the icon appendix preserve the original v1.1 design from [PR
 
 ## 1. Product decision and goals
 
-Introduce a standalone **Minifier** workspace in **Develop**, immediately after Code Editor and before Cart Builder. Expose the same tool through a **Minify…** command in the Code Editor. Both entry points invoke one implementation. The workspace performs an explicit, non-destructive optimization of an in-memory source snapshot and permits inspection and export of a generated *build artifact*; it does not silently replace editable project sources.
+Introduce a standalone **Minifier** workspace in **Develop**, immediately after Code Editor and before Cart Packer. Expose the same tool through a **Minify…** command in the Code Editor. Both entry points invoke one implementation. The workspace performs an explicit, non-destructive optimization of an in-memory source snapshot and permits inspection and export of a generated *build artifact*; it does not silently replace editable project sources.
 
 Primary task: **“I want to reduce the PICO-8 token count without making my source unnecessarily hard to debug.”** Optimizing tokens does not guarantee a lower character count, smaller compressed code, or faster execution. Minimal may save *zero* tokens; a zero result is valid and must never be disguised as success with an invented saving.
 
@@ -49,7 +49,7 @@ Design invariants: integrate with the existing static/no-build JavaScript shell;
 
 ### Out of scope for v1
 
-- Automatically optimizing every Code Editor save, Run, or Cart Builder build.
+- Automatically optimizing every Code Editor save, Run, or Cart Packer build.
 - Parens-8 compilation / experimental compiler transformations.
 - Mandatory local Python service, remote optimization API, or new mandatory bundler.
 - Pretending source and optimized output are semantically identical without runtime testing.
@@ -58,7 +58,7 @@ Design invariants: integrate with the existing static/no-build JavaScript shell;
 ## 2. Information architecture and launch points
 
 - Register workspace as `ws: 'minifier'`, `name: 'Minifier'`, `category: 'develop'`, tags `['minify','optimize','tokens','shrinko8','lua','cartridge']` and a descriptive action-oriented `desc`. Route `#minifier`.
-- In `index.html`, add the Minifier workspace-tab control between Code Editor and Cart Builder, plus `<main data-ws="minifier" class="layout-minifier" hidden>`.
+- In `index.html`, add the Minifier workspace-tab control between Code Editor and Cart Packer, plus `<main data-ws="minifier" class="layout-minifier" hidden>`.
 - In Code Editor, add **Tools → Minify…** (or a clearly labeled Code/Cart action consistent with current menu organization). This transfers the *unsaved in-memory snapshot*, not only last-saved disk content.
 - Add Minifier to Home/Find Tool through `Suite.registerTool`; do not special-case Home search or write a second launcher.
 - Optionally add a Code Editor toolbar shortcut only after verifying space and responsive behavior; one menu entry is mandatory, an icon-only button is not.
@@ -201,7 +201,7 @@ No precomputed sample improvements or marketing claims may appear in the real me
 1. Enumerate actual includes via the current Suite's `P8Code` / `P8Audit` include model, then pass a relative-path file map to Shrinko8.
 2. Preserve the entry cart, include-order semantics, tab includes (`.p8:N`), source version and paths as required by the engine.
 3. On missing, ambiguous, cyclic, inaccessible, or unsupported includes: display the affected path and **do not** create an incomplete output.
-4. If a project contains `--@data` anchor lines, generated cart source may no longer be valid as an editable Cart Builder source even when it is valid at runtime. Warn explicitly, retain original editable project, and label output `Optimized build copy`.
+4. If a project contains `--@data` anchor lines, generated cart source may no longer be valid as an editable Cart Packer source even when it is valid at runtime. Warn explicitly, retain original editable project, and label output `Optimized build copy`.
 5. Do not offer Apply-to-Editor for include-dependent or anchored projects until lossless project-source round-trip semantics have been designed and tested.
 
 ### D. Input changed while a job runs
@@ -348,7 +348,7 @@ The unchecked boxes below retain the original design checklist. They do not indi
 
 ### User-visible behavior
 
-- [ ] Navigation shows **Minifier** in Develop between Code Editor and Cart Builder; Home, Find Tool and `#minifier` work.
+- [ ] Navigation shows **Minifier** in Develop between Code Editor and Cart Packer; Home, Find Tool and `#minifier` work.
 - [ ] Default controls consistently show **Minimal** and **Tokens**, including fresh browser sessions and restored options; choices are labeled and keyboard-operable.
 - [ ] Minimal maps to upstream `--minify-safe-only --no-minify-rename --no-minify-lines`; token target maps to `--focus-tokens`; additional transform restrictions are validated.
 - [ ] Source loading works from `.p8`, `.lua`, paste, and current **unsaved** Code Editor snapshot.
@@ -410,7 +410,7 @@ The unchecked boxes below retain the original design checklist. They do not indi
 
 ![Proposed Minifier icon](../assets/icons/minifier.svg)
 
-**Source file:** `assets/icons/minifier.svg` (vector source of truth). **Concept:** two inward-facing chevrons represent compression; three short horizontal lines in the center represent condensed Lua code. The symbol must remain distinct from the Code Editor's outward-facing code chevrons and Cart Builder's cartridge symbol.
+**Source file:** `assets/icons/minifier.svg` (vector source of truth). **Concept:** two inward-facing chevrons represent compression; three short horizontal lines in the center represent condensed Lua code. The symbol must remain distinct from the Code Editor's outward-facing code chevrons and Cart Packer's cartridge symbol.
 
 | Property | Specification |
 | --- | --- |
@@ -420,7 +420,7 @@ The unchecked boxes below retain the original design checklist. They do not indi
 | Style | `fill="none"`, `stroke="currentColor"`, `stroke-width="1.6"`, rounded caps and joins |
 | States | Inherit the workspace tab's foreground for normal, selected, hover, focus and disabled states; never hardcode an accent within the SVG |
 | Accessibility | Workspace tab button has accessible name `Minifier`; inline SVG is `aria-hidden="true"` and must not be the only label |
-| Location | Develop navigation, after Code Editor and before Cart Builder; matching Home/Find Tool identity |
+| Location | Develop navigation, after Code Editor and before Cart Packer; matching Home/Find Tool identity |
 | Variants | No separately maintained dark/light SVG files; the same shape works in both themes |
 
 **Embedding:** For the Suite's existing icon-based workspace navigation, copy the markup from `assets/icons/minifier.svg` into the workspace tab's inline `<svg viewBox="0 0 20 20" aria-hidden="true">` element, retaining the path geometry and inheriting `currentColor`. Do **not** use an external `<img src="...">` for theme-dependent foreground color: `currentColor` in an external SVG does not reliably inherit its host element's CSS color. As an alternative, use the SVG file as a CSS mask and style the mask with `currentColor`.

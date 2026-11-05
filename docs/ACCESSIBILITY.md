@@ -32,7 +32,7 @@ All minimums come from one token, `--target-min: 24px`. Rather than growing the 
 
 | Control type | Before (main) | Now | How |
 | --- | --- | --- | --- |
-| Segmented buttons in command bars and panel headers (Brush size, Preview Fit/1×/2×, Data Carts Inspect/Pack, Palette mode and direction, Tiles view, Audit view) | 20px tall (Brush **1** 23×20) | pill still 20px, hit area 24px tall, ≥24px wide | `::after` over the group's 2px padding; `min-width` |
+| Segmented buttons in command bars and panel headers (Brush size, Preview Fit/1×/2×, Cart Inspector Inspect/Pack, Palette mode and direction, Tiles view, Audit view) | 20px tall (Brush **1** 23×20) | pill still 20px, hit area 24px tall, ≥24px wide | `::after` over the group's 2px padding; `min-width` |
 | Other segmented buttons (`.seg`, `.seg-sm`: LUT preview screen, Terrain view/brush, Simple/Advanced) | 20–23px tall | ≥24×24 | `min-height`/`min-width` |
 | Small buttons (`.btn-sm`) | 24px or more where measured, not guaranteed | ≥24px tall | `min-height` |
 | Checkboxes with a label (`.check`) | label 22px, box 16×16 | label 24px tall, box 16×16 | the whole label is the target |
@@ -40,11 +40,11 @@ All minimums come from one token, `--target-min: 24px`. Rather than growing the 
 | Pixel Studio layer visibility (◉) | 25×19 | 25×25 hit area, same look | `::after` inside the layer row's padding |
 | Code outline entries (`.ce-fn`) | 21px tall | 24px tall | `min-height` |
 | Home collapsible headings | 19px tall | 24px tall | `min-height` |
-| Data Carts palette field | 20px tall | 24px tall | `min-height` |
+| Cart Inspector palette field | 20px tall | 24px tall | `min-height` |
 | Workspace tabs, menu buttons, icon buttons | 36×30, ≥57×25, 32×32 | unchanged | — |
 
 **Documented exceptions:**
-- **Data Carts palette swatches** (`.dc-swatches`) stay 18×18 so the 16-slot row stays compact. Their gap is now 6px, a 24px pitch, so they meet the spacing exception. Before, the 2px gap failed it.
+- **Cart Inspector palette swatches** (`.dc-swatches`) stay 18×18 so the 16-slot row stays compact. Their gap is now 6px, a 24px pitch, so they meet the spacing exception. Before, the 2px gap failed it.
 - **Canvases** are excluded: pixel, tileset, map, terrain preview and memory map. Their content is not a set of separate targets.
 - **Inline links** inside a sentence fall under the inline exception.
 
@@ -71,7 +71,7 @@ The pixel, map, tile and terrain canvases are drawing surfaces. Their pixel cont
 1. **Palette & Fades:** reorder and assign colors without dragging swatches.
 2. **Pixel Studio:** move or resize a selection and reorder layers/frames entirely by keyboard, with feedback on the position or size.
 3. **Map Editor:** place a tile at a keyboard-chosen cell and select a rectangle without dragging.
-4. **Cart Builder:** move an asset between carts without drag (auto-pack already covers the common case).
+4. **Cart Packer:** move an asset between carts without drag (auto-pack already covers the common case).
 5. **Library:** send an asset to a tool without drag-and-drop (menus and buttons exist; check coverage per asset type).
 6. **Resizable panels (#64):** done: the splitter is keyboard operable (see `js/panels.js`). Remaining: none for panel width.
 
