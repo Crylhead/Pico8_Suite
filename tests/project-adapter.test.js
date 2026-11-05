@@ -71,7 +71,7 @@ t('#56 lapsed permission: reconnect first; refusal adopts nothing and explains',
 t('#56 a failing adopt keeps the previous mode and reports; an adopt returning false changes nothing', async () => {
   const x = load();
   let mode = 'fail';
-  const link = x.A.mount(x.host, { tool: 'Data Carts', adopt: async () => { if (mode === 'fail') throw new Error('read failed'); return false; } });
+  const link = x.A.mount(x.host, { tool: 'Cart Inspector', adopt: async () => { if (mode === 'fail') throw new Error('read failed'); return false; } });
   await x.publisher.select({ name: 'demo', source: 'cartbuilder', handle: handle() });
   link.refresh();
   await parts(x.created).btn.listeners.click();

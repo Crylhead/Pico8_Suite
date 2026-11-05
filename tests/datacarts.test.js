@@ -1,4 +1,4 @@
-// #12: Data Carts read ranges: literal reads split over every region they cross, comments and
+// #12: Cart Inspector read ranges: literal reads split over every region they cross, comments and
 // strings ignored (shared Lua lexer), uncertain reads kept visible, "no read detected" wording.
 const assert = require('assert');
 const { t } = require('./harness.js');

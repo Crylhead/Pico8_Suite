@@ -1,5 +1,5 @@
 // js/preflight-core.js
-// Cart Builder preflight and workflow stages (UX issue #66). Presentation only: this module builds the
+// Cart Packer preflight and workflow stages (UX issue #66). Presentation only: this module builds the
 // list the user confirms from the plan project.js already computed (js/project-core.js does the real
 // work: validation, retirement analysis, transactions, journaling, recovery). It adds no new write
 // path and changes no algorithm (#40-#44). No DOM; tests/preflight.test.js runs it in Node.

@@ -1,4 +1,4 @@
-// #66: Cart Builder's Commit stage is "done" only when the arrangement matches the manifest on disk.
+// #66: Cart Packer's Commit stage is "done" only when the arrangement matches the manifest on disk.
 // Runs the actual renderStages, layoutSig, diskSig and placed from js/project.js with the real
 // P8Preflight core; the DOM is replaced by plain objects.
 const assert = require('assert');

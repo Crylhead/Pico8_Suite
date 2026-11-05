@@ -335,9 +335,9 @@ end`;
    *   "m"..i..".p8"     pattern m<number>.p8
    *   filename          resolved from `filename= ...` in the same code
    *   names[i]          resolved from `names= {"a.p8", ...}` in the same code
-   * This is an approximate PREVIEW (Data Carts analysis): it guesses numeric fragments and trusts an
+   * This is an approximate PREVIEW (Cart Inspector analysis): it guesses numeric fragments and trusts an
    * initial table literal. Never base a destructive decision (retiring, adopting, rewriting) on it;
-   * Cart Builder proves targets from the lexed code instead (project-core.js cartTargets).
+   * Cart Packer proves targets from the lexed code instead (project-core.js cartTargets).
    */
   function reloadTarget(expr, code, depth = 0) {
     expr = (expr || '').trim();

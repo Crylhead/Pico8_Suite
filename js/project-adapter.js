@@ -1,5 +1,5 @@
 // js/project-adapter.js
-// "Use the active project" strip for Code Editor, Project Audit and Data Carts (UX issue #56).
+// "Use the active project" strip for Code Editor, Project Audit and Cart Inspector (UX issue #56).
 // Consumes the read-only context (P8App.projectContext, js/project-context-core.js, #55).
 //
 // - Opt-in only: nothing is adopted automatically. Each tool keeps its own folder picker and its

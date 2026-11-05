@@ -492,7 +492,7 @@
     });
   }
 
-  // The opened project folder, shared with other workspaces (Data Carts).
+  // The opened project folder, shared with other workspaces (Cart Inspector).
   window.P8Project = {
     get files() { return au.files; },
     get meta() { return au.meta; },

@@ -81,3 +81,17 @@ t('#166 menu opening fits the page gutter and short viewport while preserving ke
     assert.strictEqual(focused, 1, 'pointer opening leaves existing focus alone');
   }
 });
+
+t('#189 a former display name still finds the renamed tool first; IDs and routes are unchanged', () => {
+  const tools = [...TOOLS,
+    { ws: 'cartbuilder', name: 'Cart Packer', desc: 'A demo project folder packed into data carts.', tags: ['project', 'pack'], category: 'develop' },
+    { ws: 'datacarts', name: 'Cart Inspector', desc: 'See what every data cart holds.', tags: ['reload', 'pack'], category: 'inspect' },
+    { ws: 'data', name: 'Converters', desc: 'Binary to PICO-8 string literals.', tags: ['bytes'], category: 'utilities' }];
+  const bar = [...BAR, 'cartbuilder', 'datacarts', 'data'];
+  assert.strictEqual(ids(N.search(tools, 'Data Carts', bar))[0], 'datacarts', 'beats the description match in Cart Packer');
+  assert.deepStrictEqual(ids(N.search(tools, 'cart builder', bar)), ['cartbuilder']);
+  assert.strictEqual(ids(N.search(tools, 'data tools', bar))[0], 'data');
+  assert.deepStrictEqual(ids(N.search(tools, 'inspector', bar)), ['datacarts'], 'the new name works too');
+  assert.deepStrictEqual(N.formerNames({ ws: 'extras', sub: 'data' }), [], 'only whole workspaces, never a sub-tool');
+  assert.deepStrictEqual(N.parseRoute('#datacarts'), { ws: 'datacarts', sub: null });
+});

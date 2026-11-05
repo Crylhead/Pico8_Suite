@@ -1,5 +1,5 @@
 // js/datacarts.js
-// Data Carts workspace:
+// Cart Inspector workspace:
 //   Inspect - what each cart holds in 0x0000-0x42ff (exactly as reload() sees it), which ranges
 //             the project's code reloads, and how much space nobody reads.
 //   Pack    - build a new data cart from ranges of existing carts, library images and files;
@@ -35,7 +35,7 @@
     // #56: the cart list follows Project Audit's scans (the shared project folder) until the user opens
     // .p8 files here; then a scan elsewhere never replaces them. Open Project Folder / Use resume following.
     followProject: true,
-    followRequested: false, // Open Project Folder / Use pressed here: the next scan arriving while Data Carts is open
+    followRequested: false, // Open Project Folder / Use pressed here: the next scan arriving while Cart Inspector is open
     packName: 'pack.p8',
     packStart: 0,
     secs: [],             // sections of the selected cart (datacarts-core)
@@ -682,7 +682,7 @@ Set Start to the address where the palette table begins (the “palette table”
 
   function bind() {
     // the picker belongs to Project Audit and gives no cancel signal: following resumes only when its scan
-    // arrives while Data Carts is still open, so a cancelled picker changes nothing
+    // arrives while Cart Inspector is still open, so a cancelled picker changes nothing
     dom.open.addEventListener('click', () => { dc.followRequested = true; window.P8Project?.choose(); });
     dom.files.addEventListener('click', openFiles);
     dom.only.addEventListener('change', () => { dc.onlyData = dom.only.checked; renderList(); });
@@ -823,25 +823,25 @@ Set Start to the address where the palette table begins (the “palette table”
     });
   }
 
-  // #56: Data Carts shows what Project Audit scanned; adopting the active project scans it there.
+  // #56: Cart Inspector shows what Project Audit scanned; adopting the active project scans it there.
   // The pack list (bytes you collected) is kept: only the cart list is replaced, as with any rescan.
   let projectLink = null;
   if (window.P8ProjectAdapter) {
     projectLink = window.P8ProjectAdapter.mount(document.querySelector('main[data-ws="datacarts"] .dc-top'), {
-      tool: 'Data Carts',
-      // adopting here scans the folder in Project Audit (Data Carts reads it from there), and says so
+      tool: 'Cart Inspector',
+      // adopting here scans the folder in Project Audit (Cart Inspector reads it from there), and says so
       adopt: async (h) => {
         if (!window.P8Project?.use) return false;
         dc.followRequested = true;
         const ok = await window.P8Project.use(h);
         if (!ok) dc.followRequested = false;
-        if (ok) toast(`Data Carts and Project Audit now show “${h.name}” (Data Carts reads the project folder through Project Audit).`, 'info', 4200);
+        if (ok) toast(`Cart Inspector and Project Audit now show “${h.name}” (Cart Inspector reads the project folder through Project Audit).`, 'info', 4200);
         return ok;
       },
     });
   }
 
-  S.registerTool({ ws: 'datacarts', category: 'inspect', name: 'Data Carts', desc: 'See what every data cart holds and which ranges the code reloads; pack new data carts and get the reload() lines.', tasks: [{ group: 'analyze', label: 'Inspect data carts', hint: 'What each cart holds and what reload() reads' }], color: '#ffa300', tags: ['reload', 'memory map', 'pack'] });
+  S.registerTool({ ws: 'datacarts', category: 'inspect', name: 'Cart Inspector', desc: 'See what every data cart holds and which ranges the code reloads; pack new data carts and get the reload() lines.', tasks: [{ group: 'analyze', label: 'Inspect data carts', hint: 'What each cart holds and what reload() reads' }], color: '#ffa300', tags: ['reload', 'memory map', 'pack'] });
 
   bind();
   renderAll();

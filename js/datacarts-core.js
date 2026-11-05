@@ -1,5 +1,5 @@
 // js/datacarts-core.js
-// Data Carts analysis (pure logic, no DOM): which sections of a data cart the fx code
+// Cart Inspector analysis (pure logic, no DOM): which sections of a data cart the fx code
 // uses, and the palettes those sections are shown with.
 //
 // The fx code is read, not run. It follows the patterns PICO-8 demos use:

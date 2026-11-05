@@ -1,5 +1,5 @@
 // js/project.js
-// Cart Builder workspace: a demo project folder (read/write), its assets and parts, the data
+// Cart Packer workspace: a demo project folder (read/write), its assets and parts, the data
 // carts as stacks, auto-pack, and writing carts + --@data anchors. Logic: js/project-core.js
 
 'use strict';
@@ -54,22 +54,22 @@
 
   /** one project mutation at a time in this page (P.transact also holds a cross-tab lock) */
   async function exclusive(title, fn) {
-    if (pj.busy) { showMessage(title, 'Cart Builder is still writing or recovering the project. Try again when it has finished.'); return; }
+    if (pj.busy) { showMessage(title, 'Cart Packer is still writing or recovering the project. Try again when it has finished.'); return; }
     pj.busy = true;
     render();
     try { await fn(); } finally { pj.busy = false; render(); }
   }
 
   async function openFolder() {
-    if (pj.busy) { showMessage('Cart Builder', 'Wait until the current write has finished before opening another folder.'); return; }
-    if (!window.showDirectoryPicker) { showMessage('Cart Builder', 'This browser cannot write to folders. Use Chrome or Edge.'); return; }
+    if (pj.busy) { showMessage('Cart Packer', 'Wait until the current write has finished before opening another folder.'); return; }
+    if (!window.showDirectoryPicker) { showMessage('Cart Packer', 'This browser cannot write to folders. Use Chrome or Edge.'); return; }
     let h;
     try { h = await window.showDirectoryPicker({ id: 'p8-demo-project', mode: 'readwrite' }); } catch { return; }
     await useFolder(h);
   }
 
   async function useFolder(h) {
-    await exclusive('Cart Builder', () => openProject(h));
+    await exclusive('Cart Packer', () => openProject(h));
   }
 
   async function openProject(h) {
@@ -79,7 +79,7 @@
       if (await exists(h, 'main.p8')) demo = h;
     }
     if (!demo) {
-      showMessage('Cart Builder', `“${h.name}” has neither a demo/ folder nor a main.p8. Choose the project folder (the one that contains demo/, e.g. a copy of demoframe) or a flat demo folder with main.p8.`);
+      showMessage('Cart Packer', `“${h.name}” has neither a demo/ folder nor a main.p8. Choose the project folder (the one that contains demo/, e.g. a copy of demoframe) or a flat demo folder with main.p8.`);
       return;
     }
     pj.root = h;
@@ -148,7 +148,7 @@
       // failures are announced as alerts (role="alertdialog", #65 convention)
       if (e.stage === 'busy') { showMessage(title, e.message, 'error'); return null; }
       if (e.stage === 'conflict') {
-        showMessage(title, `These files changed on disk after Cart Builder read them (in PICO-8, another tab or another program):\n${e.conflicts.join('\n')}\n\nNothing was written: the files on disk keep the external changes and Cart Builder keeps its own changes in memory. To continue from the disk versions, open the folder again (Cart Builder's unsaved changes are then dropped).`, 'error');
+        showMessage(title, `These files changed on disk after Cart Packer read them (in PICO-8, another tab or another program):\n${e.conflicts.join('\n')}\n\nNothing was written: the files on disk keep the external changes and Cart Packer keeps its own changes in memory. To continue from the disk versions, open the folder again (Cart Packer's unsaved changes are then dropped).`, 'error');
         return null;
       }
       showMessage(title, `${e.message}${pj.project ? '\n\nYour unsaved changes are still here.' : ''}`, 'error');
@@ -166,8 +166,8 @@
     const j = inDemo(P.JOURNAL);
     const r = await P.recover(projectDirs(), {
       confirmRollback: ({ reason, files }) => confirmDialog('Interrupted write', reason === 'mixed'
-        ? `An earlier write was recorded as finished (${j}), but these files now hold neither its new contents nor their originals:\n${files.join('\n')}\n\nRestore every file that write changed (and the carts it moved to unused/) to the state before it? Otherwise the files stay as they are and Cart Builder writes nothing.`
-        : `An earlier write did not finish (${j}). Restore the files it changed, and the carts it moved to unused/, to their state before that write? Until then Cart Builder writes nothing.`, 'Restore'),
+        ? `An earlier write was recorded as finished (${j}), but these files now hold neither its new contents nor their originals:\n${files.join('\n')}\n\nRestore every file that write changed (and the carts it moved to unused/) to the state before it? Otherwise the files stay as they are and Cart Packer writes nothing.`
+        : `An earlier write did not finish (${j}). Restore the files it changed, and the carts it moved to unused/, to their state before that write? Until then Cart Packer writes nothing.`, 'Restore'),
     });
     if (!r) return;
     if (r.outcome === 'busy') { pj.journalPending = true; showMessage('Interrupted write', `${j} is there, but ${r.problems[0]} Reopen the project when it has finished.`); return; }
@@ -181,7 +181,7 @@
   // Loading                                                            //
   // ------------------------------------------------------------------ //
 
-  /** demo/*.p8 texts -> carts as Data Carts analyses them (with reads) */
+  /** demo/*.p8 texts -> carts as Cart Inspector analyses them (with reads) */
   function cartsFromTexts(texts) {
     const carts = new Map();
     for (const [name, text] of texts) {
@@ -221,7 +221,7 @@
     pj.renamed = new Map();
     pj.layout = [];
     if (await exists(pj.demo, 'suite.json')) {
-      try { pj.project = JSON.parse(pj.disk.get('demo/suite.json').replace(/\r\n/g, '\n')); } catch (e) { showMessage('Cart Builder', `demo/suite.json could not be read: ${e.message}`); }
+      try { pj.project = JSON.parse(pj.disk.get('demo/suite.json').replace(/\r\n/g, '\n')); } catch (e) { showMessage('Cart Packer', `demo/suite.json could not be read: ${e.message}`); }
     }
     try {
       const ad = await pj.root.getDirectoryHandle('assets');
@@ -326,7 +326,7 @@
 
   /** keyboard / button alternative to dragging: choose the cart (or "not placed") for a part */
   async function movePartDialog(ref) {
-    if (pj.busy) { showMessage('Cart Builder', 'Wait until the current write has finished.'); return; }
+    if (pj.busy) { showMessage('Cart Packer', 'Wait until the current write has finished.'); return; }
     const p = partOf(ref);
     if (!p) return;
     const here = pj.layout.find((c) => c.items.some((i) => i.ref === ref));
@@ -601,7 +601,7 @@
   const KIND_TEXT = { img: 'image', pal: 'palette / fades', hex: 'data' };
 
   function renderParts() {
-    if (!pj.project) { dom.parts.replaceChildren(el('p', { className: 'muted', textContent: pj.root ? 'Adopt the demo first.' : 'Open Project Folder… (read and write): a folder with demo/ (e.g. a copy of demoframe) or main.p8, outside AppData. It becomes the active project that Code Editor, Project Audit and Data Carts can use.' })); return; }
+    if (!pj.project) { dom.parts.replaceChildren(el('p', { className: 'muted', textContent: pj.root ? 'Adopt the demo first.' : 'Open Project Folder… (read and write): a folder with demo/ (e.g. a copy of demoframe) or main.p8, outside AppData. It becomes the active project that Code Editor, Project Audit and Cart Inspector can use.' })); return; }
     const anchors = anchorsByRef();
     const isPlaced = placed();
     const out = [];
@@ -846,7 +846,7 @@
     });
     dom.parts.addEventListener('click', async (e) => {
       const d = e.target.dataset || {};
-      if (pj.busy && (d.rename || d.segin)) { showMessage('Cart Builder', 'Wait until the current write has finished.'); return; }
+      if (pj.busy && (d.rename || d.segin)) { showMessage('Cart Packer', 'Wait until the current write has finished.'); return; }
       if (d.move) return movePartDialog(d.move);
       if (d.rename) return renameAsset(d.rename);
       if (d.segout) return segmentOut(d.segout, Number(d.seg));
@@ -863,7 +863,7 @@
     document.addEventListener('p8:workspace', () => { if (document.body.dataset.workspace === 'cartbuilder') restore(); });
   }
 
-  S.registerTool({ ws: 'cartbuilder', category: 'develop', name: 'Cart Builder', desc: 'A demo project folder: its data as assets, packed into data carts (drag or auto-pack); the fx find their data through --@data anchors.', tasks: [{ group: 'edit', label: 'Pack data carts', hint: 'Needs a project folder (Chrome or Edge)' }], color: '#00e436', tags: ['project', 'pack', 'reload'] });
+  S.registerTool({ ws: 'cartbuilder', category: 'develop', name: 'Cart Packer', desc: 'A demo project folder: its data as assets, packed into data carts (drag or auto-pack); the fx find their data through --@data anchors.', tasks: [{ group: 'edit', label: 'Pack data carts', hint: 'Needs a project folder (Chrome or Edge)' }], color: '#00e436', tags: ['project', 'pack', 'reload'] });
 
   // folder handles can also come from elsewhere (tests, drag & drop)
   window.P8CartBuilder = { useFolder };

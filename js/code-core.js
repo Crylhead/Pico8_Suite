@@ -2,7 +2,7 @@
 // Code Editor model: a PICO-8 Lua lexer (PICO-8's extra operators, number formats and
 // shorthands), the API with signatures, code tabs (-->8), an outline of the functions, and
 // reading / writing the __lua__ section of a cart without touching the other sections.
-// The lexer is also the lexical model of Project Audit and Data Carts (comments and strings at
+// The lexer is also the lexical model of Project Audit and Cart Inspector (comments and strings at
 // any long-bracket level, real #include lines, .p8:N tab includes): lex / includes / maskLua.
 // No DOM; runs in Node for tests.
 
@@ -287,7 +287,7 @@ const P8Code = (() => {
   }
 
   /**
-   * Lexical mask shared by the Audit and Data Carts readers: the text with every comment (any
+   * Lexical mask shared by the Audit and Cart Inspector readers: the text with every comment (any
    * long-bracket level), -->8 separator and, optionally, the contents of strings and the
    * #include lines replaced by spaces. Same length and line breaks, so offsets and line numbers
    * stay valid; string delimiters stay, so a masked string is still one (empty-looking) string.

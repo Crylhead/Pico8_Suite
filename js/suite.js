@@ -889,11 +889,43 @@ This cannot be undone.`, 'Delete')) {
     for (const { b, k } of sorted) {
       if (prev !== null && k !== prev) bar.append(el('span', { className: 'ws-sep', attrs: { 'aria-hidden': 'true' } }));
       bar.append(b);
-      const cat = byWs.has(b.dataset.value) ? P8Nav.category(P8Nav.categoryOf(byWs.get(b.dataset.value))).label : '';
-      b.title = cat ? `${b.getAttribute('aria-label')} · ${cat}` : b.getAttribute('aria-label');
+      // #189: hovering a tab names the tool and says in one line what it is for (the registry `desc`)
+      const desc = (byWs.get(b.dataset.value) || (b.dataset.value === 'home' ? HOME_ENTRY : null))?.desc;
+      b.title = desc ? `${b.getAttribute('aria-label')} · ${desc}` : b.getAttribute('aria-label');
       prev = k;
     }
     focused?.focus({ preventScroll: true });
+    queueFitTabLabels();
+  }
+
+  /**
+   * #189: tabs show their names beside the icons only when all of them fit in the bar without
+   * scrolling; otherwise the bar stays icon-only with the current tool's name in front. Measured
+   * rather than a fixed breakpoint, so font, tab count and the Library button's width all count.
+   */
+  function fitTabLabels() {
+    const bar = $('#wsTabs');
+    const root = document.documentElement;
+    if (!bar) return;
+    root.setAttribute('data-nav-labels', '');
+    const shown = bar.querySelector('.ws-tab-label') && bar.getClientRects().length && !root.hasAttribute('data-compact-nav');
+    if (!shown || bar.scrollWidth > bar.clientWidth + 1) root.removeAttribute('data-nav-labels');
+  }
+  let fitQueued = false;
+  function queueFitTabLabels() {
+    if (fitQueued) return;
+    fitQueued = true;
+    requestAnimationFrame(() => { fitQueued = false; fitTabLabels(); });
+  }
+  function bindTabLabels() {
+    window.addEventListener('resize', queueFitTabLabels);
+    // compact navigation (Settings) hides the labels; turning it off measures again
+    new MutationObserver(queueFitTabLabels).observe(document.documentElement, { attributes: true, attributeFilter: ['data-compact-nav'] });
+    const bar = $('#wsTabs');
+    if (bar && typeof ResizeObserver === 'function') new ResizeObserver(queueFitTabLabels).observe(bar);
+    document.fonts?.ready?.then(queueFitTabLabels);
+    document.addEventListener('p8:workspace', queueFitTabLabels); // also once app.js has added the labels
+    queueFitTabLabels();
   }
 
   /** a copy of a workspace tab's icon, with its internal ids (masks) made unique */
@@ -1308,6 +1340,7 @@ This cannot be undone.`, 'Delete')) {
   bindLibrary();
   bindHome();
   bindHomeSections();
+  bindTabLabels();
   bindNavigation();
   registerTool({ ws: 'palette', category: 'create', name: 'Palette & Fades', desc: '16-color custom palettes from all 32 PICO-8 colors, dark/bright fade tables, greyscale conversion.', tasks: [{ group: 'create', label: 'Make a palette', hint: '16 of the 32 PICO-8 colors, with fade tables' }], color: '#ff004d', tags: ['palette', 'fades', 'Lua'] });
   registerTool({ ws: 'tiles', category: 'create', name: 'Tile Maker', desc: 'Packs images into 8×8 tiles + map, VRAM viewport heatmap, tile editor, .p8 carts.', tasks: [{ group: 'create', label: 'Turn an image into tiles', hint: 'Tile sheet and map from any picture' }], color: '#00e436', tags: ['tiles', 'map', '.p8'] });

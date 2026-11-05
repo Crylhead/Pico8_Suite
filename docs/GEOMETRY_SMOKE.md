@@ -56,7 +56,7 @@ The default checks catch current-contract violations and within-run jitter. The 
 
 ## Manual fallback and physical zoom
 
-Use a disposable/incognito session on a separate local origin. Load an image and Lua source with long names; select a disposable project, then clear/reselect it. Keep the same window while visiting Home → Studio → Code → Palette → Minifier → Map → Tile → Cart Builder → Data Carts → Audit → Data Tools → all Extra Tools tabs, and then return in reverse order.
+Use a disposable/incognito session on a separate local origin. Load an image and Lua source with long names; select a disposable project, then clear/reselect it. Keep the same window while visiting Home → Studio → Code → Palette → Minifier → Map → Tile → Cart Packer → Cart Inspector → Audit → Converters → all Extra Tools tabs, and then return in reverse order.
 
 At 360/768/1280/1536/1920 CSS px, in both themes, record the controls/rows above with DevTools `getBoundingClientRect()` or before/after screenshots. Compare at identical viewport and scroll positions. Scroll a dashboard to the bottom, return to an editor and check the shared chrome/scrollbar rail stays put. Check each stage remains useful and all primary actions can be reached by scrolling/keyboard. Open the rightmost menu and a long menu in a short window; its final item and Escape return must remain reachable.
 
@@ -78,7 +78,7 @@ With the same existing `P8_GEOMETRY_*` browser configuration, run:
 node tests/panel-breakpoints.mjs --out ../panel-geometry
 ```
 
-This reuses the geometry server, loaded Code/Studio/Minifier fixtures and measurement routine; no new dependency is required. It writes `panels.json` plus screenshots at representative desktop boundaries. Default coverage: **832 cases** (eight tools, 25 widths, two themes and two return visits, plus the 640×450/device-scale-2 case), six collapsed/reload/resize-back transitions and eight default-preset assertions. The tools are Studio, Map, Terrain, Code, Minifier, Audit, Cart Builder and Data Carts. Widths include 320/360/768/1280 and minus/at/plus 1 around 640/699/860/900/1000/1100/1200px.
+This reuses the geometry server, loaded Code/Studio/Minifier fixtures and measurement routine; no new dependency is required. It writes `panels.json` plus screenshots at representative desktop boundaries. Default coverage: **832 cases** (eight tools, 25 widths, two themes and two return visits, plus the 640×450/device-scale-2 case), six collapsed/reload/resize-back transitions and eight default-preset assertions. The tools are Studio, Map, Terrain, Code, Minifier, Audit, Cart Packer and Cart Inspector. Widths include 320/360/768/1280 and minus/at/plus 1 around 640/699/860/900/1000/1100/1200px.
 
 Actual side/center rectangles are sampled over six frames to detect resize feedback. Checks cover the 320px desktop center track, unchanged stored preference under viewport clamps, return-visit widths, expected workspace/pane scrolling and horizontal overflow. Loaded documents must remain unchanged before deliberate reloads. Primary Studio/Map bitmap/display scale ratios must match within 0.01 (fractional pixel rounding). The real separators exercise collapse, stacked visibility/inert state, reload persistence, resize-back, keyboard reset and `resetAll`; CSS defaults are checked at Studio 1100/1101 and Minifier 1199/1200. The normal regression harness separately tests content-width/bounds arithmetic and storage failure cases.
 

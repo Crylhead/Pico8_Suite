@@ -4,7 +4,7 @@
 //
 // A cart's map is 128×32 cells in __map__ (0x2000). Rows 32–63 live in the lower half of the
 // sprite sheet (0x1000–0x1fff, sprites 128–255), so a 128×64 map costs those sprites.
-// Bigger maps (up to 256×256) are raw bytes for data carts (Cart Builder).
+// Bigger maps (up to 256×256) are raw bytes for data carts (Cart Packer).
 
 'use strict';
 

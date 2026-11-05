@@ -50,7 +50,7 @@ t('#69 a documented exception is honoured', () => {
   const x = real();
   x.topics = x.topics.filter((y) => y.ws !== 'audit');
   assert.ok(check(x).some((e) => e.includes('Workspace "audit"')));
-  assert.ok(!check({ ...x, exceptions: { audit: 'covered by Cart Builder help' } }).some((e) => e.includes('Workspace "audit"')));
+  assert.ok(!check({ ...x, exceptions: { audit: 'covered by Cart Packer help' } }).some((e) => e.includes('Workspace "audit"')));
 });
 
 t('#109 built-in inventory discovers bundled registration and tabs without a hard-coded subtool list', () => {

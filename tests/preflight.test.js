@@ -1,4 +1,4 @@
-// #66: Cart Builder preflight list and workflow stages (js/preflight-core.js) on a fake project plan.
+// #66: Cart Packer preflight list and workflow stages (js/preflight-core.js) on a fake project plan.
 const assert = require('assert');
 const { t } = require('./harness.js');
 const F = require('../js/preflight-core.js');

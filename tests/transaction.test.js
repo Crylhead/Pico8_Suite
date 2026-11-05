@@ -1,4 +1,4 @@
-// Cart Builder transaction ownership and recovery decisions (issues #31, #32), over tests/fake-fs.js.
+// Cart Packer transaction ownership and recovery decisions (issues #31, #32), over tests/fake-fs.js.
 const assert = require('assert');
 const { t } = require('./harness.js');
 const P = require('../js/project-core.js');

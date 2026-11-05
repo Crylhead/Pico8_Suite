@@ -1,14 +1,14 @@
-# Demo project model and Cart Builder
+# Demo project model and Cart Packer
 
 This describes the implementation in the standalone Pico8_Suite repository as re-reviewed on 2026-11-02 at [72f6e029412ce06afe0576bd60f59aca0d44c52f](https://github.com/Crylhead/Pico8_Suite/commit/72f6e029412ce06afe0576bd60f59aca0d44c52f). It replaces the older phase-1 proposal. Open defects and fix provenance are tracked in the [current health review](HEALTH_REVIEW_2026-11-02_72f6e02.md); implemented behavior below is not a guarantee that those defects are resolved.
 
 ## Folder and persistence
 
-Cart Builder uses Chrome/Edge's File System Access API with read/write permission. Pick a project containing `demo/`, or a flat folder containing `main.p8`. Work in a browser-writable location; protected locations such as `AppData` may be rejected. The selected folder handle is remembered in IndexedDB; reconnect if permission must be granted again.
+Cart Packer uses Chrome/Edge's File System Access API with read/write permission. Pick a project containing `demo/`, or a flat folder containing `main.p8`. Work in a browser-writable location; protected locations such as `AppData` may be rejected. The selected folder handle is remembered in IndexedDB; reconnect if permission must be granted again.
 
 | Path | Current use |
 | --- | --- |
-| `demo/*.p8` | FX and data carts; Cart Builder scans this directory, not arbitrary nested FX folders. |
+| `demo/*.p8` | FX and data carts; Cart Packer scans this directory, not arbitrary nested FX folders. |
 | `demo/suite.json` | Project format version 1, prefix, generated cart layout, unmanaged carts and adoption bookkeeping. |
 | `assets/<name>.json` | One asset per file, at the selected project root; parts are stored as base64 bytes. |
 | `demo/unused/` | Source/previously generated carts retired by Write Carts. |
@@ -93,7 +93,7 @@ A rejected list is reported with the file, the line and the reason; the list, th
 
 ### Segments and editing
 
-`meta.segments[part]` describes regions inside a part: name, offset, length and kind (`img`, `pal`, `hex`), with optional width/palette. Data Carts analysis infers these from FX code; they are not guaranteed exact.
+`meta.segments[part]` describes regions inside a part: name, offset, length and kind (`img`, `pal`, `hex`), with optional width/palette. Cart Inspector analysis infers these from FX code; they are not guaranteed exact.
 
 **→ Library** publishes a segment for editing. **← Library** applies an edited image of the same byte size, or a palette row, back into that part. Write Carts commits the edited bytes to the demo. This is an explicit round trip, not automatic synchronization.
 
@@ -113,7 +113,7 @@ Retirement candidates are carts the project wrote before, or adopted, that the n
 - References counted are the cart argument of `reload()` and `cstore()` (4th) and `load()` (1st), plus `#include` lines. The Lua is read with the shared lexer (the Code Editor's, also used by Project Audit), so comments, string contents and `#include` text inside strings or comments of any long-bracket level are not references, and calls may span lines. `run()` takes a parameter string, not a cart, so it is not counted. A name without an extension also matches `<name>.p8`.
 - Lua's call forms with a single string argument count like the parenthesized call: `load"old.p8"`, `load'old.p8'`, `load [[old.p8]]` and `load[==[old.p8]==]` keep `old.p8` as `load("old.p8")` does (and `load"old"` keeps `old.p8`). A long-bracket literal inside parentheses, `load([[old.p8]])`, is read as a literal too. `reload"x"`, `cstore{…}` and the like pass one argument, so they name no other cart.
 - Member calls (`obj.load"x"`, `obj:load("x")`) and definitions (`function load(…)`, `local load=…`, `load=…`) are not the PICO-8 function and are not counted. `_ENV.load(…)` and `_G.reload(…)` are the PICO-8 functions and are counted. Indexing the globals table (`_G["load"]`, `_ENV[k]`) or using it as a value (`__index=_ENV`, `local g=_G`) is an unresolved reference: the functions may be called through it.
-- A name counts as resolved only when the executable code proves it: a literal string, a variable with exactly one assignment whose value is itself resolved (no other write, including targets of multiple assignments at any nesting; no `_ENV`/`_G` or `#include` that could change a global; a local only within its own block), a concatenation `..` whose every fragment is resolved (a fragment of unknown value, such as `"m"..i..".p8"` or `name..".p8"` with `name` assigned twice, is **not** assumed to be a number), and `list[i]` with a proven literal list (see *Cart sets*: a list that is mutated, reassigned, passed to a function or has computed entries is not proven). Data Carts' palette/segment previews still use the approximate preview resolver and mark those reads *inferred*; it is never used for retirement or adoption.
+- A name counts as resolved only when the executable code proves it: a literal string, a variable with exactly one assignment whose value is itself resolved (no other write, including targets of multiple assignments at any nesting; no `_ENV`/`_G` or `#include` that could change a global; a local only within its own block), a concatenation `..` whose every fragment is resolved (a fragment of unknown value, such as `"m"..i..".p8"` or `name..".p8"` with `name` assigned twice, is **not** assumed to be a number), and `list[i]` with a proven literal list (see *Cart sets*: a list that is mutated, reassigned, passed to a function or has computed entries is not proven). Cart Inspector' palette/segment previews still use the approximate preview resolver and mark those reads *inferred*; it is never used for retirement or adoption.
 - A reference that cannot be resolved keeps **every** candidate in place and is listed. This covers a computed name, a variable assigned more than once, a string with escapes, `load{…}` (a table instead of a name), any other use of `load`, `reload` or `cstore` that is not a call (`local f=load`, `pcall(load,"x.p8")`: the cart it is later called with cannot be traced), and an `#include` that is neither a demo cart nor a top-level `.lua` file.
 - The Write confirmation lists the carts that will move, the carts that stay with the line that references them, and any unresolved references.
 - Carts that stay are no longer owned by the project afterwards. Their names are reserved, and later writes never overwrite or retire them.
@@ -124,7 +124,7 @@ Partial adoption does not grant permission to retire a cart: a source cart is re
 
 Write Carts and Adopt change several files. Both go through `P8Project.transact()`:
 
-1. **Lock.** The whole write, from preflight to clean-up, holds the Cart Builder write lock (see *One writer at a time*).
+1. **Lock.** The whole write, from preflight to clean-up, holds the Cart Packer write lock (see *One writer at a time*).
 2. **Preflight.** Every target file is read and its current contents kept, and so is every cart to retire, both in `demo/` and at its place in `unused/`. A read error, an existing journal, a baseline conflict or a file that would be both written and retired stops the write before anything changes.
 3. **Journal.** `demo/suite.journal.json` (next to `suite.json`, format 3) records a random write id, the state `writing`, the original contents of every target, a digest (length plus a 64-bit non-cryptographic hash) of its new contents, and for every cart to retire what `demo/` and `unused/` held under its name. It is read back before any other file changes.
 4. **Write.** Order: data carts, FX carts, assets (including removal of renamed asset files), then `suite.json` last. Each file is **read back from disk** and compared with what was written.
@@ -132,7 +132,7 @@ Write Carts and Adopt change several files. Both go through `P8Project.transact(
 6. **Retire.** Only now do old carts move to `unused/`: copied, read back, then removed. A cart that cannot be moved stays where it is and is reported. An older file of the same name already in `unused/` is never overwritten: that cart stays in `demo/` and is reported. Before every move the write checks that the journal is still its own; once it is not, no further cart moves.
 7. **Clean up.** The journal is removed if it is still this write's journal (same id).
 
-If a write or readback fails before the commit, the journal still says `writing`, and the transaction restores every file touched so far. If the `committed` marker fails to close or to read back, it may or may not be on disk; the journal is first marked `rolling-back` (and read back), and only then are the originals restored. If even that marker cannot be written, nothing is restored: every file keeps its verified new contents and the journal stays for recovery to finish or undo. The journal is removed only once the folder holds one coherent revision. A write that fails keeps the in-memory project dirty, so you can try again; while a journal remains, Cart Builder refuses further writes until the project is reopened.
+If a write or readback fails before the commit, the journal still says `writing`, and the transaction restores every file touched so far. If the `committed` marker fails to close or to read back, it may or may not be on disk; the journal is first marked `rolling-back` (and read back), and only then are the originals restored. If even that marker cannot be written, nothing is restored: every file keeps its verified new contents and the journal stays for recovery to finish or undo. The journal is removed only once the folder holds one coherent revision. A write that fails keeps the in-memory project dirty, so you can try again; while a journal remains, Cart Packer refuses further writes until the project is reopened.
 
 On opening, recovery takes the same lock and decides from the files, not from the marker alone:
 
@@ -152,20 +152,20 @@ An unreadable journal, an unknown state or any restore failure leaves the journa
 
 #### One writer at a time
 
-A Cart Builder write, Adopt or recovery never runs alongside another. In one page, the actions and folder switching are disabled while one runs, and `transact()`/`recover()` refuse a second caller at once (`busy`, nothing touched) instead of queueing a write computed from an older state. Across tabs of the same origin the lock is the Web Locks API (`navigator.locks`, available in every browser that can write folders). A browser without Web Locks only serializes the page; another tab is then detected only on a best-effort basis. A write checks before every file, every journal update, every cart move and its clean-up that the journal on disk is still exactly the text it wrote; a recovery marks the journal with its own id before restoring and checks before every change that the journal is still the one it wrote or read. A write that finds the journal changed or gone stops at once (stage `ownership`) and never deletes another writer's journal. If another tab's journal or recovery marker is there, it touches nothing and leaves the decision to that tab. If the journal is gone (a recovery restored the originals and removed it while this write was still in flight), it puts every file that still holds its own new contents back to the original it keeps in memory. Not covered: a file write landing just after another tab's recovery restored that file but before it removed the journal, and the `committed` marker overwriting another tab's `rolling-back` marker between the check and the write. The File System Access API has no compare-and-swap to close these windows, which is why Web Locks are used wherever they exist. Other programs (PICO-8, an editor, another browser profile) are not covered by the lock; their edits are detected as baseline conflicts below.
+A Cart Packer write, Adopt or recovery never runs alongside another. In one page, the actions and folder switching are disabled while one runs, and `transact()`/`recover()` refuse a second caller at once (`busy`, nothing touched) instead of queueing a write computed from an older state. Across tabs of the same origin the lock is the Web Locks API (`navigator.locks`, available in every browser that can write folders). A browser without Web Locks only serializes the page; another tab is then detected only on a best-effort basis. A write checks before every file, every journal update, every cart move and its clean-up that the journal on disk is still exactly the text it wrote; a recovery marks the journal with its own id before restoring and checks before every change that the journal is still the one it wrote or read. A write that finds the journal changed or gone stops at once (stage `ownership`) and never deletes another writer's journal. If another tab's journal or recovery marker is there, it touches nothing and leaves the decision to that tab. If the journal is gone (a recovery restored the originals and removed it while this write was still in flight), it puts every file that still holds its own new contents back to the original it keeps in memory. Not covered: a file write landing just after another tab's recovery restored that file but before it removed the journal, and the `committed` marker overwriting another tab's `rolling-back` marker between the check and the write. The File System Access API has no compare-and-swap to close these windows, which is why Web Locks are used wherever they exist. Other programs (PICO-8, an editor, another browser profile) are not covered by the lock; their edits are detected as baseline conflicts below.
 
 ### External edits
 
-When it opens the folder, Cart Builder keeps the raw text of every demo `.p8`, `suite.json` and `assets/*.json` as its disk baseline. Write Carts and Adopt compare the disk against that baseline in the preflight. A conflict is any of the following:
+When it opens the folder, Cart Packer keeps the raw text of every demo `.p8`, `suite.json` and `assets/*.json` as its disk baseline. Write Carts and Adopt compare the disk against that baseline in the preflight. A conflict is any of the following:
 - a file it writes, or one its result depends on, now reads differently;
 - a file has appeared;
 - a file has gone.
 
-On a conflict nothing is written. The dialog lists the files, the disk keeps the external version and Cart Builder keeps its own changes in memory. Opening the folder again continues from the disk versions. Cancelling the confirmation writes nothing. After a successful write the baseline becomes what was written.
+On a conflict nothing is written. The dialog lists the files, the disk keeps the external version and Cart Packer keeps its own changes in memory. Opening the folder again continues from the disk versions. Cancelling the confirmation writes nothing. After a successful write the baseline becomes what was written.
 
 The check runs immediately before the journal and the writes. An edit in the short window between that check and the writes themselves is not detected.
 
-There is **no `tools/build.py` release builder in this repository**. Anchor validation runs in Cart Builder; if the surrounding demo framework supplies a release checker, configure and run it there separately.
+There is **no `tools/build.py` release builder in this repository**. Anchor validation runs in Cart Packer; if the surrounding demo framework supplies a release checker, configure and run it there separately.
 
 ## Related tools and future work
 
@@ -174,9 +174,9 @@ Map Editor and Code Editor/Run already exist; they are no longer future phases. 
 Live tile editing, shared document/revision semantics and a permanent Send to action remain design proposals. See the [historical review index](https://github.com/Crylhead/Demotools/blob/4a2855b99efb2e7a265961c63f1ac809adea3ed2/reviews/README.md); do not treat those proposals as delivered features.
 
 
-## Cart Builder workflow and preflight (UX #66)
+## Cart Packer workflow and preflight (UX #66)
 
-The Cart Builder UI is organised as four stages, shown as a strip above the stacks (`js/preflight-core.js`, `stages()`):
+The Cart Packer UI is organised as four stages, shown as a strip above the stacks (`js/preflight-core.js`, `stages()`):
 
 1. **Analyze** (read-only): opening a folder reads `demo/`, `assets/` and `demo/suite.json`. Nothing is written.
 2. **Plan**: place every part into a data cart. Besides drag-and-drop and Auto-pack, each part has **Move…** (cart, "A new cart" or "Not placed"), which uses the same `moveTo()` as a drop.

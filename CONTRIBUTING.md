@@ -68,6 +68,6 @@ The permanent **Send to** control, Asset Dock and Output Shelf are earlier UX op
 - `index.html`: workspaces, menus and F1 help.
 - `tools/pico8_bridge.py`: optional loopback HTTP helper; no third-party Python dependencies.
 
-See [EXTENDING.md](EXTENDING.md) before adding a tool, [PROJECT_MODEL.md](docs/PROJECT_MODEL.md) for Cart Builder and [COMPRESSION.md](docs/COMPRESSION.md) for the implemented codec and historical measurements.
+See [EXTENDING.md](EXTENDING.md) before adding a tool, [PROJECT_MODEL.md](docs/PROJECT_MODEL.md) for Cart Packer and [COMPRESSION.md](docs/COMPRESSION.md) for the implemented codec and historical measurements.
 
 
