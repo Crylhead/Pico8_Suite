@@ -459,3 +459,14 @@ Older settings that only stored `timeline: false` load as hidden. Because the st
 - No exceptions.
 
 `tests/home.test.js` was updated for the one-line storage text. Not covered: physical 200% zoom, screen readers, non-Chromium browsers.
+
+## Follow-up: #195 24px pointer targets (2026-11-05)
+
+**Behaviour change:** a `--target-min: 24px` token, applied to segmented buttons, `.btn-sm`, labelled checkboxes, range sliders, the Pixel Studio layer eye, Code outline entries, Home section headings and the Data Carts palette field. In command bars and panel headers the visible pill stays 20px and an `::after` hit area covers the group padding, so no bar changed height. The Data Carts swatches stay 18px with a 24px pitch (spacing exception).
+
+**Checked** in headless Chrome at 1440×900 and 1280×800 in both themes:
+- A hit-test audit of every workspace and Extra Tool finds no control under 24px outside the documented exceptions. On main, 116 controls measured under 24px, and 21 of them also failed the spacing exception.
+- The heights of all 81 measured bars match main.
+- There is no horizontal overflow and no exception.
+
+The measurements per control type are in `docs/ACCESSIBILITY.md`.
