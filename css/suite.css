@@ -253,10 +253,18 @@ canvas.thumb {
 .home-logo i:nth-child(3) { background: #29adff; }
 .home-logo i:nth-child(4) { background: #00e436; }
 .home-section h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 10px; }
-.home-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
-.home-card h3 { text-transform: none; letter-spacing: 0; color: var(--text); font-size: 14px; }
-.home-card p { margin: 0 0 8px; }
 .home-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+/* #193: one storage line with its actions */
+.home-storage { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.home-storage .home-note-warn { color: var(--warn); font-weight: 600; }
+/* #193: collapsed secondary sections; the summary is the heading and the keyboard target */
+.home-more > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; border-radius: var(--radius-xs); }
+.home-more > summary::-webkit-details-marker { display: none; }
+.home-more > summary::before { content: "▸"; color: var(--muted); font-size: 12px; width: 12px; }
+.home-more[open] > summary::before { content: "▾"; }
+.home-more > summary h3 { margin: 0; }
+.home-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.home-more[open] > summary { margin-bottom: 10px; }
 
 .tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .tool-card {
@@ -1175,6 +1183,12 @@ canvas.thumb {
 #homeStorage.home-note-warn { color: var(--warn); }
 .home-tasks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
 .home-task-group { display: grid; gap: 6px; align-content: start; }
+/* #193: balance the columns: Create (most tasks) spans two tracks and lays out its tasks in two columns */
+@media (min-width: 1100px) {
+  .home-tasks { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .home-task-group[data-group="create"] { grid-column: span 2; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; }
+  .home-task-group[data-group="create"] > h4 { grid-column: 1 / -1; }
+}
 .home-task-group h4 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .home-task { text-align: left; font: inherit; color: inherit; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 10px; min-height: 44px; cursor: pointer; display: grid; gap: 2px; }
 .home-task:hover { border-color: var(--accent); }

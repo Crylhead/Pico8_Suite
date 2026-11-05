@@ -63,7 +63,8 @@ const P8Home = (() => {
     if (mode === 'memory') {
       return { tone: 'warn', text: 'Browser storage is unavailable here (private mode or blocked). The Library works for this page only and is lost when you close it. Use Library → Export Library Backup or download your work.' };
     }
-    return { tone: 'info', text: `Library and tool sessions live in this browser only (not files on disk${hasAssets ? '' : '; nothing saved yet'}). Back them up with Library → Export Library Backup. Project folders are real files and need browser permission each visit.` };
+    // #193: one line; Back up and How storage works sit beside it on Home
+    return { tone: 'info', text: `Library and tool sessions live in this browser only (not files on disk${hasAssets ? '' : '; nothing saved yet'}).` };
   }
 
   return { GROUPS, taskGroups, continueEntry, projectEntry, storageNotice };

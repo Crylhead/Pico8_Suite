@@ -439,3 +439,23 @@ Older settings that only stored `timeline: false` load as hidden. Because the st
 - No exceptions.
 
 `tests/studio-timeline.test.js` runs the real `setTimeline` and `applyTimeline` (2 cases, failing on the old code). Observed, not changed: once the save badge reads *Unsaved changes*, the upper options row at 1440 wide overflows and shows its horizontal scrollbar, which costs about 9px of stage height. That comes from the existing scrolling options row.
+
+## Follow-up: #193 A shorter Home (2026-11-05)
+
+**Behaviour change:** this is a density and hierarchy pass on the #68 Home, not a rebuild. Routes, task shortcuts and tool cards are unchanged.
+- **Order:** hero, then **Continue**, **Recent** (shown only when the Library has assets), the tasks, then **All tools** and **How the tools work together** as collapsed `<details>`. Their open state is remembered in `p8suite.homeSections`.
+- **Storage:** the three storage and folder notes became one line: "Library and tool sessions live in this browser only (not files on disk…)" plus **Back up** (the existing Library export) and **How storage works**, which opens Help at *Where your work lives*. The memory-only warning keeps its full text and alert role.
+- **Project note:** with no project, the long project note moved to that help entry. Project states that need action (continue, reconnect, denied, missing) still show their note.
+- **Desktop tools:** *Desktop tools outside the suite* moved to F1 (the suite section).
+- **Task grid:** above 1100px it is five tracks, with Create (6 tasks) spanning two tracks in two columns beside Edit, Import and Analyze.
+
+**Checked** in headless Chrome 156 (fresh profiles):
+- **Height at 1440×900:** Home is 653px instead of 2191px. On a first run every task card ends at 649px instead of 868px. With a Library asset, Recent appears and the last card ends at 813px, still on the first screen.
+- **Height at 390×844:** 1541px instead of 4376px, with no horizontal overflow.
+- Every workspace tab still has a tool card, and a card opens its tool. The *All tools* open state survives a reload.
+- **How storage works** opens Help with the storage entry. **Back up** downloads `p8suite_library_….json`.
+- Focus order follows the sections top to bottom and the task groups left to right.
+- The suite tour targets only shared chrome, which is unchanged.
+- No exceptions.
+
+`tests/home.test.js` was updated for the one-line storage text. Not covered: physical 200% zoom, screen readers, non-Chromium browsers.

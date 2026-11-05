@@ -22,7 +22,7 @@ const P8HelpData = (() => {
       actions: [
         { id: 'home.continue', name: 'Continue', text: 'Offers your last tool and, if a project folder is known, a Continue or Reconnect button. A remembered folder is never opened automatically: Reconnect asks the browser for permission and only a granted folder is used. A denied, revoked or missing folder explains what to do.' },
         { id: 'home.tasks', name: 'What do you want to do?', text: 'Shortcuts grouped as Create, Edit, Import and Analyze, generated from the registered tools. A shortcut only switches to the tool (or one of its tabs); it never changes another tool’s work.' },
-        { id: 'home.tools', name: 'Tool cards', text: 'Each card opens its workspace. Work stays in each tool while you switch.' },
+        { id: 'home.tools', name: 'Tool cards', text: 'All tools (collapsed below the tasks; Home remembers whether it is open) lists a card per tool. Each card opens its workspace. Work stays in each tool while you switch. How the tools work together is collapsed the same way.' },
         { id: 'home.storage', name: 'Where your work lives', text: 'The Library and tool sessions are saved in this browser only, not as files; export a backup. Project folders are real files and need permission each visit. If the browser blocks storage, Home says the Library lasts only for this page.' },
       ],
       controls: [],

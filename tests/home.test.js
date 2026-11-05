@@ -57,7 +57,8 @@ t('#68 storage notice separates browser-only state from files and warns when sto
   const ok = H.storageNotice('indexeddb', false);
   assert.strictEqual(ok.tone, 'info');
   assert.match(ok.text, /this browser only \(not files on disk; nothing saved yet\)/);
-  assert.match(ok.text, /Project folders are real files/);
+  // #193: one line on Home; backing up is the button beside it, project folders are explained in Help
+  assert.doesNotMatch(ok.text, /Project folders|Export Library Backup/);
 });
 
 t('#68 actual Continue project action rechecks permission before navigating', async () => {
