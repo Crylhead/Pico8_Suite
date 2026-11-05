@@ -83,6 +83,7 @@
   --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-base: 14px; --fs-lg: 15px;
   --fw-control: 550; --fw-label: 600; --fw-heading: 650;
   --radius-xs: 4px; --radius-ctl: 6px;
+  --target-min: 24px; /* WCAG 2.2 SC 2.5.8 pointer-target minimum (docs/ACCESSIBILITY.md, #195) */
   --focus-width: 2px; --focus-color: var(--accent); --focus-offset: 2px;
   --disabled-opacity: 0.45;
 }
@@ -284,6 +285,9 @@ kbd {
   border-radius: 6px;
   padding: 4px 12px;
   cursor: pointer;
+  position: relative;
+  min-width: var(--target-min);
+  min-height: var(--target-min);
 }
 .seg button[aria-checked="true"] { background: var(--surface-3); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); }
 .seg button:hover:not([aria-checked="true"]):not(:disabled) { color: var(--text); }
@@ -407,6 +411,9 @@ main[data-layout="dashboard"][data-width-tier="wide"] { --workspace-max-width: v
 :is(.command-row, .card-head, .ps-panel-head, .ps-status) .seg button {
   min-height: 20px; font-size: var(--fs-md); line-height: var(--bar-line); padding-block: 1px;
 }
+/* #195: in bars the visible pill stays 20px so the row keeps its height; the hit area extends over the
+   group's 2px padding to the 24px target. Neighbouring buttons touch, so it does not extend sideways. */
+:is(.command-row, .card-head, .ps-panel-head, .ps-status) .seg button::after { content: ""; position: absolute; inset: -2px 0; }
 .command-row :is(input[type="search"], input[type="text"]) { min-height: var(--bar-control-min); font-size: var(--fs-md); line-height: var(--bar-line); padding-block: 3px; }
 .command-row.dt-row { gap: var(--bar-row-gap) var(--bar-gap); }
 .command-row > .btn { flex: none; }
@@ -601,6 +608,8 @@ main[data-layout="dashboard"][data-width-tier="wide"] { --workspace-max-width: v
 .grey-row > .label { width: 92px; }
 .grey-row .field input { width: 60px; }
 
+/* #195: a 24px tall hit area for every slider; the track and thumb keep their size */
+input[type="range"] { height: var(--target-min); }
 .fade-slider input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
 .slider-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 2px; }
 .slider-scale #sliderReadout { color: var(--text); font-weight: 600; }
@@ -649,7 +658,8 @@ dialog.modal::backdrop { background: rgba(5, 5, 10, 0.6); }
 .dialog-form label.row { display: grid; gap: 4px; color: var(--muted); }
 .dialog-form input[type="text"] { width: 100%; }
 .dialog-form input[type="number"] { width: 100px; }
-.check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+/* #195: the whole label is the target (24px tall); the box itself stays 16px */
+.check { display: flex; align-items: center; gap: 8px; cursor: pointer; min-height: var(--target-min); }
 .check input { width: 16px; height: 16px; accent-color: var(--accent); }
 
 .code-out {

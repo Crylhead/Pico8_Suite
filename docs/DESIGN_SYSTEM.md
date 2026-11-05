@@ -18,6 +18,7 @@ Adopt tokens and primitives incrementally when you touch a surface. Do not re-sk
 | Type | `--fs-xs`, `--fs-sm`, `--fs-md`, `--fs-base`, `--fs-lg` | 11, 12, 13, 14, 15 px; `--font` UI stack and `--mono` code stack (system fonts only, nothing downloaded) |
 | Weight | `--fw-control`, `--fw-label`, `--fw-heading` | 550 (buttons, segments), 600 (labels, panel headings), 650 (h1–h3) |
 | Radius | `--radius-xs`, `--radius-ctl`, `--radius-sm`, `--radius` | 4, 6, 8, 12 px |
+| Target size | `--target-min` | 24 px: minimum pointer target (WCAG 2.5.8). In bars, extend the hit area with `::after` rather than growing the visible control; measurements in `ACCESSIBILITY.md` (#195) |
 | Focus | `--focus-width`, `--focus-color`, `--focus-offset` | 2px `--accent`, offset 2px. `prefers-contrast: more`: 3px in `--ring` (white/near-black). `forced-colors: active`: `Highlight` |
 | Disabled | `--disabled-opacity` | 0.45 |
 

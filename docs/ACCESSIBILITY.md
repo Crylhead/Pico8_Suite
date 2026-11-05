@@ -18,11 +18,37 @@ Status of the shared shell (issue #65). These are measured improvements, not a c
 
 ## Measured evidence (2026-11-02, Chromium via Playwright)
 
-- **Target size (WCAG 2.5.8, 24×24 CSS px minimum):** workspace tabs 36×30, menu buttons ≥57×25, icon buttons 32×32, segmented buttons 36×30.
+- **Target size (WCAG 2.5.8, 24×24 CSS px minimum):** workspace tabs 36×30, menu buttons ≥57×25, icon buttons 32×32. The segmented buttons figure (36×30) held for the workspace tabs only; tool-level controls are measured per type in [Target size per control type](#target-size-per-control-type-195).
 - **Text contrast (4.5:1)** of shell tokens on `--bg`, `--surface`, `--surface-2` and `--surface-3`: `--text` ≥11.5 (dark) and ≥14.2 (light); `--muted` ≥5.1 / ≥5.1; `--accent` ≥5.7 / ≥5.6.
 - **Focus indicator (3:1 non-text):** a 2px `--accent` outline (≥5.6:1 on every surface in both themes). Menu items now also get an inset accent ring, not only a pale background.
 - **Fixed:** white text on `.btn-danger` was 3.9:1 on `#ff004d`; the button now uses `#e0003f` (4.95:1; 3.5:1 against the dark surface).
 - **Status icons:** the save-status contract (#58) pairs every state with an icon and text.
+
+## Target size per control type (#195)
+
+Measured 2026-11-05 in headless Chrome at 1440×900 and 1280×800 in both themes. A browser script visits every workspace and the four Extra Tools. For each visible control it measures the effective hit area by hit-testing outward from the centre with `elementFromPoint`, so `::after` hit extensions count and covered parts do not. It treats a checkbox inside its `<label>` as one target. A control under 24px also passes when a 24px circle on its centre touches no other target, which is the SC 2.5.8 spacing exception.
+
+All minimums come from one token, `--target-min: 24px`. Rather than growing the visible control, the fix prefers an invisible hit area, so every command bar, panel header and status bar kept its measured height.
+
+| Control type | Before (main) | Now | How |
+| --- | --- | --- | --- |
+| Segmented buttons in command bars and panel headers (Brush size, Preview Fit/1×/2×, Data Carts Inspect/Pack, Palette mode and direction, Tiles view, Audit view) | 20px tall (Brush **1** 23×20) | pill still 20px, hit area 24px tall, ≥24px wide | `::after` over the group's 2px padding; `min-width` |
+| Other segmented buttons (`.seg`, `.seg-sm`: LUT preview screen, Terrain view/brush, Simple/Advanced) | 20–23px tall | ≥24×24 | `min-height`/`min-width` |
+| Small buttons (`.btn-sm`) | 24px or more where measured, not guaranteed | ≥24px tall | `min-height` |
+| Checkboxes with a label (`.check`) | label 22px, box 16×16 | label 24px tall, box 16×16 | the whole label is the target |
+| Range sliders | 16px tall | 24px tall, same track and thumb | `height` |
+| Pixel Studio layer visibility (◉) | 25×19 | 25×25 hit area, same look | `::after` inside the layer row's padding |
+| Code outline entries (`.ce-fn`) | 21px tall | 24px tall | `min-height` |
+| Home collapsible headings | 19px tall | 24px tall | `min-height` |
+| Data Carts palette field | 20px tall | 24px tall | `min-height` |
+| Workspace tabs, menu buttons, icon buttons | 36×30, ≥57×25, 32×32 | unchanged | — |
+
+**Documented exceptions:**
+- **Data Carts palette swatches** (`.dc-swatches`) stay 18×18 so the 16-slot row stays compact. Their gap is now 6px, a 24px pitch, so they meet the spacing exception. Before, the 2px gap failed it.
+- **Canvases** are excluded: pixel, tileset, map, terrain preview and memory map. Their content is not a set of separate targets.
+- **Inline links** inside a sentence fall under the inline exception.
+
+**Not covered:** the audit measures each workspace in its default state at desktop widths. Open dialogs, the Library drawer, menus and narrow layouts were not part of this pass.
 
 ## Second pass (UX roadmap batch, 2026-11-02)
 

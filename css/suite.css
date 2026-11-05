@@ -11,7 +11,7 @@
 /* Shared small controls                                              */
 /* ------------------------------------------------------------------ */
 
-.btn-sm { padding: 3px 9px; font-size: 13px; }
+.btn-sm { padding: 3px 9px; font-size: 13px; min-height: var(--target-min); }
 .seg-sm button { padding: 2px 9px; font-size: 13px; }
 .select-sm { padding: 3px 6px; font-size: 13px; }
 .row-inline { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -258,7 +258,7 @@ canvas.thumb {
 .home-storage { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
 .home-storage .home-note-warn { color: var(--warn); font-weight: 600; }
 /* #193: collapsed secondary sections; the summary is the heading and the keyboard target */
-.home-more > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; border-radius: var(--radius-xs); }
+.home-more > summary { display: flex; align-items: center; gap: 8px; min-height: var(--target-min); cursor: pointer; list-style: none; border-radius: var(--radius-xs); }
 .home-more > summary::-webkit-details-marker { display: none; }
 .home-more > summary::before { content: "▸"; color: var(--muted); font-size: 12px; width: 12px; }
 .home-more[open] > summary::before { content: "▾"; }
@@ -547,7 +547,9 @@ canvas.thumb {
 .ps-layer.selected { background: var(--accent-soft); border-color: var(--accent); }
 .ps-layer:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .ps-layer-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.ps-eye { padding: 2px 6px; font-size: 13px; line-height: 1; }
+.ps-eye { padding: 2px 6px; font-size: 13px; line-height: 1; position: relative; }
+/* #195: reach 24px tall inside the layer row's padding without making every row taller */
+.ps-eye::after { content: ""; position: absolute; inset: -4px 0; } /* measured from the padding box, so -4px gives 25px */
 .ps-eye[aria-pressed="false"] { color: var(--muted); }
 
 .ps-timeline { grid-area: timeline; display: grid; gap: 8px; }
@@ -796,7 +798,7 @@ canvas.thumb {
 .ce-side { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .ce-outline-panel { flex: 1 1 auto; min-height: 0; display: flex !important; flex-direction: column; }
 .ce-outline { flex: 1 1 auto; min-height: 0; overflow: auto; display: grid; align-content: start; gap: 1px; }
-.ce-fn { display: flex; gap: 4px; min-width: 0; padding: 3px 6px; font: 13px var(--mono); text-align: left; color: var(--text); background: none; border: 0; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.ce-fn { display: flex; align-items: center; gap: 4px; min-width: 0; min-height: var(--target-min); padding: 3px 6px; font: 13px var(--mono); text-align: left; color: var(--text); background: none; border: 0; border-radius: 4px; cursor: pointer; white-space: nowrap; }
 .ce-fn:hover { background: var(--surface-3); }
 .ce-fn-name { color: var(--ce-api); }
 .ce-fn-name.local { color: var(--ce-string); }
@@ -1055,10 +1057,11 @@ canvas.thumb {
 
 /* data view palette */
 .dc-pal { align-items: center; flex-wrap: wrap; }
-.dc-swatches { display: flex; gap: 2px; }
+/* #195: swatches stay 18px; the 6px gap gives a 24px pitch, which meets the WCAG 2.5.8 spacing exception */
+.dc-swatches { display: flex; gap: 6px; }
 .dc-sw { width: 18px; height: 18px; padding: 0; border: 1px solid var(--border-strong); border-radius: 3px; cursor: pointer; }
 .dc-sw:hover, .dc-sw[aria-pressed="true"] { outline: 2px solid var(--accent, #29adff); outline-offset: 1px; }
-.dc-pal-lua { font: 12px var(--mono); flex: 1 1 220px; min-width: 0; }
+.dc-pal-lua { font: 12px var(--mono); flex: 1 1 220px; min-width: 0; min-height: var(--target-min); }
 .dc-pick { display: grid; grid-template-columns: repeat(8, 28px); gap: 6px; }
 .dc-pick .dc-sw { width: 28px; height: 28px; }
 
