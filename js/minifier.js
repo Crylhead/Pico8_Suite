@@ -47,6 +47,10 @@ const P8Minifier = (() => {
     const needsLocalSetup = (s) => s.diagnostics.some((d) => d.code === 'E_LOCAL_HTTP' || d.code === 'E_FILE_SETUP');
     // An unsupported address cannot be repaired from this tab; missing setup can (run it, then Retry).
     const retryBlocked = (s) => s.diagnostics.some((d) => d.code === 'E_LOCAL_HTTP');
+    // #191: missing setup / an unsupported address is setup status, not an error the user made.
+    // Diagnostics list them as "setup" and the Errors filter leaves them out; real engine failures stay errors.
+    const SETUP_CODES = new Set(['E_FILE_SETUP', 'E_LOCAL_HTTP']);
+    const kind = (d) => (SETUP_CODES.has(d.code) ? 'setup' : d.severity);
     const setValue = (node, value) => {
       // Textareas expose LF even after assigning CRLF. Compare display text so renders keep selection/scroll.
       const display = value.replace(/\r\n?/g, '\n');
@@ -108,7 +112,8 @@ const P8Minifier = (() => {
       }
     }
     function statusText(s, rows) {
-      if (needsLocalSetup(s)) return 'One-time setup required: run python tools/package_minifier.py, then choose Retry engine.';
+      // #191: the notice above holds the command (with Copy); this line only names the state
+      if (needsLocalSetup(s)) return retryBlocked(s) ? 'Setup needed: see the notice above.' : 'Setup needed: follow the one-time setup above, then choose Retry engine.';
       if (editorStale) return 'Earlier Code Editor snapshot. Use current editor to refresh before optimizing.';
       if (s.status === 'ready' && s.enginePhase === 'cold') return 'Source loaded. Engine not ready. Load the engine to optimize.';
       const messages = {
@@ -129,21 +134,21 @@ const P8Minifier = (() => {
     function renderDiagnostics(s) {
       if (previousDiagnostics !== s.diagnostics) {
         previousDiagnostics = s.diagnostics; diagnosticFilter = 'all';
-        if (s.diagnostics.length) $('mnDiagnostics').open = true;
+        if (s.diagnostics.some((d) => kind(d) !== 'setup')) $('mnDiagnostics').open = true;
       }
       setText($('mnDiagnosticsSummary'), `Diagnostics (${s.diagnostics.length})`);
       const labels = { all: 'All', error: 'Errors', warning: 'Warnings', info: 'Info' };
       for (const b of radios('mnDiagnosticFilter')) {
         const severity = b.dataset.value;
         b.setAttribute('aria-checked', String(severity === diagnosticFilter));
-        setText(b, `${labels[severity]} (${severity === 'all' ? s.diagnostics.length : s.diagnostics.filter((d) => d.severity === severity).length})`);
+        setText(b, `${labels[severity]} (${severity === 'all' ? s.diagnostics.length : s.diagnostics.filter((d) => kind(d) === severity).length})`);
       }
       if (renderedDiagnostics === s.diagnostics && renderedFilter === diagnosticFilter && renderedDiagnosticJob === s.diagnosticJob) return;
       renderedDiagnostics = s.diagnostics; renderedFilter = diagnosticFilter; renderedDiagnosticJob = s.diagnosticJob;
-      const shown = s.diagnostics.filter((d) => diagnosticFilter === 'all' || d.severity === diagnosticFilter);
+      const shown = s.diagnostics.filter((d) => diagnosticFilter === 'all' || kind(d) === diagnosticFilter);
       setText($('mnDiagnosticsShown'), !s.diagnostics.length ? 'No diagnostics.' : `${shown.length} of ${s.diagnostics.length} diagnostics shown · ${labels[diagnosticFilter]}.`);
       const items = shown.map((d) => {
-        const li = root.ownerDocument.createElement('li'); li.textContent = `${d.severity}: ${d.code} — ${d.message}`;
+        const li = root.ownerDocument.createElement('li'); li.textContent = `${kind(d)}: ${d.code} — ${d.message}`;
         const location = Core.diagnosticLocation(s, currentInput(s), d);
         if (location) {
           const button = root.ownerDocument.createElement('button');
@@ -177,6 +182,8 @@ const P8Minifier = (() => {
       const reportWarning = current && (rows[0].delta.direction === 'increase' || rows.some((row) => row.afterOver));
       const localSetup = needsLocalSetup(s);
       $('mnLocalSetup').hidden = !localSetup;
+      root.dataset.setup = String(localSetup);
+      if (!localSetup) setText($('mnSetupCopyStatus'), '');
       root.dataset.state = s.status;
       $('mnSourceName').textContent = s.source ? s.source.entryPath.split('/').pop() : 'No source selected';
       $('mnProvenance').textContent = input?.editor ? `From Code Editor${input.editor.dirty ? ' · Unsaved changes at capture' : ''}` : s.source ? origin : '';
@@ -226,6 +233,7 @@ const P8Minifier = (() => {
       const retryText = s.status === 'error' ? 'Retry engine' : 'Load engine';
       for (const b of root.ownerDocument.querySelectorAll('[data-action="mn-retry"]')) b.textContent = retryText;
       $('mnRetry').hidden = retryBlocked(s) || (s.enginePhase === 'ready' && s.status !== 'error');
+      $('mnSetupRetry').hidden = retryBlocked(s); // #191: the notice's own Retry, so the next step is in view
       $('mnEngine').textContent = s.engine ? `Shrinko8 ${s.engine.shrinko8Version} · Pyodide ${s.engine.pyodideVersion}` : s.enginePhase === 'loading' ? 'Engine initializing locally…' : 'Engine not ready.';
       $('mnFlags').textContent = Core.validateSettings(s.options).ok ? Core.flagsFor(s.options).join(' ') : 'Unsupported settings.';
       setText($('mnMetricsState'), !s.result ? 'No measurements. Choose Optimize to measure with Shrinko8.' : `${current ? 'Current result' : 'Stale measurements · earlier snapshot'} · Shrinko8 ${s.result.engine.shrinko8Version} · Lua code from “${s.result.job.entryPath}”.`);
@@ -356,6 +364,19 @@ const P8Minifier = (() => {
       const target = usable(opener) ? opener : $('mnOpen');
       if (usable(target)) target.focus({ preventScroll: true });
     }
+    /** #191: copies the setup command; the status says whether the clipboard write really succeeded */
+    async function copySetupCommand() {
+      const command = $('mnSetupCommand'), status = $('mnSetupCopyStatus');
+      const say = (text, tone) => { if (disposed) return; setText(status, text); status.dataset.tone = tone; };
+      try {
+        if (!clipboard?.writeText) throw new Error('clipboard unavailable');
+        await clipboard.writeText(command.textContent.trim());
+        say('Copied to the clipboard.', 'ok');
+      } catch (_) {
+        say('Copy failed: the clipboard is blocked here. The command is selected; press Ctrl+C (⌘C on a Mac).', 'error');
+        try { root.ownerDocument.getSelection?.()?.selectAllChildren(command); } catch (_) { /* selection is a convenience */ }
+      }
+    }
     async function copyLua() {
       if (exportPending) return;
       let capture;
@@ -440,7 +461,7 @@ const P8Minifier = (() => {
     const actions = {
       'mn-open': openFile, 'mn-paste': pasteLua,
       'mn-use-editor': () => useEditor(), 'mn-return-editor': returnToEditor,
-      'mn-copy': copyLua, 'mn-download': downloadBuild,
+      'mn-copy': copyLua, 'mn-download': downloadBuild, 'mn-copy-setup': copySetupCommand,
       'mn-optimize': () => { if (!invalidateEditor() && !editorStale && !intakePending && Core.describe(adapter.getState()).canOptimize) return swallow(() => adapter.optimize()); },
       'mn-cancel': () => { if (intakePending) cancelIntake(); else adapter.cancel(); },
       'mn-retry': () => { const s = adapter.getState(); if (!intakePending && !Core.describe(s).busy && !retryBlocked(s)) return swallow(() => adapter.retry()); },

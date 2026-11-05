@@ -133,7 +133,7 @@ t('#162 opening index.html directly needs no server; missing one-time setup show
   f.workers.at(-1).reply({ type: 'error', engine: undefined, result: { ok: false, diagnostics: [{ severity: 'error', code: 'E_FILE_SETUP', message: Host.SETUP }] } });
   await first.catch(() => {});
   assert.strictEqual(f.$('mnLocalSetup').hidden, false);
-  assert.match(f.$('mnStatus').textContent, /One-time setup required/); assert.doesNotMatch(f.$('mnStatus').textContent, /failed/);
+  assert.match(f.$('mnStatus').textContent, /Setup needed/); assert.doesNotMatch(f.$('mnStatus').textContent, /failed|package_minifier/, 'the command lives once, in the notice');
   assert.strictEqual(f.$('mnRetry').hidden, false, 'after running the setup, Retry engine can load it');
   assert.strictEqual(f.$('mnRetry').disabled, false, 'and it is usable, not just visible');
   assert.strictEqual(f.$('mnSourceCode').value, 'cls()');
@@ -147,7 +147,8 @@ t('#134 an unsupported address type still shows guidance and suppresses a futile
   const f = fixture(true, 'chrome-extension:');
   f.view.load(source()); await f.view.initialize();
   assert.strictEqual(f.view.getState().status, 'unsupported');
-  assert.strictEqual(f.$('mnLocalSetup').hidden, false); assert.strictEqual(f.$('mnRetry').hidden, true); assert.ok(f.$('mnRetry').disabled); assert.ok(f.$('mnOptimize').disabled);
+  assert.strictEqual(f.$('mnLocalSetup').hidden, false); assert.strictEqual(f.$('mnRetry').hidden, true); assert.ok(f.$('mnRetry').disabled);
+  assert.strictEqual(f.$('mnSetupRetry').hidden, true, '#191: no futile Retry in the notice either'); assert.ok(f.$('mnOptimize').disabled);
   assert.strictEqual(f.$('mnSourceCode').value, 'cls()'); f.view.dispose();
 });
 
@@ -557,4 +558,43 @@ t('#164 level, focus and switches drive the job; Minimal locks Keep linebreaks; 
   assert.strictEqual(f.$('mnAggressiveOptions').hidden, true); assert.ok(f.$('mnKeepLines').checked); assert.ok(f.$('mnKeepLines').disabled);
   assert.match(f.$('mnOutputState').textContent, /Stale/, 'a changed level marks the earlier result stale');
   f.view.dispose();
+});
+
+t('#191 missing setup is setup status, not a user error; a real engine failure still counts as an error with Retry', async () => {
+  const Host = require('../js/minifier-worker-host.js');
+  const counts = (fx) => Object.fromEntries(fx.$('mnDiagnosticFilter').children.map((b) => [b.dataset.value, b.textContent]));
+  const f = fixture(true, 'file:');
+  const first = f.view.initialize(); await flush();
+  f.workers.at(-1).reply({ type: 'error', engine: undefined, result: { ok: false, diagnostics: [{ severity: 'error', code: 'E_FILE_SETUP', message: Host.SETUP }] } });
+  await first.catch(() => {});
+  assert.deepStrictEqual(counts(f), { all: 'All (1)', error: 'Errors (0)', warning: 'Warnings (0)', info: 'Info (0)' });
+  assert.match(f.$('mnDiagnosticList').children[0].textContent, /^setup: E_FILE_SETUP/);
+  assert.notStrictEqual(f.$('mnDiagnostics').open, true, 'setup alone does not open the diagnostics');
+  assert.strictEqual(f.root.dataset.setup, 'true', 'the command region may grow so the notice is not clipped');
+  assert.strictEqual(f.$('mnRetry').disabled, false);
+  assert.strictEqual(f.$('mnSetupRetry').hidden, false); assert.strictEqual(f.$('mnSetupRetry').disabled, false, 'the notice offers Retry itself');
+  f.view.dispose();
+
+  const g = fixture(); g.view.load(source()); const p = g.view.initialize(); await flush();
+  g.workers[0].reply({ type: 'error', result: { diagnostics: [{ severity: 'error', code: 'E_ENGINE_ASSETS', message: 'Local Minifier assets are missing.' }] } }); await p;
+  assert.strictEqual(counts(g).error, 'Errors (1)'); assert.match(g.$('mnDiagnosticList').children[0].textContent, /^error: E_ENGINE_ASSETS/);
+  assert.strictEqual(g.$('mnDiagnostics').open, true); assert.strictEqual(g.$('mnLocalSetup').hidden, true); assert.strictEqual(g.root.dataset.setup, 'false');
+  assert.strictEqual(g.$('mnRetry').hidden, false); assert.strictEqual(g.$('mnRetry').disabled, false);
+  g.view.dispose();
+});
+
+t('#191 Copy for the setup command reports real clipboard success or failure', async () => {
+  const copied = [], clipboard = { writeText: async (text) => copied.push(text) };
+  const f = fixture(true, 'file:', { clipboard });
+  f.$('mnSetupCommand').textContent = 'python tools/package_minifier.py';
+  await f.actions['mn-copy-setup']();
+  assert.deepStrictEqual(copied, ['python tools/package_minifier.py']);
+  assert.strictEqual(f.$('mnSetupCopyStatus').textContent, 'Copied to the clipboard.'); assert.strictEqual(f.$('mnSetupCopyStatus').dataset.tone, 'ok');
+  clipboard.writeText = async () => { throw Error('denied'); };
+  await f.actions['mn-copy-setup']();
+  assert.match(f.$('mnSetupCopyStatus').textContent, /^Copy failed/); assert.strictEqual(f.$('mnSetupCopyStatus').dataset.tone, 'error');
+  const none = fixture(true, 'file:', { clipboard: null }); none.$('mnSetupCommand').textContent = 'python tools/package_minifier.py';
+  await none.actions['mn-copy-setup']();
+  assert.match(none.$('mnSetupCopyStatus').textContent, /^Copy failed/, 'no clipboard API is a failure, never a claimed success');
+  f.view.dispose(); none.view.dispose();
 });
