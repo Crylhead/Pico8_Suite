@@ -422,6 +422,24 @@ Not covered: screen readers, non-Chromium browsers.
 
 `tests/view-resize.test.js` runs the real `clampView` and `onStageResize` of both editors (4 cases, failing on the old code). Not run: the opt-in Playwright geometry smoke (not configured here).
 
+## Follow-up: #199 Compact timeline for single-frame images (2026-11-05)
+
+**Behaviour change:** Pixel Studio's timeline has three modes, stored in the existing studio settings as `timelineMode`:
+- **`auto`** (default): a one-frame image gets a compact one-row strip (Play, FPS, Onion, the frame counter, *＋ Frame* and Duplicate) without the thumbnail row. It expands as soon as a second frame exists and compacts again when the image is back to one frame. Duplicate stays in the compact strip because duplicating the only frame is the usual way to start an animation.
+- **`shown`** and **`hidden`**: explicit choices made with *Timeline*, `T` or the View menu. Hiding is kept, and showing again keeps the full timeline even for one frame.
+
+Older settings that only stored `timeline: false` load as hidden. Because the stage changes size, an automatic view refits (#200), while a manual zoom is kept. `zoomFit`, its 32px margin and the timeline features are unchanged. The F1 View text and the Pixel Studio tour step were updated.
+
+**Checked** in headless Chrome 156 at 1440×900 (fresh profile):
+- A new 128×128 image has a compact 50px strip (instead of 133px), a 611px stage and opens at **400%**.
+- *＋ Frame* shows the full timeline with thumbnails, refits to 300%, and leaves frame 1 unchanged. Deleting back to one frame compacts the strip again (400%).
+- `T` hides it (`aria-pressed` false). `T` again shows it full with one frame, stored as `shown`, and a reload keeps it.
+- Old settings with `timeline: false` load as hidden.
+- After a manual zoom, the expanding strip keeps the zoom.
+- No exceptions.
+
+`tests/studio-timeline.test.js` runs the real `setTimeline` and `applyTimeline` (2 cases, failing on the old code). Observed, not changed: once the save badge reads *Unsaved changes*, the upper options row at 1440 wide overflows and shows its horizontal scrollbar, which costs about 9px of stage height. That comes from the existing scrolling options row.
+
 ## Follow-up: #193 A shorter Home (2026-11-05)
 
 **Behaviour change:** this is a density and hierarchy pass on the #68 Home, not a rebuild. Routes, task shortcuts and tool cards are unchanged.
