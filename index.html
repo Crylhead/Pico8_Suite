@@ -1133,9 +1133,18 @@
       <p id="mnAvailability" class="notice">Exports are separate optimized build copies. Keep the original editable project; source-only directives may be removed. Nothing is applied to the editor or saved over the source.</p>
       <section id="mnLocalSetup" class="notice" data-tone="warn" hidden aria-labelledby="mnLocalSetupHeading">
         <h3 id="mnLocalSetupHeading">One-time setup required</h3>
-        <p>The Minifier engine files are not prepared in this Suite folder yet. Run <code>python tools/package_minifier.py</code> once from the Suite folder (Python 3.9+), then choose <b>Retry engine</b> or reload this page. The first run downloads the pinned engine (or uses the pinned archives); afterwards everything works offline.</p>
-        <p>After that, just open <b>index.html</b> directly (Chrome or Edge); no server or launcher is needed. <b>Start_Pico8_Suite.bat</b> remains optional and serves the Suite at http://127.0.0.1:8000.</p>
-        <p>Your Library and browser sessions belong to each address: opening index.html directly and the launcher address keep separate data. Export a Library backup to move between them. Original files are unchanged.</p>
+        <p>The Minifier engine files are not prepared in this Suite folder yet. Run this once from the Suite folder (Python 3.9+):</p>
+        <div class="mn-setup-command">
+          <code id="mnSetupCommand">python tools/package_minifier.py</code>
+          <button type="button" id="mnSetupCopy" class="btn btn-sm" data-action="mn-copy-setup" aria-label="Copy setup command" data-help-id="minifier.setup">Copy</button>
+          <span id="mnSetupCopyStatus" class="status-line" role="status" aria-live="polite" aria-atomic="true"></span>
+        </div>
+        <p>Then <button type="button" id="mnSetupRetry" class="btn btn-sm" data-action="mn-retry" data-help-id="minifier.retry">Retry engine</button> or reload this page. The first run downloads the pinned engine (or uses the pinned archives); afterwards everything works offline.</p>
+        <details id="mnSetupMore">
+          <summary>Why data may look different at another address</summary>
+          <p>After that, just open <b>index.html</b> directly (Chrome or Edge); no server or launcher is needed. <b>Start_Pico8_Suite.bat</b> remains optional and serves the Suite at http://127.0.0.1:8000.</p>
+          <p>Your Library and browser sessions belong to each address: opening index.html directly and the launcher address keep separate data. Export a Library backup to move between them. Original files are unchanged.</p>
+        </details>
       </section>
     </header>
 

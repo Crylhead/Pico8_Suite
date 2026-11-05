@@ -70,7 +70,7 @@ Independent cartridge-parser checks establish format/data preservation; they do 
 
 | Symptom | Next step |
 | --- | --- |
-| One-time setup required | Run `python tools/package_minifier.py` in the Suite folder, then choose Retry engine (or reload). For an unsupported address type, open `index.html` directly or use the launcher. |
+| One-time setup required | Run `python tools/package_minifier.py` in the Suite folder (the notice has a **Copy** button that says whether the clipboard accepted it), then choose **Retry engine** in the notice (or reload). Until then the source area grows so the notice is fully visible, and Diagnostics lists the state as *setup*, not as an error. For an unsupported address type, open `index.html` directly or use the launcher. |
 | Engine failed to load / missing runtime | Check [packaging/setup](MINIFIER_ENGINE.md), prepare verified assets, then Retry engine. Retry never silently resubmits code. |
 | Optimize unavailable | Load a nonempty source, wait for readiness, or refresh an earlier editor capture. Unknown level/focus values are refused. |
 | Invalid UTF-8, malformed cart or empty input | Use a UTF-8 text `.lua`/`.p8` with nonempty Lua. Cancelled/failed intake leaves earlier work intact. |

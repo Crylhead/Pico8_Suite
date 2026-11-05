@@ -484,3 +484,18 @@ The measurements per control type are in `docs/ACCESSIBILITY.md`.
 - Ctrl+K: *Data Carts*, *cart builder* and *data tools* list the renamed tool first.
 - Deep links and the restored workspace open the same tools, and the document title uses the new names.
 - No old name remains in the page's text, titles or labels.
+
+## Follow-up: #191 Discoverable, copyable Minifier setup (2026-11-05)
+
+**Behaviour change:**
+- **Never clipped:** while the engine still needs its one-time setup, the Minifier source/commands region grows instead of being capped at 240px (35dvh), up to 70dvh. On main, only the notice heading was visible at 1280×720 and 1440×900.
+- **Copyable command:** `python tools/package_minifier.py` is a code block with **Copy**. Copy reports the real clipboard result; on failure it selects the command for Ctrl+C. The notice has its own **Retry engine**, hidden when Retry is blocked.
+- **Folded note:** the address and storage note is behind *Why data may look different at another address*.
+- **Diagnostics:** `E_FILE_SETUP` and `E_LOCAL_HTTP` are listed as *setup*, are not counted under Errors and do not open Diagnostics by themselves. Real engine failures (such as `E_ENGINE_ASSETS`) stay errors with Retry.
+- **Status line:** it says *Setup needed: follow the one-time setup above, then choose Retry engine.* instead of repeating the command.
+
+**Checked** in headless Chrome on a `file://` copy without the packaged engine, at 1280×720 and 1440×900:
+- The whole notice is visible, including its Retry. Errors (0).
+- Copy put the command on the clipboard (read back). With clipboard write denied, or when writeText rejects, Copy reported the failure and selected the command.
+- Retry with the files still missing keeps the setup state.
+- Over http with the packaged engine, the notice stays hidden and the engine loads (Shrinko8 1.2.7f).
